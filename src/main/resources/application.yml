@@ -12,6 +12,7 @@ spring:
     baseline-on-migrate: true
     baseline-version: 1
   jpa:
+    open-in-view: false
     hibernate:
       ddl-auto: validate
   quartz:
