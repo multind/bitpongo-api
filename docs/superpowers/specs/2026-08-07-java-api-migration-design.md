@@ -1,68 +1,68 @@
-# Zhitoubao API Java Migration Design
+# 智投宝 API Java 迁移设计
 
-## 1. Objective
+## 1. 目标
 
-Replace the Python FastAPI service at `/Volumes/ExternalDrive/Code/Zhitoubao/zhitoubaoapi` with a Java service in this repository. The replacement is delivered as one complete application and preserves the existing frontend contract and MySQL data.
+将 `/Volumes/ExternalDrive/Code/Zhitoubao/zhitoubaoapi` 下的 Python FastAPI 服务转换为当前仓库中的 Java 服务。新服务一次性交付完整功能，并兼容现有前端契约和 MySQL 数据。
 
-The implementation is a modular monolith. It retains a multi-exchange abstraction, implements Binance Spot only, and uses Binance's official Java Connector rather than CCXT. Real trading is disabled unless an explicit production switch is enabled.
+系统采用模块化单体架构，保留多交易所抽象，首版仅实现 Binance 现货交易，并使用 Binance 官方 Java Connector 替代 CCXT。除非显式开启生产交易开关，否则禁止真实下单。
 
-## 2. Confirmed Scope
+## 2. 已确认范围
 
-The Java service includes all behavior present in the source working tree:
+Java 服务包含源项目当前工作区中的全部行为：
 
-- local and WordPress-backed login, registration, profile, notices, and DingTalk test notifications;
-- exchange configuration CRUD, credential checks, balances, and minimum-order calculations;
-- strategy creation with associated plans and coin allocations;
-- active-plan listing, detail, status changes, current valuation, and profit calculations;
-- persistent scheduled purchases and hourly asset snapshots;
-- Binance market data ingestion and the frontend price WebSocket;
-- database migrations, health checks, logging, Docker packaging, and deployment documentation.
+- 本地登录、WordPress 登录、注册、个人资料、通知配置和钉钉测试通知；
+- 交易所配置增删改查、密钥校验、余额查询和最小下单金额计算；
+- 策略创建，以及关联计划和币种分配的创建；
+- 活动计划列表、计划详情、状态变更、当前估值和收益计算；
+- 持久化定投任务和每小时资产快照；
+- Binance 行情接入和面向前端的价格 WebSocket；
+- 数据库迁移、健康检查、日志、Docker 打包和部署文档。
 
-The current uncommitted Python behavior that returns `strategy`, `plan`, and `coins` from strategy creation is part of the contract. The source's hard-coded local proxy is not copied; proxy configuration is externalized.
+Python 源项目当前未提交的“创建策略后返回 `strategy`、`plan` 和 `coins`”行为属于兼容契约。源项目中硬编码的本地代理不直接迁移，改为外部配置。
 
-OKX is out of scope for this delivery. The exchange boundary must allow an OKX implementation to be added without changing strategy, plan, or scheduling modules.
+本次交付不实现 OKX。交易所边界必须保证以后增加 OKX 实现时，无需修改策略、计划和调度模块。
 
-## 3. Platform and Dependency Policy
+## 3. 平台与依赖策略
 
-Versions are the latest stable generally available releases as verified on 2026-08-07:
+以下版本是截至 2026-08-07 经核实的最新稳定正式版：
 
-- Java 26, the latest Java GA release;
-- Spring Boot 4.1.0;
-- Maven with Maven Wrapper committed to the repository;
-- `io.github.binance:binance-spot:10.1.1`, the latest stable Maven Central release;
-- Spring Boot's dependency management for Spring Framework, Spring Security, Spring Data JPA, Hibernate, Jackson, Quartz, Micrometer, MySQL Driver, Flyway, JUnit, and Testcontainers-compatible transitive libraries;
-- the latest stable direct dependency only when a dependency is not managed by the Spring Boot BOM.
+- Java 26，当前最新 Java GA 版本；
+- Spring Boot 4.1.0；
+- Maven，并将 Maven Wrapper 提交到仓库；
+- `io.github.binance:binance-spot:10.1.1`，Maven Central 当前最新稳定版；
+- Spring Framework、Spring Security、Spring Data JPA、Hibernate、Jackson、Quartz、Micrometer、MySQL Driver、Flyway、JUnit 以及与 Testcontainers 兼容的传递依赖，由 Spring Boot 依赖管理统一控制；
+- Spring Boot BOM 未管理的直接依赖使用最新稳定版本。
 
-Milestone, release-candidate, snapshot, and early-access dependencies are excluded. The build records all resolved versions and must pass Maven Enforcer dependency convergence checks. The implementation plan must recheck direct dependency versions before scaffolding in case a newer stable release is published.
+不使用 Milestone、RC、Snapshot 或 Early Access 依赖。构建必须记录全部解析版本，并通过 Maven Enforcer 的依赖收敛检查。由于后续可能发布新版本，实施计划要求在搭建项目骨架前重新核对所有直接依赖的最新稳定版。
 
-Official references:
+官方参考资料：
 
 - <https://www.oracle.com/java/technologies/downloads/>
 - <https://spring.io/projects/spring-boot/>
 - <https://github.com/binance/binance-connector-java>
 - <https://github.com/binance/binance-spot-api-docs/blob/master/web-socket-streams.md>
 
-## 4. Architecture
+## 4. 架构
 
-The repository contains one Spring Boot application, one executable JAR, and one Docker image. Code is organized by business capability rather than as a global controller/service/repository stack.
+仓库中只包含一个 Spring Boot 应用、一个可执行 JAR 和一个 Docker 镜像。代码按业务能力组织，不采用全局式 Controller、Service、Repository 分层目录。
 
-### 4.1 Modules
+### 4.1 模块
 
-- `auth`: local JWT, WordPress login and validation, local user synchronization, request authentication, and password compatibility.
-- `exchange`: exchange credential storage, CRUD, masking, credential verification, account balance, market rules, and orders.
-- `market`: Binance public stream lifecycle, current-price cache, symbol normalization, and the frontend WebSocket.
-- `strategy`: strategy creation, coin allocation creation, and plan initialization as one transaction.
-- `plan`: active plans, plan detail, status transitions, current valuation, profit, and revenue calculations.
-- `scheduler`: Quartz jobs, persistent job recovery, scheduled purchases, hourly asset snapshots, and order reconciliation.
-- `notification`: DingTalk notification delivery and notice configuration lookup.
-- `common`: API response envelope, exceptions, JSON conventions, clock and identifiers, and shared configuration.
-- `infrastructure`: JPA, Flyway, Binance Connector, WordPress HTTP client, database and external-client configuration.
+- `auth`：本地 JWT、WordPress 登录和校验、本地用户同步、请求认证及密码兼容；
+- `exchange`：交易所密钥存储、增删改查、脱敏、密钥校验、账户余额、市场规则和订单；
+- `market`：Binance 公共行情流生命周期、实时价格缓存、交易对标准化和前端 WebSocket；
+- `strategy`：策略创建、币种分配和计划初始化，三者位于同一事务；
+- `plan`：活动计划、计划详情、状态变更、当前估值和收益计算；
+- `scheduler`：Quartz 任务、持久化任务恢复、定投任务、每小时资产快照和订单对账；
+- `notification`：钉钉通知发送和通知配置查询；
+- `common`：API 响应包装、异常、JSON 约定、时钟、标识符和共享配置；
+- `infrastructure`：JPA、Flyway、Binance Connector、WordPress HTTP 客户端、数据库和外部客户端配置。
 
-Each module exposes focused application services. Controllers do not access repositories or external SDKs directly. Domain and application code depend on interfaces; infrastructure provides implementations.
+每个模块对外提供职责单一的应用服务。Controller 不直接访问 Repository 或外部 SDK。领域层和应用层依赖接口，基础设施层提供接口实现。
 
-### 4.2 Exchange Port
+### 4.2 交易所端口
 
-The initial boundary is equivalent to:
+初始边界等价于：
 
 ```java
 public interface ExchangeGateway {
@@ -80,20 +80,20 @@ public interface ExchangeGateway {
 }
 ```
 
-`BinanceExchangeGateway` implements the interface with the official Binance Spot REST client. An `ExchangeGatewayRegistry` resolves the configured exchange code and returns a clear unsupported-exchange response for every code except `binance`.
+`BinanceExchangeGateway` 使用 Binance 官方现货 REST 客户端实现该接口。`ExchangeGatewayRegistry` 根据交易所代码选择实现；除 `binance` 之外的代码均返回明确的“不支持该交易所”错误。
 
-## 5. External Contract Compatibility
+## 5. 对外契约兼容
 
-The Java service preserves existing HTTP methods and paths:
+Java 服务保留现有 HTTP 方法和路径：
 
-- `GET /` and `GET /health`;
-- `/api/users/login`, `/register`, `/profile`, `/ding`, `/notices`, and `/v1/login`;
-- `/api/exchanges/list`, `/{exchange_id}`, `/create`, `/check`, and `/minimumAmount`;
-- `/api/strategies/create` and `/list/active`;
-- `/api/plans/list/active`, `/{plan_id}/{plan_status}`, and `/{plan_id}`;
-- WebSocket `/api/ws/price`.
+- `GET /` 和 `GET /health`；
+- `/api/users/login`、`/register`、`/profile`、`/ding`、`/notices` 和 `/v1/login`；
+- `/api/exchanges/list`、`/{exchange_id}`、`/create`、`/check` 和 `/minimumAmount`；
+- `/api/strategies/create` 和 `/list/active`；
+- `/api/plans/list/active`、`/{plan_id}/{plan_status}` 和 `/{plan_id}`；
+- WebSocket `/api/ws/price`。
 
-Request and response JSON remains compatible with the current frontend. Jackson maps Java names to the existing snake-case names. Successful and business-error responses retain:
+请求和响应 JSON 与现有前端保持兼容。Java 内部使用清晰命名，Jackson 将其映射为现有 snake_case 字段。成功响应和业务错误响应继续使用：
 
 ```json
 {
@@ -103,7 +103,7 @@ Request and response JSON remains compatible with the current frontend. Jackson 
 }
 ```
 
-The WebSocket accepts the existing subscription message:
+WebSocket 继续接受现有订阅消息：
 
 ```json
 {
@@ -113,134 +113,134 @@ The WebSocket accepts the existing subscription message:
 }
 ```
 
-It emits one compatible message per available symbol with `symbol`, `price`, and `exchange`. Invalid JSON and unavailable prices produce the current error shape.
+对于每个存在可用价格的交易对，服务发送一条包含 `symbol`、`price` 和 `exchange` 的兼容消息。非法 JSON 和无可用价格时继续使用现有错误格式。
 
-Compatibility does not require reproducing defects. Authentication control-flow errors, premature database-session closes, null dereferences, sensitive logging, and inconsistent exception wrapping are corrected while preserving paths, JSON fields, status semantics, and user-facing messages.
+兼容不等于复制缺陷。认证控制流错误、数据库会话过早关闭、空指针、敏感信息日志和不一致的异常包装会被修复，同时保持路径、JSON 字段、状态语义和用户可见文案不变。
 
-## 6. Database Compatibility and Migration
+## 6. 数据库兼容与迁移
 
-The service directly reads the existing MySQL schema and data. JPA mappings retain the tables `user`, `exchange`, `strategy`, `plan`, `coin`, `order`, `snapshot`, and `dict`, their column names, and their relationships. Reserved identifiers such as `user` and `order` are explicitly quoted.
+服务直接读取现有 MySQL 表结构和数据。JPA 映射保留 `user`、`exchange`、`strategy`、`plan`、`coin`、`order`、`snapshot` 和 `dict` 表及其字段名和关联关系。`user`、`order` 等保留关键字将显式转义。
 
-Money, price, quantity, fee, and ratio calculations use `BigDecimal`. Existing floating-point columns remain readable; Flyway may add precision-preserving columns or change compatible numeric definitions only through reviewed, non-destructive migrations. No business table is dropped or recreated.
+金额、价格、数量、手续费和收益率在 Java 中统一使用 `BigDecimal`。现有浮点字段可继续读取；只有集成测试证明存在必要性时，Flyway 才通过已审核的非破坏性迁移增加高精度字段或调整兼容的数值类型。不得删除或重建业务表。
 
-Flyway uses a baseline for an existing populated database and creates a clean schema from migrations for new environments. Incremental migrations add only:
+Flyway 对现有已使用数据库建立基线，并能从迁移脚本创建全新环境。增量迁移仅增加：
 
-- Quartz JDBC job-store tables;
-- indexes or constraints required for safe user-scoped queries and order idempotency;
-- compatible column adjustments proven necessary by integration tests.
+- Quartz JDBC JobStore 表；
+- 用户数据隔离查询和订单幂等所需的索引或约束；
+- 集成测试证明必要的兼容字段调整。
 
-The existing user IDs returned by WordPress remain the local user IDs. The original PBKDF2 representation, `32-character hexadecimal salt + 64-character hexadecimal SHA-256 hash` with 100,000 iterations, remains readable so existing local passwords work.
+WordPress 返回的用户 ID 继续作为本地用户 ID。原 PBKDF2 格式保持可读：`32 位十六进制盐值 + 64 位十六进制 SHA-256 哈希值`，迭代 100,000 次，保证现有本地密码仍可使用。
 
-Transactions are owned by application services. Strategy, plan, and coin creation commit together. Database work never holds a transaction open across a long-lived WebSocket connection.
+事务由应用服务控制。策略、计划和币种配置必须在同一事务内提交。长连接 WebSocket 生命周期内不得持有数据库事务。
 
-## 7. Authentication and Security
+## 7. 认证与安全
 
-Public paths match the Python allowlist. All exchange, strategy, and plan routes require a Bearer token and enforce `user_id` ownership in every query.
+公共路径与 Python 服务的放行列表一致。所有交易所、策略和计划接口都要求 Bearer Token，并在每条查询中校验 `user_id` 数据归属。
 
-The application supports:
+应用支持：
 
-- local JWT creation and validation with the existing `id` claim and configurable HS256 secret;
-- WordPress JWT login through `/wp-json/jwt-auth/v1/token`;
-- WordPress token/user validation through `/wp-json/wp/v2/users/me`;
-- local synchronization of the WordPress user record.
+- 使用现有 `id` Claim 和可配置 HS256 密钥创建及校验本地 JWT；
+- 通过 `/wp-json/jwt-auth/v1/token` 完成 WordPress JWT 登录；
+- 通过 `/wp-json/wp/v2/users/me` 校验 WordPress Token 和用户；
+- 将 WordPress 用户同步到本地数据库。
 
-Database credentials, JWT secret, WordPress URL, Binance endpoints, proxy, and trading switches come from environment variables. Source-controlled defaults contain no production passwords or secrets. Logs never contain plaintext passwords, Bearer tokens, Secret Keys, or complete Access Keys.
+数据库凭据、JWT 密钥、WordPress 地址、Binance 地址、代理和交易开关全部来自环境变量。提交到仓库的默认配置不得包含生产密码或密钥。日志不得包含明文密码、Bearer Token、Secret Key 或完整 Access Key。
 
-Exchange list and detail responses retain their current masking behavior. Secret Keys are never returned unmasked. New credentials remain compatible with the current database layout; encryption-at-rest is not introduced silently because it would make existing readers and column sizes incompatible.
+交易所列表和详情响应保持现有脱敏行为，Secret Key 绝不以明文返回。新凭据继续兼容当前数据库结构；本次不静默引入静态加密，因为这会破坏现有读取方和字段长度兼容性。
 
-## 8. Binance Market Data and Trading
+## 8. Binance 行情与交易
 
-### 8.1 Market Data
+### 8.1 行情
 
-One application-managed Binance `SpotWebSocketStreams` client supplies market prices. Browser WebSocket sessions read the shared cache and never open their own Binance connections.
+应用级唯一的 Binance `SpotWebSocketStreams` 客户端负责提供市场价格。浏览器 WebSocket 会话只读取共享缓存，不为每个客户端单独建立 Binance 连接。
 
-The client:
+客户端必须：
 
-- subscribes to the Binance Spot ticker stream required to populate all requested USDT symbols;
-- normalizes Binance `BTCUSDT` names to the internal `BTC/USDT` form;
-- records price and update time in a thread-safe cache;
-- responds to ping/pong correctly;
-- reconnects with bounded exponential backoff and jitter;
-- rotates before Binance's 24-hour connection lifetime;
-- exposes connected state and last-message time through health indicators.
+- 订阅足以覆盖所有所需 USDT 交易对的 Binance 现货行情流；
+- 将 Binance 的 `BTCUSDT` 标准化为内部 `BTC/USDT` 格式；
+- 在线程安全缓存中记录价格和更新时间；
+- 正确响应 ping/pong；
+- 使用有上限并带随机抖动的指数退避策略重连；
+- 在 Binance 24 小时连接期限前主动轮换连接；
+- 通过健康指标暴露连接状态和最后消息时间。
 
-### 8.2 Market Rules
+### 8.2 市场规则
 
-Binance `exchangeInfo` supplies symbol status, `LOT_SIZE`, `MARKET_LOT_SIZE`, `PRICE_FILTER`, and `MIN_NOTIONAL`/`NOTIONAL`. Rules are cached with a bounded lifetime and refreshed on rule-related Binance errors.
+通过 Binance `exchangeInfo` 获取交易对状态、`LOT_SIZE`、`MARKET_LOT_SIZE`、`PRICE_FILTER` 和 `MIN_NOTIONAL`/`NOTIONAL`。规则按有限时长缓存；遇到与规则相关的 Binance 错误时立即刷新。
 
-Allocated quote amount is calculated from plan instalment and coin proportion. Existing semantics are preserved: if the allocation is below the minimum notional, the target amount is raised to the minimum. Base quantity is rounded down to Binance step size, checked against minimum and maximum quantity, and revalidated against notional limits before submission.
+根据计划每期金额和币种比例计算分配金额。保留现有语义：当分配金额低于最低成交额时，将目标金额提升到最低成交额。基础币数量按 Binance `stepSize` 向下取整，检查最小和最大数量，并在提交前再次校验成交额限制。
 
-### 8.3 Safe Trading and Idempotency
+### 8.3 安全交易与幂等
 
-`BINANCE_LIVE_TRADING` defaults to `false`. With the default, signed account and order operations use Binance Spot Testnet. Production REST endpoints are used only when the switch is explicitly true. Public market data may use production streams in both modes.
+`BINANCE_LIVE_TRADING` 默认为 `false`。默认情况下，签名账户和订单操作使用 Binance Spot Testnet；只有显式开启该开关后才使用生产 REST 地址。两种模式都可以使用生产公共行情流。
 
-Each scheduled purchase derives a deterministic `clientOrderId` from plan, symbol, and scheduled fire time. Query operations may retry on transient transport and rate-limit failures. An order submission is never blindly repeated: after an ambiguous result, the service queries by `clientOrderId` before deciding whether to submit or persist.
+每次计划执行根据计划、交易对和计划触发时间生成确定性的 `clientOrderId`。查询操作可在临时网络错误或限流时重试；下单请求绝不盲目重试。结果不明确时，先按 `clientOrderId` 查询订单，再决定是否提交或持久化。
 
-If Binance accepts an order but the database transaction fails, a reconciliation job retrieves the order by `clientOrderId` and persists it exactly once. A unique database constraint prevents duplicate local order records.
+如果 Binance 已接受订单但数据库事务失败，对账任务会根据 `clientOrderId` 查询订单并保证只持久化一次。数据库唯一约束防止本地订单重复。
 
-## 9. Scheduling and Calculations
+## 9. 调度与计算
 
-Quartz uses the JDBC job store. At startup, the application reconciles active plans with Quartz so jobs survive restarts and missing jobs are restored without duplication.
+Quartz 使用 JDBC JobStore。应用启动时对活动计划与 Quartz 任务进行核对，使任务能在重启后恢复，并补充缺失任务且不重复创建。
 
-- Creating a strategy creates its active plan and schedules `job_plan_<planId>` from the stored cron expression.
-- Changing a plan away from `active` unschedules its purchase job.
-- Returning a plan to `active` validates and restores its job.
-- The asset snapshot job runs hourly and records the user's USDT free balance for every active plan.
+- 创建策略时创建活动计划，并按保存的 Cron 表达式调度 `job_plan_<planId>`；
+- 计划状态离开 `active` 时取消对应定投任务；
+- 计划重新进入 `active` 时校验并恢复任务；
+- 资产快照任务每小时运行，为每个活动计划记录用户的 USDT 可用余额。
 
-The scheduled-purchase flow loads the plan and its user-scoped exchange, strategy, and coins; applies `last_average` or `total_average`; validates price freshness and market rules; places each permitted order; persists order facts; updates coin quantity and average; and recomputes plan funds, revenue, ratio, trigger count, and next execution time.
+定投任务依次执行：加载计划及其用户所属交易所、策略和币种；应用 `last_average` 或 `total_average` 条件；校验价格时效和市场规则；提交允许执行的订单；持久化订单事实；更新币种数量和持仓均价；重新计算计划累计投入、收益、收益率、触发次数和下次执行时间。
 
-Calculations use immutable `BigDecimal` values with explicit scales and rounding modes. A missing or stale market price blocks that symbol's order and records an actionable error rather than treating the price as zero.
+所有计算使用不可变 `BigDecimal`，并显式指定精度和舍入方式。价格缺失或过期时，不以零价格继续计算；阻止该交易对下单并记录可定位的错误。
 
-## 10. Error Handling and Observability
+## 10. 错误处理与可观测性
 
-A global exception handler maps validation, authentication, authorization, not-found, database, WordPress, Binance authentication, Binance rate-limit, and unexpected failures into the compatible response envelope and Chinese messages.
+全局异常处理器将参数校验、认证、授权、资源不存在、数据库、WordPress、Binance 认证、Binance 限流和未知异常转换为兼容的响应包装和中文提示。
 
-Actuator exposes application health. Custom indicators report database connectivity, Quartz scheduler state, and Binance market-stream freshness. Structured logs include request correlation ID, user ID when authenticated, plan ID, and safe Binance error codes without credentials.
+Actuator 提供运维健康检查。自定义健康指标报告数据库连通性、Quartz 调度状态和 Binance 行情新鲜度。结构化日志包含请求关联 ID、已认证用户 ID、计划 ID 和安全的 Binance 错误码，但不包含任何凭据。
 
-The existing `/health` response remains `{"status":"ok"}` for compatibility. Operational health is available through Actuator.
+现有 `/health` 为兼容前端继续返回 `{"status":"ok"}`；完整运维健康状态通过 Actuator 提供。
 
-## 11. Packaging and Deployment
+## 11. 打包与部署
 
-The repository delivers:
+仓库交付内容包括：
 
-- complete Java source and tests;
-- Maven Wrapper and reproducible `pom.xml`;
-- Flyway migrations for clean and existing databases;
-- `.env.example` without secrets;
-- production Dockerfile;
-- Docker Compose for the application and MySQL;
-- README covering local development, migration, Testnet verification, production enablement, proxy settings, rollback, and operations.
+- 完整 Java 源码和测试；
+- Maven Wrapper 和可复现的 `pom.xml`；
+- 同时支持新数据库和现有数据库的 Flyway 迁移；
+- 不含密钥的 `.env.example`；
+- 生产 Dockerfile；
+- 用于应用和 MySQL 的 Docker Compose；
+- README，包含本地开发、迁移、Testnet 验证、生产交易启用、代理、回滚和运维说明。
 
-The Spring Boot application runs Flyway validation and approved migrations on startup. A migration failure prevents application startup. The Docker image runs as a non-root user and includes a health check.
+Spring Boot 启动时执行 Flyway 校验和已批准迁移。迁移失败时应用必须停止启动。Docker 镜像使用非 root 用户运行并提供健康检查。
 
-## 12. Verification and Acceptance
+## 12. 验证与验收
 
-### 12.1 Automated Tests
+### 12.1 自动化测试
 
-- Unit tests cover PBKDF2 and JWT compatibility, masking, allocation, minimum notional, step-size rounding, average-down conditions, valuation, profit, and deterministic order IDs.
-- MVC contract tests cover every existing REST path, request field, response field, status, and Chinese error message.
-- WebSocket tests cover subscription parsing, compatible price messages, invalid JSON, and missing prices.
-- MySQL Testcontainers tests load an existing-schema fixture, run Flyway baseline/migrations, verify JPA mappings and relationships, and exercise transaction rollback.
-- Stubbed WordPress tests cover success, invalid credentials, invalid token, unavailable service, and user synchronization.
-- Stubbed Binance tests cover credentials, balances, exchange rules, order success, authentication failure, rate limits, ambiguous submission, and reconciliation.
-- Market-stream tests cover symbol normalization, cache freshness, disconnect, backoff, resubscription, and scheduled 24-hour rotation.
-- Quartz tests cover create, pause, resume, restart recovery, and duplicate-fire protection.
+- 单元测试覆盖 PBKDF2 和 JWT 兼容、密钥脱敏、资金分配、最低成交额、步长取整、逢低买入条件、估值、收益和确定性订单 ID；
+- MVC 契约测试覆盖每个现有 REST 路径、请求字段、响应字段、状态和中文错误文案；
+- WebSocket 测试覆盖订阅解析、兼容价格消息、非法 JSON 和价格缺失；
+- MySQL Testcontainers 测试加载现有结构样本，执行 Flyway 基线和迁移，校验 JPA 映射、关联关系和事务回滚；
+- WordPress 模拟测试覆盖成功、凭据错误、Token 无效、服务不可用和用户同步；
+- Binance 模拟测试覆盖凭据、余额、市场规则、下单成功、认证失败、限流、结果不明确和订单对账；
+- 行情流测试覆盖交易对标准化、缓存新鲜度、断线、退避、重新订阅和定时 24 小时轮换；
+- Quartz 测试覆盖创建、暂停、恢复、重启恢复和重复触发保护。
 
-Automated tests never use real API keys or production orders. An opt-in Testnet profile performs credentials, balance, rules, and minimum-size order smoke tests only when Testnet credentials are supplied.
+自动化测试绝不使用真实 API Key 或生产订单。只有提供 Testnet 凭据时，才通过可选 Testnet Profile 执行凭据、余额、市场规则和最小金额订单冒烟测试。
 
-### 12.2 Completion Gates
+### 12.2 完成门槛
 
-Delivery is complete only when:
+只有满足以下全部条件才视为交付完成：
 
-1. `./mvnw verify` passes with no test failures;
-2. the Docker image builds successfully;
-3. Docker Compose starts the application and MySQL from a clean environment;
-4. Flyway successfully upgrades an existing-schema fixture without deleting business data;
-5. `/health`, representative REST endpoints, and `/api/ws/price` pass smoke tests;
-6. the default configuration proves that production order submission is disabled;
-7. a contract checklist shows every Python endpoint and scheduled behavior mapped to the Java implementation;
-8. the repository contains no committed secrets or generated build artifacts.
+1. `./mvnw verify` 无测试失败；
+2. Docker 镜像构建成功；
+3. Docker Compose 可从全新环境启动应用和 MySQL；
+4. Flyway 可升级现有表结构样本，且不删除业务数据；
+5. `/health`、代表性 REST 接口和 `/api/ws/price` 通过冒烟测试；
+6. 默认配置可证明生产订单提交被禁用；
+7. 契约检查表明确映射每个 Python 接口和调度行为到 Java 实现；
+8. 仓库中不存在已提交的密钥或生成的构建产物。
 
-## 13. Replacement Boundary
+## 13. 替换边界
 
-This repository becomes the Java implementation. The placeholder `main.py` is removed during implementation. The source Python repository is read-only migration input and is not modified. Its uncommitted strategy-response behavior is included, while its hard-coded proxy change is represented by external configuration.
+当前仓库将成为 Java 实现。占位用的 `main.py` 在实施阶段删除。Python 源仓库只作为只读迁移输入，不做任何修改。源仓库未提交的策略响应行为会纳入迁移，硬编码代理变更则通过外部配置表达。
