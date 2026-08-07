@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.AuthenticationException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -41,6 +42,11 @@ public class GlobalExceptionHandler {
                 .map(violation -> violation.getMessage())
                 .orElse("参数校验失败");
         return ResponseEntity.badRequest().body(ApiResponse.fail(400, message));
+    }
+
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ApiResponse<Void>> handleUnreadableRequest(HttpMessageNotReadableException exception) {
+        return ResponseEntity.badRequest().body(ApiResponse.fail(400, "请求内容格式错误"));
     }
 
     @ExceptionHandler(AuthenticationException.class)

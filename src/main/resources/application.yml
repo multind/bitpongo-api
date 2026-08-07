@@ -31,6 +31,8 @@ zhitoubao:
     allowed-origins: ${BACKEND_CORS_ORIGINS:*}
   wordpress:
     endpoint-url: ${WORDPRESS_ENDPOINT_URL:https://multind.com}
+    connect-timeout: ${WORDPRESS_CONNECT_TIMEOUT:5s}
+    read-timeout: ${WORDPRESS_READ_TIMEOUT:10s}
   jwt:
     secret-key: ${JWT_SECRET_KEY:}
     access-token-expire-minutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:300}

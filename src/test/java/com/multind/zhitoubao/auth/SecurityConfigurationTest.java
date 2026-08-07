@@ -9,6 +9,7 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.test.context.ActiveProfiles;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -33,14 +34,15 @@ class SecurityConfigurationTest {
 
     @Autowired private MockMvc mvc;
     @Autowired private JwtTokenService tokens;
+    @MockitoBean private UserApplicationService userApplicationService;
 
     @Test
     void compatibilityPublicPathsRemainAnonymous() throws Exception {
         mvc.perform(get("/")).andExpect(status().isOk());
         mvc.perform(get("/health")).andExpect(status().isOk());
-        mvc.perform(post("/api/users/login")).andExpect(status().isOk());
-        mvc.perform(post("/api/users/v1/login")).andExpect(status().isOk());
-        mvc.perform(post("/api/users/register")).andExpect(status().isOk());
+        mvc.perform(post("/api/users/login")).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/users/v1/login")).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/users/register")).andExpect(status().isBadRequest());
     }
 
     @Test
@@ -68,9 +70,6 @@ class SecurityConfigurationTest {
 
     @RestController
     public static class TestEndpoints {
-        @PostMapping({"/api/users/login", "/api/users/v1/login", "/api/users/register"})
-        Map<String, Boolean> publicEndpoint() { return Map.of("ok", true); }
-
         @GetMapping("/api/plans/list/active")
         Map<String, Boolean> protectedEndpoint() { return Map.of("ok", true); }
 
