@@ -1,0 +1,38 @@
+server:
+  port: ${SERVER_PORT:8000}
+
+spring:
+  application:
+    name: zhitoubao
+  datasource:
+    url: ${DATABASE_URL:jdbc:mysql://127.0.0.1:3306/zhitoubao}
+    username: ${DATABASE_USERNAME:zhitoubao}
+    password: ${DATABASE_PASSWORD:}
+  flyway:
+    baseline-on-migrate: true
+    baseline-version: 1
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  quartz:
+    job-store-type: jdbc
+    jdbc:
+      initialize-schema: never
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+
+zhitoubao:
+  wordpress:
+    endpoint-url: ${WORDPRESS_ENDPOINT_URL:https://multind.com}
+  jwt:
+    secret-key: ${JWT_SECRET_KEY:}
+    access-token-expire-minutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:300}
+  binance:
+    live-trading: ${BINANCE_LIVE_TRADING:false}
+    testnet-rest-base-url: ${BINANCE_TESTNET_REST_BASE_URL:https://testnet.binance.vision}
+    production-rest-base-url: ${BINANCE_PRODUCTION_REST_BASE_URL:https://api.binance.com}
+    market-stream-url: ${BINANCE_MARKET_STREAM_URL:wss://stream.binance.com:9443}

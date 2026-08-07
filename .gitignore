@@ -1,1 +1,7 @@
 .worktrees/
+.venv/
+__pycache__/
+target/
+.env
+*.log
+.idea/workspace.xml
