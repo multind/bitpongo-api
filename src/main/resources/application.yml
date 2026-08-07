@@ -27,6 +27,8 @@ management:
         include: health,info
 
 zhitoubao:
+  cors:
+    allowed-origins: ${BACKEND_CORS_ORIGINS:*}
   wordpress:
     endpoint-url: ${WORDPRESS_ENDPOINT_URL:https://multind.com}
   jwt:

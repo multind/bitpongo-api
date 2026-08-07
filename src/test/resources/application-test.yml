@@ -5,3 +5,7 @@ spring:
       - org.springframework.boot.hibernate.autoconfigure.HibernateJpaAutoConfiguration
       - org.springframework.boot.flyway.autoconfigure.FlywayAutoConfiguration
       - org.springframework.boot.quartz.autoconfigure.QuartzAutoConfiguration
+
+zhitoubao:
+  jwt:
+    secret-key: test-only-jwt-secret

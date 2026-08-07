@@ -13,7 +13,7 @@ import org.testcontainers.mysql.MySQLContainer;
 import static org.assertj.core.api.Assertions.assertThat;
 
 @Testcontainers
-@SpringBootTest
+@SpringBootTest(properties = "zhitoubao.jwt.secret-key=database-migration-test-secret")
 class LegacySchemaCompatibilityTest {
 
     @Container
