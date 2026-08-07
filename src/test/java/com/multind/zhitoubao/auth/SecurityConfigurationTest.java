@@ -35,6 +35,7 @@ class SecurityConfigurationTest {
     @Autowired private MockMvc mvc;
     @Autowired private JwtTokenService tokens;
     @MockitoBean private UserApplicationService userApplicationService;
+    @MockitoBean private com.multind.zhitoubao.exchange.ExchangeApplicationService exchangeApplicationService;
 
     @Test
     void compatibilityPublicPathsRemainAnonymous() throws Exception {

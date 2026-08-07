@@ -30,6 +30,7 @@ class UserControllerContractTest {
 
     @MockitoBean private UserRepository users;
     @MockitoBean private WordPressAuthClient wordpress;
+    @MockitoBean private com.multind.zhitoubao.exchange.ExchangeApplicationService exchangeApplicationService;
 
     private UserEntity localUser;
 
