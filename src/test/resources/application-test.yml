@@ -9,3 +9,5 @@ spring:
 zhitoubao:
   jwt:
     secret-key: test-only-jwt-secret
+  market:
+    stream-enabled: false

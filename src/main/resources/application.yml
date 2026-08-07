@@ -41,3 +41,8 @@ zhitoubao:
     testnet-rest-base-url: ${BINANCE_TESTNET_REST_BASE_URL:https://testnet.binance.vision}
     production-rest-base-url: ${BINANCE_PRODUCTION_REST_BASE_URL:https://api.binance.com}
     market-stream-url: ${BINANCE_MARKET_STREAM_URL:wss://stream.binance.com:9443}
+  market:
+    stream-enabled: ${MARKET_STREAM_ENABLED:true}
+    price-max-age: ${MARKET_PRICE_MAX_AGE_SECONDS:60}s
+    health-max-silence: ${MARKET_HEALTH_MAX_SILENCE_SECONDS:120}s
+    connection-rotation: ${MARKET_CONNECTION_ROTATION:23h50m}
