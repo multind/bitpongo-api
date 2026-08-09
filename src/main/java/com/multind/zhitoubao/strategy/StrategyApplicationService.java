@@ -149,7 +149,7 @@ public class StrategyApplicationService {
         }
     }
 
-    static String normalizeCron(String cron) {
+    public static String normalizeCron(String cron) {
         String normalized = cron == null ? "" : cron.trim().replaceAll("\\s+", " ");
         String[] fields = normalized.split(" ");
         if (fields.length == 5) {
