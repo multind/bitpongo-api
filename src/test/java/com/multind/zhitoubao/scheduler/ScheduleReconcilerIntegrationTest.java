@@ -1,0 +1,38 @@
+package com.multind.zhitoubao.scheduler;
+
+import com.multind.zhitoubao.plan.PlanEntity;
+import com.multind.zhitoubao.plan.PlanRepository;
+import com.multind.zhitoubao.strategy.StrategyEntity;
+import com.multind.zhitoubao.strategy.StrategyRepository;
+import java.util.List;
+import java.util.Optional;
+import org.junit.jupiter.api.Test;
+
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
+
+class ScheduleReconcilerIntegrationTest {
+    @Test
+    void restoresOnlyActivePlansWithoutBackfillingOldExecutions() {
+        PlanRepository plans = mock(PlanRepository.class);
+        StrategyRepository strategies = mock(StrategyRepository.class);
+        PlanScheduleService schedules = mock(PlanScheduleService.class);
+        PlanEntity active = plan(1L, "active", 11L);
+        PlanEntity stopped = plan(2L, "stop", 12L);
+        StrategyEntity strategy = new StrategyEntity(); strategy.setId(11L); strategy.setCron("0 8 * * *");
+        when(plans.findAll()).thenReturn(List.of(active, stopped));
+        when(strategies.findById(11L)).thenReturn(Optional.of(strategy));
+
+        new ScheduleReconciler(plans, strategies, schedules).reconcile();
+
+        verify(schedules).schedule(1L, "0 0 8 * * ?");
+        verify(schedules).remove(2L);
+        verify(schedules, never()).resume(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+    }
+
+    private PlanEntity plan(long id, String status, long strategyId) {
+        PlanEntity plan = new PlanEntity(); plan.setId(id); plan.setStatus(status); plan.setStrategyId(strategyId); return plan;
+    }
+}
