@@ -1,7 +1,5 @@
 package com.multind.zhitoubao.market;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.IOException;
 import java.math.BigDecimal;
 import java.time.Clock;
@@ -12,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
 import org.springframework.web.socket.handler.TextWebSocketHandler;
+import tools.jackson.databind.ObjectMapper;
 
 @Component
 public class PriceWebSocketHandler extends TextWebSocketHandler {
@@ -37,7 +36,7 @@ public class PriceWebSocketHandler extends TextWebSocketHandler {
         try {
             PriceSubscription request = json.readValue(message.getPayload(), PriceSubscription.class);
             handleSubscription(session, request);
-        } catch (JsonProcessingException exception) {
+        } catch (tools.jackson.core.JacksonException exception) {
             send(session, new ErrorMessage("Invalid JSON"));
         } catch (IllegalArgumentException exception) {
             send(session, new ErrorMessage(exception.getMessage()));

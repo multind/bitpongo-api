@@ -4,6 +4,8 @@ server:
 spring:
   application:
     name: zhitoubao
+  jackson:
+    property-naming-strategy: SNAKE_CASE
   datasource:
     url: ${DATABASE_URL:jdbc:mysql://127.0.0.1:3306/zhitoubao}
     username: ${DATABASE_USERNAME:zhitoubao}

@@ -1,6 +1,5 @@
 package com.multind.zhitoubao.market;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
@@ -12,6 +11,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.web.socket.TextMessage;
 import org.springframework.web.socket.WebSocketSession;
+import tools.jackson.databind.json.JsonMapper;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.doAnswer;
@@ -21,7 +21,7 @@ class PriceWebSocketContractTest {
     private final Instant now = Instant.parse("2026-01-01T00:00:00Z");
     private final PriceCache cache = new PriceCache(Duration.ofSeconds(60));
     private final PriceWebSocketHandler handler = new PriceWebSocketHandler(
-            cache, new SymbolNormalizer(), new ObjectMapper(), Clock.fixed(now, ZoneOffset.UTC));
+            cache, new SymbolNormalizer(), JsonMapper.builder().build(), Clock.fixed(now, ZoneOffset.UTC));
     private final WebSocketSession session = mock(WebSocketSession.class);
     private final List<String> sent = new ArrayList<>();
 
