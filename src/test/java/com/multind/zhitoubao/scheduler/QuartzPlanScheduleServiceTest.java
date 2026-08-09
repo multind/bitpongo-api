@@ -8,6 +8,8 @@ import org.quartz.Scheduler;
 import org.quartz.TriggerKey;
 import org.quartz.Trigger;
 import org.quartz.impl.StdSchedulerFactory;
+import org.quartz.CronTrigger;
+import java.time.ZoneId;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -20,7 +22,7 @@ class QuartzPlanScheduleServiceTest {
         scheduler = new StdSchedulerFactory().getScheduler();
         scheduler.start();
         scheduler.clear();
-        service = new QuartzPlanScheduleService(scheduler);
+        service = new QuartzPlanScheduleService(scheduler, ZoneId.of("Asia/Shanghai"));
     }
 
     @AfterEach
@@ -33,6 +35,9 @@ class QuartzPlanScheduleServiceTest {
         assertThat(scheduler.checkExists(JobKey.jobKey("job_plan_42", "plans"))).isTrue();
         assertThat(scheduler.getTrigger(TriggerKey.triggerKey("trigger_plan_42", "plans"))
                 .getJobKey()).isEqualTo(JobKey.jobKey("job_plan_42", "plans"));
+        assertThat(((CronTrigger) scheduler.getTrigger(
+                TriggerKey.triggerKey("trigger_plan_42", "plans"))).getTimeZone().getID())
+                .isEqualTo("Asia/Shanghai");
 
         service.pause(42L);
         assertThat(scheduler.getTriggerState(TriggerKey.triggerKey("trigger_plan_42", "plans")))

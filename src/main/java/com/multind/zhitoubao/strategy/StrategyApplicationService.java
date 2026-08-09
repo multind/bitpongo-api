@@ -2,18 +2,21 @@ package com.multind.zhitoubao.strategy;
 
 import com.multind.zhitoubao.common.api.BusinessException;
 import com.multind.zhitoubao.exchange.ExchangeRepository;
+import com.multind.zhitoubao.exchange.ExchangeGatewayRegistry;
 import com.multind.zhitoubao.plan.PlanEntity;
 import com.multind.zhitoubao.plan.PlanRepository;
 import com.multind.zhitoubao.scheduler.PlanScheduleService;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
 import org.quartz.CronExpression;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Service;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -34,6 +37,7 @@ public class StrategyApplicationService {
     private final PlanRepository plans;
     private final CoinRepository coins;
     private final ExchangeRepository exchanges;
+    private final ExchangeGatewayRegistry gateways;
     private final PlanScheduleService schedules;
     private final Clock clock;
 
@@ -43,9 +47,11 @@ public class StrategyApplicationService {
             PlanRepository plans,
             CoinRepository coins,
             ExchangeRepository exchanges,
-            ObjectProvider<PlanScheduleService> schedules) {
-        this(strategies, plans, coins, exchanges,
-                schedules.getIfAvailable(() -> DEFERRED_SCHEDULER), Clock.systemUTC());
+            ExchangeGatewayRegistry gateways,
+            ObjectProvider<PlanScheduleService> schedules,
+            @Value("${zhitoubao.scheduling-zone:Asia/Shanghai}") String schedulingZone) {
+        this(strategies, plans, coins, exchanges, gateways,
+                schedules.getIfAvailable(() -> DEFERRED_SCHEDULER), Clock.system(ZoneId.of(schedulingZone)));
     }
 
     StrategyApplicationService(
@@ -53,20 +59,29 @@ public class StrategyApplicationService {
             PlanRepository plans,
             CoinRepository coins,
             ExchangeRepository exchanges,
+            ExchangeGatewayRegistry gateways,
             PlanScheduleService schedules,
             Clock clock) {
         this.strategies = strategies;
         this.plans = plans;
         this.coins = coins;
         this.exchanges = exchanges;
+        this.gateways = gateways;
         this.schedules = schedules;
         this.clock = clock;
     }
 
     @Transactional
     public StrategyCreatedData create(long userId, StrategyCreateRequest request) {
-        exchanges.findByIdAndUserId(request.exchangeId(), userId)
+        var exchange = exchanges.findByIdAndUserId(request.exchangeId(), userId)
                 .orElseThrow(() -> new BusinessException(404, "交易所不存在"));
+        gateways.require(exchange.getExchange());
+        long distinctSymbols = request.coins().stream()
+                .map(coin -> coin.symbol().trim().toUpperCase(java.util.Locale.ROOT))
+                .distinct().count();
+        if (distinctSymbols != request.coins().size()) {
+            throw new BusinessException(400, "币种不能重复");
+        }
         BigDecimal total = request.coins().stream()
                 .map(StrategyDtos.CoinRequest::proportion)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
@@ -77,6 +92,7 @@ public class StrategyApplicationService {
         CronExpression expression;
         try {
             expression = new CronExpression(quartzCron);
+            expression.setTimeZone(java.util.TimeZone.getTimeZone(clock.getZone()));
         } catch (java.text.ParseException exception) {
             throw new BusinessException(400, "Cron表达式无效");
         }
@@ -153,9 +169,43 @@ public class StrategyApplicationService {
         String normalized = cron == null ? "" : cron.trim().replaceAll("\\s+", " ");
         String[] fields = normalized.split(" ");
         if (fields.length == 5) {
-            return "0 " + fields[0] + " " + fields[1] + " " + fields[2] + " " + fields[3] + " ?";
+            String dayOfMonth = fields[2];
+            String dayOfWeek = fields[4];
+            if (!"*".equals(dayOfMonth) && !"*".equals(dayOfWeek)) {
+                throw new BusinessException(400, "Cron不能同时限定日期和星期");
+            }
+            if ("*".equals(dayOfWeek)) {
+                return "0 " + fields[0] + " " + fields[1] + " " + dayOfMonth + " " + fields[3] + " ?";
+            }
+            return "0 " + fields[0] + " " + fields[1] + " ? " + fields[3] + " "
+                    + convertUnixDayOfWeek(dayOfWeek);
         }
         if (fields.length == 6 || fields.length == 7) return normalized;
         throw new BusinessException(400, "Cron表达式无效");
+    }
+
+    private static String convertUnixDayOfWeek(String value) {
+        if (value.contains("/")) {
+            throw new BusinessException(400, "Cron星期字段不支持步长表达式");
+        }
+        StringBuilder converted = new StringBuilder();
+        StringBuilder number = new StringBuilder();
+        for (int index = 0; index <= value.length(); index++) {
+            char current = index == value.length() ? '\0' : value.charAt(index);
+            if (Character.isDigit(current)) {
+                number.append(current);
+                continue;
+            }
+            if (!number.isEmpty()) {
+                int unixDay = Integer.parseInt(number.toString());
+                if (unixDay < 0 || unixDay > 7) {
+                    throw new BusinessException(400, "Cron星期字段无效");
+                }
+                converted.append(unixDay == 0 || unixDay == 7 ? 1 : unixDay + 1);
+                number.setLength(0);
+            }
+            if (current != '\0') converted.append(current);
+        }
+        return converted.toString();
     }
 }

@@ -1,0 +1,42 @@
+services:
+  mysql:
+    image: mysql:9.7
+    environment:
+      MYSQL_DATABASE: ${DATABASE_NAME:-zhitoubao}
+      MYSQL_USER: ${DATABASE_USERNAME:-zhitoubao}
+      MYSQL_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD:?MYSQL_ROOT_PASSWORD is required}
+    volumes:
+      - mysql-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping -h 127.0.0.1 -uroot -p$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  api:
+    build: .
+    ports:
+      - "${SERVER_PORT:-8000}:8000"
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DATABASE_URL: jdbc:mysql://mysql:3306/${DATABASE_NAME:-zhitoubao}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
+      DATABASE_USERNAME: ${DATABASE_USERNAME:?DATABASE_USERNAME is required}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:?DATABASE_PASSWORD is required}
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?JWT_SECRET_KEY is required}
+      BINANCE_LIVE_TRADING: ${BINANCE_LIVE_TRADING:-false}
+      BINANCE_TESTNET_REST_BASE_URL: ${BINANCE_TESTNET_REST_BASE_URL:-https://testnet.binance.vision}
+      BINANCE_PRODUCTION_REST_BASE_URL: ${BINANCE_PRODUCTION_REST_BASE_URL:-https://api.binance.com}
+      BINANCE_MARKET_STREAM_URL: ${BINANCE_MARKET_STREAM_URL:-wss://stream.binance.com:9443}
+      MARKET_STREAM_ENABLED: ${MARKET_STREAM_ENABLED:-false}
+    depends_on:
+      mysql:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8000/actuator/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+
+volumes:
+  mysql-data:

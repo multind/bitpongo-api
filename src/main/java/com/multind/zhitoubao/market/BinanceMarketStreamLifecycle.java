@@ -36,7 +36,7 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
             PriceCache prices,
             SymbolNormalizer symbols,
             MarketTaskScheduler scheduler,
-            @Value("${zhitoubao.market.connection-rotation:23h50m}") Duration rotationInterval) {
+            @Value("${zhitoubao.market.connection-rotation:PT23H50M}") Duration rotationInterval) {
         this.client = client;
         this.prices = prices;
         this.symbols = symbols;

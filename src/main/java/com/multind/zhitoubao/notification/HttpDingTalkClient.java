@@ -13,6 +13,8 @@ import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
+import java.util.function.Predicate;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,14 +27,18 @@ public class HttpDingTalkClient implements DingTalkClient {
     private final HttpClient http;
     private final ObjectMapper json;
     private final Clock clock;
+    private final Predicate<URI> webhookValidator;
+    private static final Set<String> ALLOWED_HOSTS = Set.of("oapi.dingtalk.com", "api.dingtalk.com");
 
     @Autowired
     public HttpDingTalkClient(ObjectMapper json) {
-        this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build(), json, Clock.systemUTC());
+        this(HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).build(), json,
+                Clock.systemUTC(), HttpDingTalkClient::validateWebhook);
     }
 
-    HttpDingTalkClient(HttpClient http, ObjectMapper json, Clock clock) {
-        this.http = http; this.json = json; this.clock = clock;
+    HttpDingTalkClient(
+            HttpClient http, ObjectMapper json, Clock clock, Predicate<URI> webhookValidator) {
+        this.http = http; this.json = json; this.clock = clock; this.webhookValidator = webhookValidator;
     }
 
     @Override
@@ -41,6 +47,15 @@ public class HttpDingTalkClient implements DingTalkClient {
             throw new BusinessException(400, "钉钉 Webhook 和签名密钥不能为空");
         long timestamp = clock.millis();
         String separator = webhook.contains("?") ? "&" : "?";
+        URI baseUri;
+        try {
+            baseUri = URI.create(webhook);
+        } catch (IllegalArgumentException invalid) {
+            throw new BusinessException(400, "钉钉 Webhook 地址无效");
+        }
+        if (!webhookValidator.test(baseUri)) {
+            throw new BusinessException(400, "钉钉 Webhook 地址无效");
+        }
         URI uri = URI.create(webhook + separator + "timestamp=" + timestamp + "&sign="
                 + URLEncoder.encode(sign(secret, timestamp), StandardCharsets.UTF_8));
         Map<String, Object> markdown = new LinkedHashMap<>();
@@ -80,5 +95,24 @@ public class HttpDingTalkClient implements DingTalkClient {
         } catch (java.security.GeneralSecurityException exception) {
             throw new IllegalStateException("无法生成钉钉签名", exception);
         }
+    }
+
+    static boolean validateWebhook(URI uri) {
+        if (!"https".equalsIgnoreCase(uri.getScheme())) {
+            throw new BusinessException(400, "钉钉 Webhook 必须使用 HTTPS");
+        }
+        if (!ALLOWED_HOSTS.contains(uri.getHost())) {
+            throw new BusinessException(400, "钉钉 Webhook 域名不受信任");
+        }
+        if (uri.getUserInfo() != null) {
+            throw new BusinessException(400, "钉钉 Webhook 不能包含用户信息");
+        }
+        if (uri.getPort() != -1 && uri.getPort() != 443) {
+            throw new BusinessException(400, "钉钉 Webhook 只允许 HTTPS 默认端口");
+        }
+        if (!"/robot/send".equals(uri.getPath())) {
+            throw new BusinessException(400, "钉钉 Webhook 路径无效");
+        }
+        return true;
     }
 }

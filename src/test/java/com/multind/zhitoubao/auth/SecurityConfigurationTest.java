@@ -36,6 +36,8 @@ class SecurityConfigurationTest {
     @Autowired private JwtTokenService tokens;
     @MockitoBean private UserApplicationService userApplicationService;
     @MockitoBean private com.multind.zhitoubao.exchange.ExchangeApplicationService exchangeApplicationService;
+    @MockitoBean private com.multind.zhitoubao.plan.PlanApplicationService planApplicationService;
+    @MockitoBean private com.multind.zhitoubao.strategy.StrategyApplicationService strategyApplicationService;
 
     @Test
     void compatibilityPublicPathsRemainAnonymous() throws Exception {
@@ -71,9 +73,6 @@ class SecurityConfigurationTest {
 
     @RestController
     public static class TestEndpoints {
-        @GetMapping("/api/plans/list/active")
-        Map<String, Boolean> protectedEndpoint() { return Map.of("ok", true); }
-
         @GetMapping("/test/me")
         Map<String, Long> me(@AuthenticationPrincipal AuthenticatedUser user) {
             return Map.of("id", user.id());

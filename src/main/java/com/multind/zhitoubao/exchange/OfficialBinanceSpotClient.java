@@ -8,6 +8,7 @@ import com.binance.connector.client.spot.rest.model.ExchangeInfoResponseSymbolsI
 import com.binance.connector.client.spot.rest.model.GetOrderResponse;
 import com.binance.connector.client.spot.rest.model.LotSizeFilter;
 import com.binance.connector.client.spot.rest.model.MinNotionalFilter;
+import com.binance.connector.client.spot.rest.model.MyTradesResponseInner;
 import com.binance.connector.client.spot.rest.model.NewOrderRequest;
 import com.binance.connector.client.spot.rest.model.NewOrderRespType;
 import com.binance.connector.client.spot.rest.model.NewOrderResponse;
@@ -21,7 +22,9 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.net.SocketTimeoutException;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
+import java.util.stream.Stream;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -101,9 +104,17 @@ public class OfficialBinanceSpotClient implements BinanceSpotClient {
     public Optional<OrderResult> findOrder(
             ExchangeCredentials credentials, String symbol, String clientOrderId) {
         try {
-            GetOrderResponse response = authenticatedApi(credentials)
-                    .getOrder(symbol, null, clientOrderId, null).getData();
-            return Optional.of(map(response));
+            SpotRestApi api = authenticatedApi(credentials);
+            GetOrderResponse response = api.getOrder(symbol, null, clientOrderId, null).getData();
+            List<MyTradesResponseInner> trades = List.of();
+            if (response.getOrderId() != null && decimal(response.getExecutedQty()).signum() > 0) {
+                var tradeResponse = api.myTrades(symbol, response.getOrderId(), null, null,
+                        null, null, null).getData();
+                trades = tradeResponse == null ? List.of() : tradeResponse;
+            }
+            Map<String, BigDecimal> fees = aggregateFees(trades.stream().map(trade ->
+                    new Commission(trade.getCommissionAsset(), decimal(trade.getCommission()))));
+            return Optional.of(map(response, fees));
         } catch (ApiException exception) {
             BinanceClientException translated = translate(exception);
             if (translated.errorCode() == -2013 || translated.httpStatus() == 404) {
@@ -135,17 +146,34 @@ public class OfficialBinanceSpotClient implements BinanceSpotClient {
     }
 
     private static OrderResult map(NewOrderResponse response) {
+        List<com.binance.connector.client.spot.rest.model.NewOrderResponseFillsInner> fills =
+                Optional.ofNullable(response.getFills()).orElseGet(List::of);
+        Map<String, BigDecimal> fees = aggregateFees(fills.stream().map(fill ->
+                new Commission(fill.getCommissionAsset(), decimal(fill.getCommission()))));
         return orderResult(
                 response.getSymbol(), response.getOrderId(), response.getClientOrderId(), response.getStatus(),
                 response.getExecutedQty(), response.getOrigQty(), response.getCummulativeQuoteQty(),
-                response.getPrice());
+                response.getPrice(), fees);
     }
 
-    private static OrderResult map(GetOrderResponse response) {
+    private static OrderResult map(GetOrderResponse response, Map<String, BigDecimal> fees) {
         return orderResult(
                 response.getSymbol(), response.getOrderId(), response.getClientOrderId(), response.getStatus(),
                 response.getExecutedQty(), response.getOrigQty(), response.getCummulativeQuoteQty(),
-                response.getPrice());
+                response.getPrice(), fees);
+    }
+
+    static OrderResult orderResult(
+            String symbol,
+            Long orderId,
+            String clientOrderId,
+            String status,
+            String executedQuantity,
+            String originalQuantity,
+            String cumulativeQuote,
+            String reportedPrice) {
+        return orderResult(symbol, orderId, clientOrderId, status, executedQuantity, originalQuantity,
+                cumulativeQuote, reportedPrice, Map.of());
     }
 
     private static OrderResult orderResult(
@@ -156,9 +184,9 @@ public class OfficialBinanceSpotClient implements BinanceSpotClient {
             String executedQuantity,
             String originalQuantity,
             String cumulativeQuote,
-            String reportedPrice) {
+            String reportedPrice,
+            Map<String, BigDecimal> fees) {
         BigDecimal executed = decimal(executedQuantity);
-        BigDecimal quantity = executed.signum() > 0 ? executed : decimal(originalQuantity);
         BigDecimal totalCost = decimal(cumulativeQuote);
         BigDecimal averagePrice = executed.signum() > 0 && totalCost.signum() > 0
                 ? totalCost.divide(executed, 18, RoundingMode.HALF_UP).stripTrailingZeros()
@@ -168,10 +196,21 @@ public class OfficialBinanceSpotClient implements BinanceSpotClient {
                 orderId == null ? null : orderId.toString(),
                 clientOrderId,
                 status,
-                quantity,
+                executed,
                 totalCost,
-                averagePrice);
+                averagePrice,
+                fees);
     }
+
+    private static Map<String, BigDecimal> aggregateFees(Stream<Commission> commissions) {
+        return commissions
+                .filter(item -> item.asset() != null && !item.asset().isBlank())
+                .filter(item -> item.amount().signum() != 0)
+                .collect(java.util.stream.Collectors.toUnmodifiableMap(
+                        item -> item.asset().toUpperCase(), Commission::amount, BigDecimal::add));
+    }
+
+    private record Commission(String asset, BigDecimal amount) {}
 
     private static BinanceClientException translate(ApiException exception) {
         int errorCode = 0;

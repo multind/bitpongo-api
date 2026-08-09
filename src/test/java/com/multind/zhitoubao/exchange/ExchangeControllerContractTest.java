@@ -36,6 +36,8 @@ class ExchangeControllerContractTest {
     @MockitoBean private ExchangeRepository exchanges;
     @MockitoBean private ExchangeGatewayRegistry gateways;
     @MockitoBean private com.multind.zhitoubao.auth.UserRepository users;
+    @MockitoBean private com.multind.zhitoubao.plan.PlanApplicationService planApplicationService;
+    @MockitoBean private com.multind.zhitoubao.strategy.StrategyApplicationService strategyApplicationService;
 
     private final ExchangeGateway gateway = org.mockito.Mockito.mock(ExchangeGateway.class);
     private ExchangeEntity exchange;

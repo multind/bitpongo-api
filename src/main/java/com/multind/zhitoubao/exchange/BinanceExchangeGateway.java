@@ -53,8 +53,10 @@ public class BinanceExchangeGateway implements ExchangeGateway {
     }
 
     private static RuntimeException map(BinanceClientException exception, boolean orderSubmission) {
-        if (orderSubmission && exception.timeout()) {
-            return new AmbiguousOrderException("下单请求超时，结果不明确，请按客户端订单号查询", exception);
+        if (orderSubmission && (exception.timeout()
+                || exception.httpStatus() >= 500 || exception.httpStatus() <= 0
+                || exception.errorCode() == -1006 || exception.errorCode() == -1007)) {
+            return new AmbiguousOrderException("下单结果不明确，请按客户端订单号查询", exception);
         }
         if (exception.errorCode() == -2015 || exception.httpStatus() == 401) {
             return new BusinessException(401, "API密钥认证失败，请检查密钥是否正确");

@@ -1,0 +1,6 @@
+.git
+.idea
+.worktrees
+target
+.env
+*.log

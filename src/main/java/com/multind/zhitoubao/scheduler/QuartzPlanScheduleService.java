@@ -1,5 +1,7 @@
 package com.multind.zhitoubao.scheduler;
 
+import java.time.ZoneId;
+import java.util.TimeZone;
 import org.quartz.CronScheduleBuilder;
 import org.quartz.CronTrigger;
 import org.quartz.JobBuilder;
@@ -10,6 +12,8 @@ import org.quartz.SchedulerException;
 import org.quartz.TriggerBuilder;
 import org.quartz.TriggerKey;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -17,8 +21,19 @@ import org.springframework.stereotype.Service;
 public class QuartzPlanScheduleService implements PlanScheduleService {
     private static final String GROUP = "plans";
     private final Scheduler scheduler;
+    private final TimeZone timeZone;
 
-    public QuartzPlanScheduleService(Scheduler scheduler) { this.scheduler = scheduler; }
+    @Autowired
+    public QuartzPlanScheduleService(
+            Scheduler scheduler,
+            @Value("${zhitoubao.scheduling-zone:Asia/Shanghai}") String schedulingZone) {
+        this(scheduler, ZoneId.of(schedulingZone));
+    }
+
+    QuartzPlanScheduleService(Scheduler scheduler, ZoneId schedulingZone) {
+        this.scheduler = scheduler;
+        this.timeZone = TimeZone.getTimeZone(schedulingZone);
+    }
 
     @Override
     public void schedule(long planId, String cron) {
@@ -29,6 +44,7 @@ public class QuartzPlanScheduleService implements PlanScheduleService {
                     .withIdentity(triggerKey)
                     .forJob(jobKey)
                     .withSchedule(CronScheduleBuilder.cronSchedule(cron)
+                            .inTimeZone(timeZone)
                             .withMisfireHandlingInstructionDoNothing())
                     .build();
             if (scheduler.checkExists(jobKey)) {
@@ -71,6 +87,7 @@ public class QuartzPlanScheduleService implements PlanScheduleService {
             CronTrigger trigger = TriggerBuilder.newTrigger()
                     .withIdentity("trigger_asset_snapshot", "system")
                     .withSchedule(CronScheduleBuilder.cronSchedule("0 0 * * * ?")
+                            .inTimeZone(timeZone)
                             .withMisfireHandlingInstructionDoNothing())
                     .build();
             scheduler.scheduleJob(job, trigger);

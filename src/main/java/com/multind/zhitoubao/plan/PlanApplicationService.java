@@ -16,6 +16,8 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import static com.multind.zhitoubao.plan.PlanDtos.PlanView;
 
@@ -77,15 +79,27 @@ public class PlanApplicationService {
         plan.setStatus(status);
         plans.save(plan);
         if (schedules == null) return;
+        Runnable scheduleMutation;
         if ("active".equals(status)) {
             StrategyEntity strategy = strategies.findByIdAndUserId(plan.getStrategyId(), userId)
                     .orElseThrow(() -> new BusinessException(404, "定投策略不存在"));
-            schedules.resume(planId, com.multind.zhitoubao.strategy.StrategyApplicationService
-                    .normalizeCron(strategy.getCron()));
+            String cron = com.multind.zhitoubao.strategy.StrategyApplicationService.normalizeCron(strategy.getCron());
+            scheduleMutation = () -> schedules.resume(planId, cron);
         } else if ("close".equals(status)) {
-            schedules.remove(planId);
+            scheduleMutation = () -> schedules.remove(planId);
         } else {
-            schedules.pause(planId);
+            scheduleMutation = () -> schedules.pause(planId);
+        }
+        afterCommit(scheduleMutation);
+    }
+
+    private static void afterCommit(Runnable action) {
+        if (TransactionSynchronizationManager.isSynchronizationActive()) {
+            TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                @Override public void afterCommit() { action.run(); }
+            });
+        } else {
+            action.run();
         }
     }
 
@@ -100,16 +114,21 @@ public class PlanApplicationService {
                 .map(value -> value.getExchange()).orElse("binance");
         List<PortfolioCalculator.Position> positions = planCoins.stream().map(coin -> {
             BigDecimal price = prices.getFresh(exchange, coin.getSymbol() + "/USDT", clock.instant())
-                    .orElse(BigDecimal.ZERO);
+                    .orElse(coin.getAverage() == null ? BigDecimal.ZERO : coin.getAverage());
+            BigDecimal amount = coin.getTotalAmount() == null ? BigDecimal.ZERO : coin.getTotalAmount();
+            BigDecimal average = coin.getAverage() == null ? BigDecimal.ZERO : coin.getAverage();
+            coin.setIncome(amount.multiply(price.subtract(average)));
             return new PortfolioCalculator.Position(coin.getTotalAmount(), price);
         }).toList();
         BigDecimal totalValue = calculator.value(positions);
+        BigDecimal totalRevenue = calculator.revenue(totalValue, plan.getTotalFunds());
+        BigDecimal totalRatio = calculator.ratio(totalValue, plan.getTotalFunds());
         StrategyEntity strategy = strategies.findByIdAndUserId(plan.getStrategyId(), userId).orElse(null);
         List<OrderEntity> planOrders = includeOrders
                 ? orders.findByPlanIdAndUserId(plan.getId(), userId) : List.of();
         List<SnapshotEntity> planSnapshots = snapshots
                 .findByPlanIdAndUserIdOrderByCreatedAtAsc(plan.getId(), userId);
-        return new PlanView(plan.getId(), plan.getTotalFunds(), plan.getTotalRevenue(), plan.getTotalRatio(),
+        return new PlanView(plan.getId(), plan.getTotalFunds(), totalRevenue, totalRatio,
                 totalValue, plan.getNextTime(), plan.getStatus(), plan.getUserId(), plan.getTriggeredCount(),
                 plan.getCreatedAt(), strategy, planCoins, planOrders, planSnapshots);
     }

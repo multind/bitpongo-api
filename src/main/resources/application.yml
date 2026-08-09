@@ -1,5 +1,6 @@
 server:
   port: ${SERVER_PORT:8000}
+  shutdown: graceful
 
 spring:
   application:
@@ -27,12 +28,16 @@ spring:
       org.quartz.jobStore.misfireThreshold: 60000
 
 management:
+  endpoint:
+    health:
+      show-details: never
   endpoints:
     web:
       exposure:
         include: health,info
 
 zhitoubao:
+  scheduling-zone: ${SCHEDULING_ZONE:Asia/Shanghai}
   cors:
     allowed-origins: ${BACKEND_CORS_ORIGINS:*}
   wordpress:
@@ -51,4 +56,12 @@ zhitoubao:
     stream-enabled: ${MARKET_STREAM_ENABLED:true}
     price-max-age: ${MARKET_PRICE_MAX_AGE_SECONDS:60}s
     health-max-silence: ${MARKET_HEALTH_MAX_SILENCE_SECONDS:120}s
-    connection-rotation: ${MARKET_CONNECTION_ROTATION:23h50m}
+    connection-rotation: ${MARKET_CONNECTION_ROTATION:PT23H50M}
+  orders:
+    reconciliation-delay: ${ORDER_RECONCILIATION_DELAY:60s}
+    reconciliation-stale-age: ${ORDER_RECONCILIATION_STALE_AGE:PT30S}
+    reconciliation-max-attempts: ${ORDER_RECONCILIATION_MAX_ATTEMPTS:20}
+
+logging:
+  pattern:
+    level: "%5p [requestId=%X{requestId:-} userId=%X{userId:-}]"

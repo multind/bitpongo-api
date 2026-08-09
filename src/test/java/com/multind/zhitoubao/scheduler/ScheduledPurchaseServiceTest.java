@@ -53,7 +53,8 @@ class ScheduledPurchaseServiceTest {
         when(intents.saveAndFlush(any())).thenAnswer(inv -> { claimed.set(inv.getArgument(0)); return claimed.get(); });
         when(gateway.marketBuy(any(), eq("BTCUSDT"), any(), any())).thenAnswer(inv ->
                 new OrderResult("BTCUSDT", "99", inv.getArgument(3), "FILLED",
-                        inv.getArgument(2), new BigDecimal("12.4"), new BigDecimal("62000")));
+                        inv.getArgument(2), new BigDecimal("12.4"), new BigDecimal("62000"),
+                        Map.of()));
         service = new ScheduledPurchaseService(plans, strategies, coins, orders, exchanges, intents,
                 gateways, new OrderSizingService(), prices, new OrderIdFactory(), persistence,
                 Clock.fixed(fire, ZoneOffset.UTC));
@@ -65,7 +66,7 @@ class ScheduledPurchaseServiceTest {
         service.execute(42L, fire);
         verify(gateway, times(1)).marketBuy(any(), eq("BTCUSDT"), any(), any());
         verify(persistence).confirm(any(OrderIntentEntity.class), any(OrderResult.class));
-        verify(persistence).finishTrigger(42L, fire);
+        verify(persistence, times(2)).beginTrigger(42L, fire);
     }
 
     @Test
@@ -76,6 +77,18 @@ class ScheduledPurchaseServiceTest {
         service.execute(42L, fire);
 
         verify(gateway, times(1)).marketBuy(any(), eq("BTCUSDT"), any(), any());
+        verify(persistence).mark(any(OrderIntentEntity.class), eq("PENDING_RECONCILIATION"));
+        verify(persistence, never()).confirm(any(), any());
+    }
+
+    @Test
+    void openSubmissionIsQueuedInsteadOfRecordedAsHolding() {
+        when(gateway.marketBuy(any(), eq("BTCUSDT"), any(), any())).thenAnswer(inv ->
+                new OrderResult("BTCUSDT", "99", inv.getArgument(3), "NEW",
+                        BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, Map.of()));
+
+        service.execute(42L, fire);
+
         verify(persistence).mark(any(OrderIntentEntity.class), eq("PENDING_RECONCILIATION"));
         verify(persistence, never()).confirm(any(), any());
     }

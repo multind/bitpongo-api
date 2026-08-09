@@ -128,6 +128,7 @@ public class ExchangeApplicationService {
         if (creating && (entity.getExchange() == null || entity.getExchange().isBlank())) {
             throw new BusinessException(400, "交易所代码不能为空");
         }
+        gateways.require(entity.getExchange());
     }
 
     private ExchangeView listView(ExchangeEntity entity) {

@@ -4,6 +4,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.boot.health.contributor.Health;
 import org.springframework.boot.health.contributor.HealthIndicator;
@@ -16,6 +17,7 @@ public class MarketStreamHealthIndicator implements HealthIndicator {
     private final Duration maxSilence;
     private final Clock clock;
 
+    @Autowired
     public MarketStreamHealthIndicator(
             BinanceMarketStreamLifecycle lifecycle,
             @Value("${zhitoubao.market.health-max-silence:120s}") Duration maxSilence) {

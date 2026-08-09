@@ -1,6 +1,7 @@
 package com.multind.zhitoubao.exchange;
 
 import java.math.BigDecimal;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +21,7 @@ class BinanceExchangeGatewayTest {
         AccountBalance balance = new AccountBalance("USDT", bd("12.3"), bd("0"));
         MarketRules rules = new MarketRules(bd("10"), bd("0.001"), bd("0.001"), bd("100"));
         OrderResult order = new OrderResult("BTCUSDT", "12", "client-1", "FILLED",
-                bd("0.1"), bd("6000"), bd("60000"));
+                bd("0.1"), bd("6000"), bd("60000"), Map.of());
         when(client.account(credentials)).thenReturn(balance);
         when(client.marketRules("BTCUSDT")).thenReturn(rules);
         when(client.marketBuy(credentials, "BTCUSDT", bd("0.1"), "client-1")).thenReturn(order);
@@ -53,6 +54,24 @@ class BinanceExchangeGatewayTest {
                 .isInstanceOf(AmbiguousOrderException.class)
                 .hasMessageContaining("结果不明确");
         verify(client).marketBuy(credentials, "BTCUSDT", bd("0.1"), "client-1");
+    }
+
+    @Test
+    void serverErrorDuringSubmissionIsAlsoAmbiguous() {
+        when(client.marketBuy(credentials, "BTCUSDT", bd("0.1"), "client-1"))
+                .thenThrow(new BinanceClientException(503, 0, "gateway failure", false));
+
+        assertThatThrownBy(() -> gateway.marketBuy(credentials, "BTCUSDT", bd("0.1"), "client-1"))
+                .isInstanceOf(AmbiguousOrderException.class);
+    }
+
+    @Test
+    void binanceUnknownExecutionCodesAreAmbiguous() {
+        when(client.marketBuy(credentials, "BTCUSDT", bd("0.1"), "client-1"))
+                .thenThrow(new BinanceClientException(400, -1006, "unexpected response", false));
+
+        assertThatThrownBy(() -> gateway.marketBuy(credentials, "BTCUSDT", bd("0.1"), "client-1"))
+                .isInstanceOf(AmbiguousOrderException.class);
     }
 
     private static BigDecimal bd(String value) { return new BigDecimal(value); }

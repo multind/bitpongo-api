@@ -9,6 +9,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -20,6 +22,7 @@ import org.springframework.stereotype.Service;
 @ConditionalOnBean(OrderIntentRepository.class)
 public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
     private static final Logger log = LoggerFactory.getLogger(ScheduledPurchaseService.class);
+    private static final Set<String> TERMINAL_ORDER_STATUSES = Set.of("FILLED", "CANCELED", "EXPIRED", "REJECTED");
     private final PlanRepository plans;
     private final StrategyRepository strategies;
     private final CoinRepository coins;
@@ -64,7 +67,7 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
         ExchangeGateway gateway = gateways.require(exchange.getExchange());
         ExchangeCredentials credentials = new ExchangeCredentials(
                 exchange.getAccessKey(), exchange.getSecretKey(), exchange.getPassword());
-        boolean confirmed = false;
+        persistence.beginTrigger(planId, scheduledFireTime);
         for (CoinEntity coin : coins.findByPlanIdAndUserId(planId, plan.getUserId())) {
             String marketSymbol = coin.getSymbol().toUpperCase() + "USDT";
             String internalSymbol = coin.getSymbol().toUpperCase() + "/USDT";
@@ -79,8 +82,14 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
             try {
                 persistence.mark(intent, "SUBMITTING");
                 OrderResult result = gateway.marketBuy(credentials, marketSymbol, quantity, clientOrderId);
-                persistence.confirm(intent, result);
-                confirmed = true;
+                String resultStatus = result.status() == null ? "" : result.status().toUpperCase(Locale.ROOT);
+                if (TERMINAL_ORDER_STATUSES.contains(resultStatus) && result.quantity().signum() > 0) {
+                    persistence.confirm(intent, result);
+                } else if (Set.of("CANCELED", "EXPIRED", "REJECTED").contains(resultStatus)) {
+                    persistence.mark(intent, resultStatus);
+                } else {
+                    persistence.mark(intent, "PENDING_RECONCILIATION");
+                }
             } catch (AmbiguousOrderException ambiguous) {
                 persistence.mark(intent, "PENDING_RECONCILIATION");
             } catch (RuntimeException failure) {
@@ -88,7 +97,11 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
                 log.error("计划币种下单失败，planId={}, coinId={}", planId, coin.getId(), failure);
             }
         }
-        if (confirmed) persistence.finishTrigger(planId, scheduledFireTime);
+    }
+
+    @Override
+    public void updateNextFireTime(long planId, Instant nextFireTime) {
+        persistence.updateNextFireTime(planId, nextFireTime);
     }
 
     private boolean shouldSkipAverageDown(
