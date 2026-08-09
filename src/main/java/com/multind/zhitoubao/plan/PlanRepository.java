@@ -8,4 +8,5 @@ public interface PlanRepository extends JpaRepository<PlanEntity, Long> {
     Optional<PlanEntity> findByIdAndUserId(Long id, Long userId);
     List<PlanEntity> findByUserIdAndStatusNot(Long userId, String status);
     List<PlanEntity> findByUserId(Long userId);
+    List<PlanEntity> findByStatus(String status);
 }
