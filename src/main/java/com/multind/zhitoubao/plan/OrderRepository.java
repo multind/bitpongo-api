@@ -7,5 +7,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 public interface OrderRepository extends JpaRepository<OrderEntity, Long> {
     Optional<OrderEntity> findByIdAndUserId(Long id, Long userId);
     Optional<OrderEntity> findByClientOrderId(String clientOrderId);
+    Optional<OrderEntity> findFirstByPlanIdAndSymbolOrderByCreatedAtDesc(Long planId, String symbol);
     List<OrderEntity> findByPlanIdAndUserId(Long planId, Long userId);
 }
