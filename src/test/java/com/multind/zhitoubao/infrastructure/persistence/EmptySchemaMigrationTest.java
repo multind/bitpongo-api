@@ -33,7 +33,8 @@ class EmptySchemaMigrationTest {
     void createsBusinessQuartzAndIdempotencySchema() {
         List<String> expectedTables = List.of(
                 "user", "exchange", "strategy", "plan", "coin", "order", "snapshot", "dict",
-                "order_intent", "QRTZ_JOB_DETAILS", "QRTZ_TRIGGERS", "QRTZ_LOCKS");
+                "order_intent", "deleted_external_identity",
+                "QRTZ_JOB_DETAILS", "QRTZ_TRIGGERS", "QRTZ_LOCKS");
 
         for (String table : expectedTables) {
             Integer count = jdbc.queryForObject(
@@ -57,5 +58,19 @@ class EmptySchemaMigrationTest {
 
         assertThat(orderIndex).isEqualTo(1);
         assertThat(intentIndex).isEqualTo(1);
+
+        Integer lifecycleColumns = jdbc.queryForObject(
+                "select count(*) from information_schema.columns "
+                        + "where table_schema = database() and table_name = 'user' "
+                        + "and column_name in ('auth_provider', 'status', 'deleted_at')",
+                Integer.class);
+        Integer tombstoneIndex = jdbc.queryForObject(
+                "select count(*) from information_schema.statistics "
+                        + "where table_schema = database() and table_name = 'deleted_external_identity' "
+                        + "and index_name = 'uk_deleted_external_identity_provider_subject' and non_unique = 0",
+                Integer.class);
+
+        assertThat(lifecycleColumns).isEqualTo(3);
+        assertThat(tombstoneIndex).isEqualTo(2);
     }
 }
