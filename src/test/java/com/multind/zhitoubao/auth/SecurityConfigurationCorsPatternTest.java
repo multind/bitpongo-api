@@ -24,6 +24,9 @@ class SecurityConfigurationCorsPatternTest {
 
     @Autowired private MockMvc mvc;
     @MockitoBean private UserApplicationService userApplicationService;
+    @MockitoBean private AccountDeletionService accountDeletionService;
+    @MockitoBean private UserRepository users;
+    @MockitoBean private DeletedExternalIdentityRepository deletedExternalIdentities;
     @MockitoBean private com.multind.zhitoubao.exchange.ExchangeApplicationService exchangeApplicationService;
     @MockitoBean private com.multind.zhitoubao.plan.PlanApplicationService planApplicationService;
     @MockitoBean private com.multind.zhitoubao.strategy.StrategyApplicationService strategyApplicationService;
