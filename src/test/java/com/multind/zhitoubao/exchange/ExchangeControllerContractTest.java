@@ -36,6 +36,8 @@ class ExchangeControllerContractTest {
     @MockitoBean private ExchangeRepository exchanges;
     @MockitoBean private ExchangeGatewayRegistry gateways;
     @MockitoBean private com.multind.zhitoubao.auth.UserRepository users;
+    @MockitoBean private com.multind.zhitoubao.auth.DeletedExternalIdentityRepository deletedExternalIdentities;
+    @MockitoBean private com.multind.zhitoubao.auth.AccountDeletionService accountDeletionService;
     @MockitoBean private com.multind.zhitoubao.plan.PlanApplicationService planApplicationService;
     @MockitoBean private com.multind.zhitoubao.strategy.StrategyApplicationService strategyApplicationService;
 
@@ -44,6 +46,11 @@ class ExchangeControllerContractTest {
 
     @BeforeEach
     void setUp() {
+        var user = new com.multind.zhitoubao.auth.UserEntity();
+        user.setId(7L);
+        user.setStatus("active");
+        when(users.findById(7L)).thenReturn(Optional.of(user));
+
         exchange = new ExchangeEntity();
         exchange.setId(3L);
         exchange.setUserId(7L);

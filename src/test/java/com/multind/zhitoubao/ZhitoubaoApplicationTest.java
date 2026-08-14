@@ -14,6 +14,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 class ZhitoubaoApplicationTest {
 
     @MockitoBean private UserRepository users;
+    @MockitoBean private com.multind.zhitoubao.auth.DeletedExternalIdentityRepository deletedExternalIdentities;
+    @MockitoBean private com.multind.zhitoubao.auth.AccountDeletionService accountDeletionService;
     @MockitoBean private ExchangeRepository exchanges;
     @MockitoBean private PlanApplicationService planApplicationService;
     @MockitoBean private StrategyApplicationService strategyApplicationService;

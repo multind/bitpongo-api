@@ -26,11 +26,20 @@ public class UserEntity {
     @Column(length = 255)
     private String password;
 
+    @Column(name = "auth_provider", length = 16, nullable = false)
+    private String authProvider = "local";
+
+    @Column(length = 16, nullable = false)
+    private String status = "active";
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
     @Column(name = "last_login")
     private LocalDateTime lastLogin;
+
+    @Column(name = "deleted_at")
+    private LocalDateTime deletedAt;
 
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
@@ -40,8 +49,15 @@ public class UserEntity {
     public void setEmail(String email) { this.email = email; }
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+    public String getAuthProvider() { return authProvider; }
+    public void setAuthProvider(String authProvider) { this.authProvider = authProvider; }
+    public String getStatus() { return status; }
+    public void setStatus(String status) { this.status = status; }
+    public boolean isActive() { return "active".equals(status); }
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public LocalDateTime getLastLogin() { return lastLogin; }
     public void setLastLogin(LocalDateTime lastLogin) { this.lastLogin = lastLogin; }
+    public LocalDateTime getDeletedAt() { return deletedAt; }
+    public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
 }

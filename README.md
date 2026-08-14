@@ -62,11 +62,11 @@ Compose 默认关闭真实交易和行情 Stream，便于离线检查 REST/数�
 
 1. 停止 Python 服务的写入，使用 `mysqldump --single-transaction` 完整备份业务库。
 2. 核对字符集、时区和数据库账号权限。
-3. Java 服务首次连接现有库时，Flyway 以版本 1 建立基线，不删除或重建 `user`、`order` 等业务表；V2 增加 `client_order_id`、`order_intent` 和 Quartz 表，V3 增加按计划/触发时间唯一的 `plan_fire_execution` 审计表。
+3. Java 服务首次连接现有库时，Flyway 以版本 1 建立基线，不删除或重建 `user`、`order` 等业务表；V2 增加 `client_order_id`、`order_intent` 和 Quartz 表，V3 增加按计划/触发时间唯一的 `plan_fire_execution` 审计表，V4 增加账号生命周期和外部身份注销记录。
 4. 先使用 Testnet 密钥启动，检查 `/actuator/health`、用户登录、交易所列表、策略和计划详情。
 5. 检查 `QRTZ_` 表中活动计划任务恢复正常，再切换入口流量。
 
-空库会按 V1、V2、V3 顺序创建兼容表。不要手工修改 `flyway_schema_history`。升级前始终备份。
+空库会按 V1、V2、V3、V4 顺序创建兼容表。不要手工修改 `flyway_schema_history`。升级前始终备份。
 
 ## Binance 配置
 
@@ -103,6 +103,19 @@ BINANCE_MARKET_STREAM_URL=wss://stream.binance.com:9443
 ```json
 {"symbol":"BTC","price":62000,"exchange":"binance"}
 ```
+
+### 注销账号
+
+已登录用户可通过 `DELETE /api/users/account` 永久注销账号，请求体只包含当前密码：
+
+```bash
+curl -X DELETE http://localhost:8000/api/users/account \
+  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
+  -H "Content-Type: application/json" \
+  -d '{"password":"example-password"}'
+```
+
+注销不可撤销。成功后，所有交易计划立即停止，交易所访问密钥、Secret 和口令被清除，用户资料被匿名化，已有 Token 在下一次请求时失效。策略、计划、订单和快照仅作为匿名历史保留；原邮箱之后可以注册为一个全新的身份。WordPress 身份注销后不能通过同一外部用户 ID 恢复旧账号。
 
 ## 回滚
 
