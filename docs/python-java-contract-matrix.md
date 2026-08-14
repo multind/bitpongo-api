@@ -10,6 +10,7 @@
 | 用户 | `users.py` `POST /api/users/register` | `UserController.register` | `UserControllerContractTest` |
 | 用户 | `users.py` `GET /api/users/profile` | `UserController.profile` | `UserControllerContractTest` |
 | 用户 | `users.py` `POST /api/users/v1/login` | `UserController.wordpressLogin` | `UserControllerContractTest` |
+| 用户 | 移动端新增 `DELETE /api/users/account` | `UserController.deleteAccount` | `UserControllerContractTest` |
 | 用户 | `users.py` `POST /api/users/ding` | `NotificationController.ding` | `NotificationControllerContractTest` |
 | 用户 | `users.py` `GET /api/users/notices` | `NotificationController.notices` | `NotificationControllerContractTest` |
 | 交易所 | `exchanges.py` `GET /api/exchanges/list` | `ExchangeController.list` | `ExchangeControllerContractTest` |

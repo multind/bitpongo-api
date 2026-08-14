@@ -17,6 +17,9 @@ public final class UserDtos {
             @NotBlank(message = "邮箱不能为空") @Email(message = "邮箱格式错误") String email,
             @NotBlank(message = "密码不能为空") String password) {}
 
+    public record AccountDeletionRequest(
+            @NotBlank(message = "密码不能为空") String password) {}
+
     public record UserInfo(long id, String name, String email) {}
 
     public record LoginData(String token, UserInfo info) {}

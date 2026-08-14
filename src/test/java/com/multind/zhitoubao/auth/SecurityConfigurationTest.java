@@ -37,6 +37,7 @@ class SecurityConfigurationTest {
     @Autowired private MockMvc mvc;
     @Autowired private JwtTokenService tokens;
     @MockitoBean private UserApplicationService userApplicationService;
+    @MockitoBean private AccountDeletionService accountDeletionService;
     @MockitoBean private UserRepository users;
     @MockitoBean private DeletedExternalIdentityRepository deletedExternalIdentities;
     @MockitoBean private com.multind.zhitoubao.exchange.ExchangeApplicationService exchangeApplicationService;
