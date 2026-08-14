@@ -35,10 +35,16 @@ class StrategyControllerContractTest {
     @MockitoBean ExchangeRepository exchanges;
     @MockitoBean PlanScheduleService schedules;
     @MockitoBean UserRepository users;
+    @MockitoBean com.multind.zhitoubao.auth.DeletedExternalIdentityRepository deletedExternalIdentities;
+    @MockitoBean com.multind.zhitoubao.auth.AccountDeletionService accountDeletionService;
     @MockitoBean com.multind.zhitoubao.plan.PlanApplicationService planApplicationService;
 
     @Test
     void createReturnsStrategyPlanAndCoinsAndListIsUserScoped() throws Exception {
+        var user = new com.multind.zhitoubao.auth.UserEntity();
+        user.setId(7L);
+        user.setStatus("active");
+        when(users.findById(7L)).thenReturn(java.util.Optional.of(user));
         var exchange = new com.multind.zhitoubao.exchange.ExchangeEntity();
         exchange.setId(3L);
         exchange.setExchange("binance");

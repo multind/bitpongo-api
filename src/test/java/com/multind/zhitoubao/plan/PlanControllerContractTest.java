@@ -31,9 +31,15 @@ class PlanControllerContractTest {
     @MockitoBean ExchangeApplicationService exchangeApplicationService;
     @MockitoBean StrategyApplicationService strategyApplicationService;
     @MockitoBean UserRepository users;
+    @MockitoBean com.multind.zhitoubao.auth.DeletedExternalIdentityRepository deletedExternalIdentities;
+    @MockitoBean com.multind.zhitoubao.auth.AccountDeletionService accountDeletionService;
 
     @Test
     void listDetailAndStatusKeepPythonPathsAndNestedShape() throws Exception {
+        var user = new com.multind.zhitoubao.auth.UserEntity();
+        user.setId(7L);
+        user.setStatus("active");
+        when(users.findById(7L)).thenReturn(java.util.Optional.of(user));
         PlanDtos.PlanView view = new PlanDtos.PlanView(42L, new BigDecimal("100"), BigDecimal.ZERO,
                 BigDecimal.ZERO, new BigDecimal("120"), LocalDateTime.parse("2026-08-10T08:00:00"),
                 "active", 7L, 1, LocalDateTime.parse("2026-08-09T08:00:00"),

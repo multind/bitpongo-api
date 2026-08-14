@@ -32,9 +32,15 @@ class NotificationControllerContractTest {
     @MockitoBean StrategyApplicationService strategyApplicationService;
     @MockitoBean PlanApplicationService planApplicationService;
     @MockitoBean UserRepository users;
+    @MockitoBean com.multind.zhitoubao.auth.DeletedExternalIdentityRepository deletedExternalIdentities;
+    @MockitoBean com.multind.zhitoubao.auth.AccountDeletionService accountDeletionService;
 
     @Test
     void noticesAndDingKeepCurrentContractAndCopy() throws Exception {
+        var user = new com.multind.zhitoubao.auth.UserEntity();
+        user.setId(7L);
+        user.setStatus("active");
+        when(users.findById(7L)).thenReturn(java.util.Optional.of(user));
         when(notifications.notices()).thenReturn("邮件,钉钉");
         when(notifications.testDing(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any()))
                 .thenReturn(Map.of("errcode", 0));

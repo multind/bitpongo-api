@@ -23,6 +23,7 @@ class AuthenticatedUserResolverTest {
     @MockitoBean private UserRepository users;
     @MockitoBean private DeletedExternalIdentityRepository tombstones;
     @MockitoBean private WordPressAuthClient wordpress;
+    @MockitoBean private AccountDeletionService accountDeletionService;
     @MockitoBean private ExchangeRepository exchanges;
     @MockitoBean private PlanApplicationService planApplicationService;
     @MockitoBean private StrategyApplicationService strategyApplicationService;

@@ -14,6 +14,7 @@ import java.util.List;
 import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -42,8 +43,9 @@ public class AccountDeletionService {
             DeletedExternalIdentityRepository tombstones,
             PlanRepository plans,
             ExchangeRepository exchanges,
-            PlanScheduleService schedules) {
-        this(users, passwords, tombstones, plans, exchanges, schedules, Clock.systemUTC());
+            ObjectProvider<PlanScheduleService> schedules) {
+        this(users, passwords, tombstones, plans, exchanges,
+                schedules.getIfAvailable(), Clock.systemUTC());
     }
 
     AccountDeletionService(
@@ -109,6 +111,10 @@ public class AccountDeletionService {
     }
 
     private void pausePlansAfterCommit(List<Long> planIds) {
+        if (schedules == null) {
+            LOGGER.warn("account deletion plan scheduler is unavailable");
+            return;
+        }
         if (!TransactionSynchronizationManager.isSynchronizationActive()) {
             LOGGER.error("account deletion transaction synchronization is unavailable");
             return;
