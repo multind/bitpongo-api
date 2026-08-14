@@ -68,7 +68,7 @@ class SecurityConfigurationTest {
                         .header(HttpHeaders.ORIGIN, "https://front.example")
                         .header(HttpHeaders.ACCESS_CONTROL_REQUEST_METHOD, "GET"))
                 .andExpect(status().isOk())
-                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "*"));
+                .andExpect(header().string(HttpHeaders.ACCESS_CONTROL_ALLOW_ORIGIN, "https://front.example"));
     }
 
     @RestController

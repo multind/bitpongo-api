@@ -31,6 +31,7 @@ services:
       BINANCE_PRODUCTION_REST_BASE_URL: ${BINANCE_PRODUCTION_REST_BASE_URL:-https://api.binance.com}
       BINANCE_MARKET_STREAM_URL: ${BINANCE_MARKET_STREAM_URL:-wss://stream.binance.com:9443}
       MARKET_STREAM_ENABLED: ${MARKET_STREAM_ENABLED:-false}
+      BACKEND_CORS_ORIGINS: ${BACKEND_CORS_ORIGINS:-*}
     depends_on:
       mysql:
         condition: service_healthy
