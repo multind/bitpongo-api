@@ -20,6 +20,7 @@ public class UserApplicationService {
     private final PasswordCompatibilityService passwords;
     private final JwtTokenService tokens;
     private final WordPressAuthClient wordpress;
+    private final DeletedExternalIdentityRepository tombstones;
     private final Clock clock;
 
     @Autowired
@@ -27,8 +28,9 @@ public class UserApplicationService {
             UserRepository users,
             PasswordCompatibilityService passwords,
             JwtTokenService tokens,
-            WordPressAuthClient wordpress) {
-        this(users, passwords, tokens, wordpress, Clock.systemUTC());
+            WordPressAuthClient wordpress,
+            DeletedExternalIdentityRepository tombstones) {
+        this(users, passwords, tokens, wordpress, tombstones, Clock.systemUTC());
     }
 
     UserApplicationService(
@@ -36,17 +38,20 @@ public class UserApplicationService {
             PasswordCompatibilityService passwords,
             JwtTokenService tokens,
             WordPressAuthClient wordpress,
+            DeletedExternalIdentityRepository tombstones,
             Clock clock) {
         this.users = users;
         this.passwords = passwords;
         this.tokens = tokens;
         this.wordpress = wordpress;
+        this.tombstones = tombstones;
         this.clock = clock;
     }
 
     @Transactional
     public LoginData login(UserLoginRequest request) {
         UserEntity user = users.findByEmail(normalizeEmail(request.username()))
+                .filter(UserEntity::isActive)
                 .filter(found -> passwords.matches(request.password(), found.getPassword()))
                 .orElseThrow(() -> new BusinessException(401, "用户名或密码错误"));
         user.setLastLogin(now());
@@ -64,6 +69,8 @@ public class UserApplicationService {
         user.setName(request.name());
         user.setEmail(email);
         user.setPassword(passwords.hash(request.password()));
+        user.setAuthProvider("local");
+        user.setStatus("active");
         user.setCreatedAt(now);
         user.setLastLogin(now);
         return response(users.save(user));
@@ -79,16 +86,28 @@ public class UserApplicationService {
     @Transactional
     public LoginData wordpressLogin(UserLoginRequest request) {
         WordPressSession session = wordpress.login(request.username(), request.password());
+        String subject = String.valueOf(session.userId());
+        if (tombstones.existsByProviderAndSubject("wordpress", subject)) {
+            throw new BusinessException(401, "账号不可用");
+        }
         LocalDateTime now = now();
-        UserEntity user = users.findByEmail(normalizeEmail(session.email())).orElseGet(() -> {
+        UserEntity user = users.findById(session.userId())
+                .or(() -> users.findByEmail(normalizeEmail(session.email())))
+                .orElseGet(() -> {
             UserEntity created = new UserEntity();
             created.setId(session.userId());
             created.setEmail(normalizeEmail(session.email()));
-            created.setPassword(passwords.hash(request.password()));
             created.setCreatedAt(now);
             return created;
         });
+        if (!user.isActive()) {
+            throw new BusinessException(401, "账号不可用");
+        }
         user.setName(session.displayName());
+        user.setEmail(normalizeEmail(session.email()));
+        user.setPassword(passwords.hash(request.password()));
+        user.setAuthProvider("wordpress");
+        user.setStatus("active");
         user.setLastLogin(now);
         users.save(user);
         return new LoginData(

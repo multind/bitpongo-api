@@ -1,6 +1,7 @@
 package com.multind.zhitoubao.auth;
 
 import java.util.Map;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -21,6 +22,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(properties = {
         "zhitoubao.jwt.secret-key=security-test-secret",
@@ -35,6 +37,8 @@ class SecurityConfigurationTest {
     @Autowired private MockMvc mvc;
     @Autowired private JwtTokenService tokens;
     @MockitoBean private UserApplicationService userApplicationService;
+    @MockitoBean private UserRepository users;
+    @MockitoBean private DeletedExternalIdentityRepository deletedExternalIdentities;
     @MockitoBean private com.multind.zhitoubao.exchange.ExchangeApplicationService exchangeApplicationService;
     @MockitoBean private com.multind.zhitoubao.plan.PlanApplicationService planApplicationService;
     @MockitoBean private com.multind.zhitoubao.strategy.StrategyApplicationService strategyApplicationService;
@@ -56,6 +60,11 @@ class SecurityConfigurationTest {
 
     @Test
     void validBearerTokenPopulatesUserContext() throws Exception {
+        UserEntity user = new UserEntity();
+        user.setId(42L);
+        user.setStatus("active");
+        when(users.findById(42L)).thenReturn(Optional.of(user));
+
         mvc.perform(get("/test/me")
                         .header(HttpHeaders.AUTHORIZATION, "Bearer " + tokens.issue(42L)))
                 .andExpect(status().isOk())

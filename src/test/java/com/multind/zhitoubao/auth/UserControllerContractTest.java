@@ -29,6 +29,7 @@ class UserControllerContractTest {
     @Autowired private JwtTokenService tokens;
 
     @MockitoBean private UserRepository users;
+    @MockitoBean private DeletedExternalIdentityRepository tombstones;
     @MockitoBean private WordPressAuthClient wordpress;
     @MockitoBean private com.multind.zhitoubao.exchange.ExchangeApplicationService exchangeApplicationService;
     @MockitoBean private com.multind.zhitoubao.plan.PlanApplicationService planApplicationService;
@@ -43,6 +44,7 @@ class UserControllerContractTest {
         localUser.setName("测试用户");
         localUser.setEmail("local@example.com");
         localUser.setPassword(passwords.hash("secret"));
+        localUser.setStatus("active");
         localUser.setCreatedAt(LocalDateTime.of(2025, 1, 2, 3, 4));
         when(users.findByEmail("local@example.com")).thenReturn(Optional.of(localUser));
         when(users.findById(7L)).thenReturn(Optional.of(localUser));
@@ -85,6 +87,20 @@ class UserControllerContractTest {
     }
 
     @Test
+    void deletedLocalAccountCannotLoginOrReuseOldToken() throws Exception {
+        localUser.setStatus("deleted");
+
+        mvc.perform(post("/api/users/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"local@example.com\",\"password\":\"secret\"}"))
+                .andExpect(status().isUnauthorized());
+
+        mvc.perform(get("/api/users/profile")
+                        .header("Authorization", "Bearer " + tokens.issue(7L)))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void registerCreatesPythonCompatibleUserResponse() throws Exception {
         when(users.findByEmail("new@example.com")).thenReturn(Optional.empty());
 
@@ -120,5 +136,18 @@ class UserControllerContractTest {
                 .andExpect(jsonPath("$.data.token").value("wp-token"))
                 .andExpect(jsonPath("$.data.info.id").value(4))
                 .andExpect(jsonPath("$.data.info.email").value("u@example.com"));
+    }
+
+    @Test
+    void wordpressLoginCannotRestoreDeletedSubject() throws Exception {
+        when(wordpress.login("u@example.com", "secret"))
+                .thenReturn(new WordPressSession("wp-token", 4L, "u@example.com", "WP 用户"));
+        when(tombstones.existsByProviderAndSubject("wordpress", "4")).thenReturn(true);
+
+        mvc.perform(post("/api/users/v1/login")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"username\":\"u@example.com\",\"password\":\"secret\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.message").value("账号不可用"));
     }
 }
