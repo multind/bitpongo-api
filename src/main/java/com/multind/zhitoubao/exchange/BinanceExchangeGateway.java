@@ -59,7 +59,7 @@ public class BinanceExchangeGateway implements ExchangeGateway {
             return new AmbiguousOrderException("下单结果不明确，请按客户端订单号查询", exception);
         }
         if (exception.errorCode() == -2015 || exception.httpStatus() == 401) {
-            return new BusinessException(401, "API密钥认证失败，请检查密钥是否正确");
+            return new BusinessException(400, "API密钥认证失败，请检查密钥是否正确");
         }
         if (exception.httpStatus() == 429 || exception.httpStatus() >= 500 || exception.timeout()) {
             return new RetryableExchangeException("Binance 暂时不可用，请稍后重试", exception);

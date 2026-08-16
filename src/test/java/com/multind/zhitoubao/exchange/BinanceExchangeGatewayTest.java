@@ -1,5 +1,6 @@
 package com.multind.zhitoubao.exchange;
 
+import com.multind.zhitoubao.common.api.BusinessException;
 import java.math.BigDecimal;
 import java.util.Map;
 import java.util.Optional;
@@ -40,7 +41,10 @@ class BinanceExchangeGatewayTest {
                 .thenThrow(new BinanceClientException(429, -1003, "rate limit", false));
 
         assertThatThrownBy(() -> gateway.verifyCredentials(credentials))
-                .hasMessage("API密钥认证失败，请检查密钥是否正确");
+                .isInstanceOfSatisfying(BusinessException.class, e -> {
+                    assertThat(e.getMessage()).isEqualTo("API密钥认证失败，请检查密钥是否正确");
+                    assertThat(e.getCode()).isEqualTo(400);
+                });
         assertThatThrownBy(() -> gateway.findOrder(credentials, "BTCUSDT", "client-1"))
                 .isInstanceOf(RetryableExchangeException.class);
     }
