@@ -1,6 +1,7 @@
 services:
   mysql:
     image: mysql:9.7
+    restart: unless-stopped
     ports:
       - "127.0.0.1:${MYSQL_HOST_PORT:-3306}:3306"
     environment:
@@ -18,8 +19,12 @@ services:
 
   api:
     build: .
+    restart: unless-stopped
     ports:
       - "${SERVER_PORT:-8000}:8000"
+    networks:
+      - default
+      - frontend
     environment:
       SPRING_PROFILES_ACTIVE: prod
       DATABASE_URL: jdbc:mysql://mysql:3306/${DATABASE_NAME:-zhitoubao}?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai
@@ -40,6 +45,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 30
+
+networks:
+  default:
+  frontend:
+    name: zhitoubao-net
 
 volumes:
   mysql-data:
