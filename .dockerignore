@@ -1,6 +1,8 @@
 .git
-.idea
 .worktrees
+.idea
 target
+docs
 .env
 *.log
+.DS_Store
