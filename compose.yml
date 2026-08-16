@@ -18,6 +18,7 @@ services:
       retries: 30
 
   api:
+    image: docker.io/corbettzhang/zhitoubaoapi:latest
     build: .
     restart: unless-stopped
     ports:
