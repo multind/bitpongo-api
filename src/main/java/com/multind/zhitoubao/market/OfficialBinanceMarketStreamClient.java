@@ -3,6 +3,7 @@ package com.multind.zhitoubao.market;
 import com.binance.connector.client.spot.websocket.stream.SpotWebSocketStreamsUtil;
 import com.binance.connector.client.spot.websocket.stream.api.SpotWebSocketStreams;
 import java.math.BigDecimal;
+import java.net.URI;
 import java.time.Instant;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
@@ -11,11 +12,21 @@ import org.springframework.stereotype.Component;
 
 @Component
 public class OfficialBinanceMarketStreamClient implements BinanceMarketStreamClient {
-    private final String streamUrl;
+    private final String streamPath;
 
     public OfficialBinanceMarketStreamClient(
             @Value("${zhitoubao.binance.market-stream-url:wss://stream.binance.com:9443}") String streamUrl) {
-        this.streamUrl = streamUrl;
+        this.streamPath = normalizeStreamPath(streamUrl);
+    }
+
+    /**
+     * The Binance connector appends the configured fragment to its fixed base
+     * {@code wss://stream.binance.com:9443}, so only the path part of the configured
+     * stream URL is forwarded.
+     */
+    static String normalizeStreamPath(String streamUrl) {
+        String path = URI.create(streamUrl).getPath();
+        return path == null ? "" : path;
     }
 
     @Override
@@ -23,7 +34,7 @@ public class OfficialBinanceMarketStreamClient implements BinanceMarketStreamCli
             Consumer<TickerEvent> onTicker,
             Consumer<Throwable> onFailure,
             Runnable onClosed) {
-        var configuration = SpotWebSocketStreamsUtil.getClientConfiguration(streamUrl);
+        var configuration = SpotWebSocketStreamsUtil.getClientConfiguration(streamPath);
         SpotWebSocketStreams streams = new SpotWebSocketStreams(configuration);
         var queue = streams.allMiniTicker();
         AtomicBoolean closed = new AtomicBoolean();
