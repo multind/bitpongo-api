@@ -58,9 +58,9 @@ docker compose ps
 
 Compose 默认关闭真实交易和行情 Stream，便于离线检查 REST/数据库/Quartz。需要实时行情时设置 `MARKET_STREAM_ENABLED=true`。
 
-`api` 服务除内部网络外还加入名为 `zhitoubao-net` 的共享网络，供 `zhitoubaofront` 的 Nginx 容器以服务名 `api:8000` 反向代理（前后端分开发布）。对外仅暴露 `8000` 作为 API 调试端口；如不希望暴露，把 `ports` 改为 `127.0.0.1:${SERVER_PORT:-8000}:8000`。启动顺序：先起后端 Compose（创建共享网络），再起前端 Compose。
+`api` 服务除内部网络外还加入名为 `bitpongo-net` 的共享网络，供 `bitpongofront` 的 Nginx 容器以服务名 `api:8000` 反向代理（前后端分开发布）。对外仅暴露 `8000` 作为 API 调试端口；如不希望暴露，把 `ports` 改为 `127.0.0.1:${SERVER_PORT:-8000}:8000`。启动顺序：先起后端 Compose（创建共享网络），再起前端 Compose。
 
-镜像推送到 Docker Hub（`docker.io/corbettzhang/zhitoubaoapi:latest`）：
+镜像推送到 Docker Hub（`docker.io/corbettzhang/bitpongoapi:latest`）：
 
 ```bash
 docker login

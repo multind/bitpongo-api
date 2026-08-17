@@ -18,7 +18,7 @@ services:
       retries: 30
 
   api:
-    image: docker.io/corbettzhang/zhitoubaoapi:latest
+    image: docker.io/corbettzhang/bitpongoapi:latest
     build: .
     restart: unless-stopped
     ports:
@@ -50,7 +50,7 @@ services:
 networks:
   default:
   frontend:
-    name: zhitoubao-net
+    name: bitpongo-net
 
 volumes:
   mysql-data:
