@@ -4,7 +4,7 @@ server:
 
 spring:
   application:
-    name: zhitoubao
+    name: bitpongo-api
   jackson:
     property-naming-strategy: SNAKE_CASE
   datasource:

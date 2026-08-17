@@ -8,7 +8,7 @@ RUN ./mvnw -B -DskipTests clean package
 
 FROM eclipse-temurin:26-jre-alpine
 WORKDIR /app
-COPY --from=build /workspace/target/zhitoubao-*.jar app.jar
+COPY --from=build /workspace/target/bitpongo-api-*.jar app.jar
 USER 10001:10001
 EXPOSE 8000
 ENTRYPOINT ["java", "-XX:MaxRAMPercentage=75", "-jar", "/app/app.jar"]

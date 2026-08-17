@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Create `/Volumes/ExternalDrive/Code/github/zhitoubaomobile` as a production-oriented Flutter app that loads remote `zhitoubaofront` first and safely falls back to a bundled build.
+**Goal:** Create `/Volumes/ExternalDrive/Code/github/bitpongo-mobile` as a production-oriented Flutter app that loads remote `bitpongo` first and safely falls back to a bundled build.
 
 **Architecture:** A pure configuration/navigation layer feeds a small WebView shell state machine. A loopback-only HTTP server serves the bundled Vue history-mode app and injects runtime API configuration; a narrow, origin-checked bridge owns native context, image saving, and sharing.
 
@@ -10,8 +10,8 @@
 
 ## Global Constraints
 
-- Project directory: `/Volumes/ExternalDrive/Code/github/zhitoubaomobile`.
-- App name: `智投宝`; Dart package: `zhitoubaomobile`.
+- Project directory: `/Volumes/ExternalDrive/Code/github/bitpongo-mobile`.
+- App name: `智投宝`; Dart package: `bitpongo-mobile`.
 - Android applicationId and namespace: `com.multind.zhitoubao`.
 - iOS Bundle ID: `com.multind.zhitoubao`.
 - iOS deployment target: 15.0.
@@ -54,12 +54,12 @@
 ### Task 1: Scaffold the repository and lock current stable dependencies
 
 **Files:**
-- Create: entire Flutter scaffold at `/Volumes/ExternalDrive/Code/github/zhitoubaomobile`
+- Create: entire Flutter scaffold at `/Volumes/ExternalDrive/Code/github/bitpongo-mobile`
 - Modify: `pubspec.yaml`
 - Create: `.metadata`, `.gitignore`, `analysis_options.yaml`, `pubspec.lock`
 
 **Interfaces:**
-- Produces: a clean Flutter package named `zhitoubaomobile` with Android/iOS platforms.
+- Produces: a clean Flutter package named `bitpongo-mobile` with Android/iOS platforms.
 
 - [ ] **Step 1: Verify the Flutter toolchain**
 
@@ -74,8 +74,8 @@ Run:
 
 ```bash
 flutter create --platforms=android,ios --org com.multind \
-  --project-name zhitoubaomobile /Volumes/ExternalDrive/Code/github/zhitoubaomobile
-git -C /Volumes/ExternalDrive/Code/github/zhitoubaomobile init
+  --project-name bitpongo-mobile /Volumes/ExternalDrive/Code/github/bitpongo-mobile
+git -C /Volumes/ExternalDrive/Code/github/bitpongo-mobile init
 ```
 
 Expected: default counter app builds and the repository has no parent repository capture.
@@ -473,7 +473,7 @@ target.
 
 - [ ] **Step 3: Implement sibling frontend build**
 
-Default frontend path to `../zhitoubaofront`, require `pnpm`, run `pnpm install --frozen-lockfile` only when
+Default frontend path to `../bitpongo`, require `pnpm`, run `pnpm install --frozen-lockfile` only when
 `node_modules` is absent, then `pnpm build` and call the sync script with `dist`. Record
 `git -C "$FRONTEND_DIR" rev-parse HEAD` in the manifest; do not require a clean frontend worktree merely to run
 the script, but print a warning if dirty.
@@ -535,13 +535,13 @@ the existing frontend invokes them.
 - [ ] **Step 3: Generate branding assets**
 
 Create a 1024×1024 opaque master from the existing square orange-and-white
-`zhitoubaofront/src/assets/logo.png`; because the mark is flat artwork, resize it once from the source and inspect
+`bitpongo/src/assets/logo.png`; because the mark is flat artwork, resize it once from the source and inspect
 the 1024 image at full size for edge artifacts. Save it as `assets/branding/app_icon.png`, create the splash image
 from the same opaque master, configure latest `flutter_launcher_icons` with `remove_alpha_ios: true` and
 `flutter_native_splash`, then run:
 
 ```bash
-sips -z 1024 1024 ../zhitoubaofront/src/assets/logo.png --out assets/branding/app_icon.png
+sips -z 1024 1024 ../bitpongo/src/assets/logo.png --out assets/branding/app_icon.png
 cp assets/branding/app_icon.png assets/branding/splash.png
 dart run flutter_launcher_icons
 dart run flutter_native_splash:create

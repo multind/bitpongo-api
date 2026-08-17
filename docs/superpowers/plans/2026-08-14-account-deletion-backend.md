@@ -25,31 +25,31 @@
 ## File Map
 
 - `src/main/resources/db/migration/V4__account_lifecycle.sql`: lifecycle columns and external identity tombstones.
-- `src/main/java/com/multind/zhitoubao/auth/UserEntity.java`: maps `status` and `deletedAt`.
-- `src/main/java/com/multind/zhitoubao/auth/DeletedExternalIdentityEntity.java`: maps a provider/subject tombstone without personal data.
-- `src/main/java/com/multind/zhitoubao/auth/DeletedExternalIdentityRepository.java`: provider/subject lookup.
-- `src/main/java/com/multind/zhitoubao/auth/AccountDeletionService.java`: transactional deletion use case and after-commit scheduler pause.
-- `src/main/java/com/multind/zhitoubao/auth/UserDtos.java`: deletion request record.
-- `src/main/java/com/multind/zhitoubao/auth/UserController.java`: authenticated deletion endpoint.
-- `src/main/java/com/multind/zhitoubao/auth/UserApplicationService.java`: active-only login/register behavior and WordPress tombstone guard.
-- `src/main/java/com/multind/zhitoubao/auth/AuthenticatedUserResolver.java`: active-account enforcement for all bearer tokens.
-- `src/main/java/com/multind/zhitoubao/plan/PlanRepository.java`: locks a user's plans during deletion.
-- `src/main/java/com/multind/zhitoubao/exchange/ExchangeRepository.java`: locks a user's exchange credentials during deletion.
-- `src/test/java/com/multind/zhitoubao/infrastructure/persistence/*MigrationTest.java`: proves empty and legacy schema upgrades.
-- `src/test/java/com/multind/zhitoubao/auth/AccountDeletionServiceTest.java`: deletion transaction semantics.
-- `src/test/java/com/multind/zhitoubao/auth/AuthenticatedUserResolverTest.java`: immediate token invalidation and WordPress guards.
-- `src/test/java/com/multind/zhitoubao/auth/UserControllerContractTest.java`: HTTP contract.
-- `src/test/java/com/multind/zhitoubao/contract/PythonApiContractTest.java`: records the new route without changing legacy routes.
+- `src/main/java/com/multind/bitpongo-api/auth/UserEntity.java`: maps `status` and `deletedAt`.
+- `src/main/java/com/multind/bitpongo-api/auth/DeletedExternalIdentityEntity.java`: maps a provider/subject tombstone without personal data.
+- `src/main/java/com/multind/bitpongo-api/auth/DeletedExternalIdentityRepository.java`: provider/subject lookup.
+- `src/main/java/com/multind/bitpongo-api/auth/AccountDeletionService.java`: transactional deletion use case and after-commit scheduler pause.
+- `src/main/java/com/multind/bitpongo-api/auth/UserDtos.java`: deletion request record.
+- `src/main/java/com/multind/bitpongo-api/auth/UserController.java`: authenticated deletion endpoint.
+- `src/main/java/com/multind/bitpongo-api/auth/UserApplicationService.java`: active-only login/register behavior and WordPress tombstone guard.
+- `src/main/java/com/multind/bitpongo-api/auth/AuthenticatedUserResolver.java`: active-account enforcement for all bearer tokens.
+- `src/main/java/com/multind/bitpongo-api/plan/PlanRepository.java`: locks a user's plans during deletion.
+- `src/main/java/com/multind/bitpongo-api/exchange/ExchangeRepository.java`: locks a user's exchange credentials during deletion.
+- `src/test/java/com/multind/bitpongo-api/infrastructure/persistence/*MigrationTest.java`: proves empty and legacy schema upgrades.
+- `src/test/java/com/multind/bitpongo-api/auth/AccountDeletionServiceTest.java`: deletion transaction semantics.
+- `src/test/java/com/multind/bitpongo-api/auth/AuthenticatedUserResolverTest.java`: immediate token invalidation and WordPress guards.
+- `src/test/java/com/multind/bitpongo-api/auth/UserControllerContractTest.java`: HTTP contract.
+- `src/test/java/com/multind/bitpongo-api/contract/PythonApiContractTest.java`: records the new route without changing legacy routes.
 
 ### Task 1: Persist account lifecycle state
 
 **Files:**
 - Create: `src/main/resources/db/migration/V4__account_lifecycle.sql`
-- Create: `src/main/java/com/multind/zhitoubao/auth/DeletedExternalIdentityEntity.java`
-- Create: `src/main/java/com/multind/zhitoubao/auth/DeletedExternalIdentityRepository.java`
-- Modify: `src/main/java/com/multind/zhitoubao/auth/UserEntity.java`
-- Modify: `src/test/java/com/multind/zhitoubao/infrastructure/persistence/EmptySchemaMigrationTest.java`
-- Modify: `src/test/java/com/multind/zhitoubao/infrastructure/persistence/LegacySchemaCompatibilityTest.java`
+- Create: `src/main/java/com/multind/bitpongo-api/auth/DeletedExternalIdentityEntity.java`
+- Create: `src/main/java/com/multind/bitpongo-api/auth/DeletedExternalIdentityRepository.java`
+- Modify: `src/main/java/com/multind/bitpongo-api/auth/UserEntity.java`
+- Modify: `src/test/java/com/multind/bitpongo-api/infrastructure/persistence/EmptySchemaMigrationTest.java`
+- Modify: `src/test/java/com/multind/bitpongo-api/infrastructure/persistence/LegacySchemaCompatibilityTest.java`
 
 **Interfaces:**
 - Produces: `UserEntity.isActive(): boolean`, `UserEntity.authProvider`, `UserEntity.status`, `UserEntity.deletedAt`.
@@ -121,20 +121,20 @@ Expected: PASS on both empty and legacy schemas.
 
 ```bash
 git add src/main/resources/db/migration/V4__account_lifecycle.sql \
-  src/main/java/com/multind/zhitoubao/auth/UserEntity.java \
-  src/main/java/com/multind/zhitoubao/auth/DeletedExternalIdentityEntity.java \
-  src/main/java/com/multind/zhitoubao/auth/DeletedExternalIdentityRepository.java \
-  src/test/java/com/multind/zhitoubao/infrastructure/persistence
+  src/main/java/com/multind/bitpongo-api/auth/UserEntity.java \
+  src/main/java/com/multind/bitpongo-api/auth/DeletedExternalIdentityEntity.java \
+  src/main/java/com/multind/bitpongo-api/auth/DeletedExternalIdentityRepository.java \
+  src/test/java/com/multind/bitpongo-api/infrastructure/persistence
 git commit -m "feat: add account lifecycle schema"
 ```
 
 ### Task 2: Reject inactive and deleted identities during authentication
 
 **Files:**
-- Create: `src/test/java/com/multind/zhitoubao/auth/AuthenticatedUserResolverTest.java`
-- Modify: `src/main/java/com/multind/zhitoubao/auth/AuthenticatedUserResolver.java`
-- Modify: `src/main/java/com/multind/zhitoubao/auth/UserApplicationService.java`
-- Modify: `src/test/java/com/multind/zhitoubao/auth/UserControllerContractTest.java`
+- Create: `src/test/java/com/multind/bitpongo-api/auth/AuthenticatedUserResolverTest.java`
+- Modify: `src/main/java/com/multind/bitpongo-api/auth/AuthenticatedUserResolver.java`
+- Modify: `src/main/java/com/multind/bitpongo-api/auth/UserApplicationService.java`
+- Modify: `src/test/java/com/multind/bitpongo-api/auth/UserControllerContractTest.java`
 
 **Interfaces:**
 - Consumes: `UserEntity.isActive()` and tombstone lookup from Task 1.
@@ -194,18 +194,18 @@ Expected: PASS; old active-user response payloads remain unchanged.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/auth \
-  src/test/java/com/multind/zhitoubao/auth
+git add src/main/java/com/multind/bitpongo-api/auth \
+  src/test/java/com/multind/bitpongo-api/auth
 git commit -m "feat: reject inactive accounts during authentication"
 ```
 
 ### Task 3: Implement transactional account deletion
 
 **Files:**
-- Create: `src/main/java/com/multind/zhitoubao/auth/AccountDeletionService.java`
-- Create: `src/test/java/com/multind/zhitoubao/auth/AccountDeletionServiceTest.java`
-- Modify: `src/main/java/com/multind/zhitoubao/plan/PlanRepository.java`
-- Modify: `src/main/java/com/multind/zhitoubao/exchange/ExchangeRepository.java`
+- Create: `src/main/java/com/multind/bitpongo-api/auth/AccountDeletionService.java`
+- Create: `src/test/java/com/multind/bitpongo-api/auth/AccountDeletionServiceTest.java`
+- Modify: `src/main/java/com/multind/bitpongo-api/plan/PlanRepository.java`
+- Modify: `src/main/java/com/multind/bitpongo-api/exchange/ExchangeRepository.java`
 
 **Interfaces:**
 - Produces: `void AccountDeletionService.delete(long userId, String password)`.
@@ -276,20 +276,20 @@ Expected: PASS.
 - [ ] **Step 5: Commit**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/auth/AccountDeletionService.java \
-  src/main/java/com/multind/zhitoubao/plan/PlanRepository.java \
-  src/main/java/com/multind/zhitoubao/exchange/ExchangeRepository.java \
-  src/test/java/com/multind/zhitoubao/auth/AccountDeletionServiceTest.java
+git add src/main/java/com/multind/bitpongo-api/auth/AccountDeletionService.java \
+  src/main/java/com/multind/bitpongo-api/plan/PlanRepository.java \
+  src/main/java/com/multind/bitpongo-api/exchange/ExchangeRepository.java \
+  src/test/java/com/multind/bitpongo-api/auth/AccountDeletionServiceTest.java
 git commit -m "feat: anonymize deleted accounts"
 ```
 
 ### Task 4: Expose the deletion HTTP contract
 
 **Files:**
-- Modify: `src/main/java/com/multind/zhitoubao/auth/UserDtos.java`
-- Modify: `src/main/java/com/multind/zhitoubao/auth/UserController.java`
-- Modify: `src/test/java/com/multind/zhitoubao/auth/UserControllerContractTest.java`
-- Modify: `src/test/java/com/multind/zhitoubao/contract/PythonApiContractTest.java`
+- Modify: `src/main/java/com/multind/bitpongo-api/auth/UserDtos.java`
+- Modify: `src/main/java/com/multind/bitpongo-api/auth/UserController.java`
+- Modify: `src/test/java/com/multind/bitpongo-api/auth/UserControllerContractTest.java`
+- Modify: `src/test/java/com/multind/bitpongo-api/contract/PythonApiContractTest.java`
 
 **Interfaces:**
 - Produces: `DELETE /api/users/account` with `AccountDeletionRequest(@NotBlank String password)`.
@@ -344,10 +344,10 @@ Expected: PASS.
 - [ ] **Step 4: Commit**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/auth/UserDtos.java \
-  src/main/java/com/multind/zhitoubao/auth/UserController.java \
-  src/test/java/com/multind/zhitoubao/auth/UserControllerContractTest.java \
-  src/test/java/com/multind/zhitoubao/contract/PythonApiContractTest.java
+git add src/main/java/com/multind/bitpongo-api/auth/UserDtos.java \
+  src/main/java/com/multind/bitpongo-api/auth/UserController.java \
+  src/test/java/com/multind/bitpongo-api/auth/UserControllerContractTest.java \
+  src/test/java/com/multind/bitpongo-api/contract/PythonApiContractTest.java
 git commit -m "feat: expose account deletion endpoint"
 ```
 

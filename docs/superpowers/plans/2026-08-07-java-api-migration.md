@@ -25,7 +25,7 @@
 ## 文件结构
 
 ```text
-src/main/java/com/multind/zhitoubao/
+src/main/java/com/multind/bitpongo-api/
 ├── ZhitoubaoApplication.java
 ├── common/          # 响应、异常、JSON、请求关联 ID
 ├── auth/            # JWT、PBKDF2、WordPress、用户与安全过滤器
@@ -39,7 +39,7 @@ src/main/java/com/multind/zhitoubao/
 src/main/resources/
 ├── application.yml
 └── db/migration/
-src/test/java/com/multind/zhitoubao/
+src/test/java/com/multind/bitpongo-api/
 src/test/resources/
 └── application-test.yml
 ```
@@ -53,10 +53,10 @@ src/test/resources/
 - 创建：`.mvn/wrapper/maven-wrapper.properties`
 - 创建：`mvnw`
 - 创建：`mvnw.cmd`
-- 创建：`src/main/java/com/multind/zhitoubao/ZhitoubaoApplication.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/ZhitoubaoApplication.java`
 - 创建：`src/main/resources/application.yml`
 - 创建：`src/test/resources/application-test.yml`
-- 创建：`src/test/java/com/multind/zhitoubao/ZhitoubaoApplicationTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/ZhitoubaoApplicationTest.java`
 - 修改：`.gitignore`
 - 删除：`main.py`
 
@@ -109,7 +109,7 @@ class ZhitoubaoApplicationTest {
   <version>4.1.0</version>
 </parent>
 <groupId>com.multind</groupId>
-<artifactId>zhitoubao</artifactId>
+<artifactId>bitpongo-api</artifactId>
 <version>1.0.0-SNAPSHOT</version>
 <properties>
   <java.version>26</java.version>
@@ -174,13 +174,13 @@ git commit -m "build: initialize Java 26 Spring Boot service"
 ### 任务 2：实现兼容响应、异常和基础端点
 
 **文件：**
-- 创建：`src/main/java/com/multind/zhitoubao/common/api/ApiResponse.java`
-- 创建：`src/main/java/com/multind/zhitoubao/common/api/GlobalExceptionHandler.java`
-- 创建：`src/main/java/com/multind/zhitoubao/common/api/BusinessException.java`
-- 创建：`src/main/java/com/multind/zhitoubao/common/web/RequestCorrelationFilter.java`
-- 创建：`src/main/java/com/multind/zhitoubao/common/web/RootController.java`
-- 创建：`src/test/java/com/multind/zhitoubao/common/web/RootControllerTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/common/api/GlobalExceptionHandlerTest.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/common/api/ApiResponse.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/common/api/GlobalExceptionHandler.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/common/api/BusinessException.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/common/web/RequestCorrelationFilter.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/common/web/RootController.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/common/web/RootControllerTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/common/api/GlobalExceptionHandlerTest.java`
 
 **接口：**
 - 消费：任务 1 的 Spring MVC 测试环境。
@@ -242,7 +242,7 @@ public record ApiResponse<T>(int code, String message, T data) {
 - [ ] **步骤 5：提交**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/common src/test/java/com/multind/zhitoubao/common
+git add src/main/java/com/multind/bitpongo-api/common src/test/java/com/multind/bitpongo-api/common
 git commit -m "feat: add compatible API response layer"
 ```
 
@@ -251,18 +251,18 @@ git commit -m "feat: add compatible API response layer"
 **文件：**
 - 创建：`src/main/resources/db/migration/V1__legacy_business_schema.sql`
 - 创建：`src/main/resources/db/migration/V2__quartz_and_order_idempotency.sql`
-- 创建：`src/main/java/com/multind/zhitoubao/auth/UserEntity.java`
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/ExchangeEntity.java`
-- 创建：`src/main/java/com/multind/zhitoubao/strategy/StrategyEntity.java`
-- 创建：`src/main/java/com/multind/zhitoubao/strategy/CoinEntity.java`
-- 创建：`src/main/java/com/multind/zhitoubao/plan/PlanEntity.java`
-- 创建：`src/main/java/com/multind/zhitoubao/plan/OrderEntity.java`
-- 创建：`src/main/java/com/multind/zhitoubao/plan/SnapshotEntity.java`
-- 创建：`src/main/java/com/multind/zhitoubao/notification/DictEntity.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/OrderIntentEntity.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/OrderIntentRepository.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/UserEntity.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/ExchangeEntity.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/strategy/StrategyEntity.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/strategy/CoinEntity.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/plan/PlanEntity.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/plan/OrderEntity.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/plan/SnapshotEntity.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/notification/DictEntity.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/OrderIntentEntity.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/OrderIntentRepository.java`
 - 创建：各模块同目录下的 `*Repository.java`
-- 创建：`src/test/java/com/multind/zhitoubao/infrastructure/persistence/LegacySchemaCompatibilityTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/infrastructure/persistence/LegacySchemaCompatibilityTest.java`
 - 创建：`src/test/resources/db/legacy-existing-schema.sql`
 - 修改：`src/main/resources/application.yml`
 
@@ -352,24 +352,24 @@ spring:
 - [ ] **步骤 6：提交**
 
 ```bash
-git add src/main/resources src/main/java/com/multind/zhitoubao/{auth,exchange,strategy,plan,notification,scheduler} src/test
+git add src/main/resources src/main/java/com/multind/bitpongo-api/{auth,exchange,strategy,plan,notification,scheduler} src/test
 git commit -m "feat: map legacy MySQL schema"
 ```
 
 ### 任务 4：实现 PBKDF2、JWT 和安全请求上下文
 
 **文件：**
-- 创建：`src/main/java/com/multind/zhitoubao/auth/PasswordCompatibilityService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/auth/JwtTokenService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/auth/AuthenticatedUser.java`
-- 创建：`src/main/java/com/multind/zhitoubao/auth/AuthenticatedUserResolver.java`
-- 创建：`src/main/java/com/multind/zhitoubao/auth/WordPressAuthClient.java`
-- 创建：`src/main/java/com/multind/zhitoubao/auth/WordPressSession.java`
-- 创建：`src/main/java/com/multind/zhitoubao/auth/BearerAuthenticationFilter.java`
-- 创建：`src/main/java/com/multind/zhitoubao/auth/SecurityConfiguration.java`
-- 创建：`src/test/java/com/multind/zhitoubao/auth/PasswordCompatibilityServiceTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/auth/JwtTokenServiceTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/auth/SecurityConfigurationTest.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/PasswordCompatibilityService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/JwtTokenService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/AuthenticatedUser.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/AuthenticatedUserResolver.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/WordPressAuthClient.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/WordPressSession.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/BearerAuthenticationFilter.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/SecurityConfiguration.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/auth/PasswordCompatibilityServiceTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/auth/JwtTokenServiceTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/auth/SecurityConfigurationTest.java`
 
 **接口：**
 - 消费：任务 2 的兼容异常；任务 3 的 `UserRepository`。
@@ -437,19 +437,19 @@ public record WordPressSession(String token, long userId,
 - [ ] **步骤 6：提交**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/auth src/test/java/com/multind/zhitoubao/auth src/main/resources/application.yml
+git add src/main/java/com/multind/bitpongo-api/auth src/test/java/com/multind/bitpongo-api/auth src/main/resources/application.yml
 git commit -m "feat: add compatible authentication primitives"
 ```
 
 ### 任务 5：迁移用户和 WordPress 认证接口
 
 **文件：**
-- 创建：`src/main/java/com/multind/zhitoubao/auth/HttpWordPressAuthClient.java`
-- 创建：`src/main/java/com/multind/zhitoubao/auth/UserApplicationService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/auth/UserController.java`
-- 创建：`src/main/java/com/multind/zhitoubao/auth/UserDtos.java`
-- 创建：`src/test/java/com/multind/zhitoubao/auth/UserControllerContractTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/auth/HttpWordPressAuthClientTest.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/HttpWordPressAuthClient.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/UserApplicationService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/UserController.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/auth/UserDtos.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/auth/UserControllerContractTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/auth/HttpWordPressAuthClientTest.java`
 
 **接口：**
 - 消费：`UserRepository`、`PasswordCompatibilityService`、`JwtTokenService`、`ApiResponse`。
@@ -511,25 +511,25 @@ Authorization: Bearer <token>
 - [ ] **步骤 6：提交**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/auth src/test/java/com/multind/zhitoubao/auth
+git add src/main/java/com/multind/bitpongo-api/auth src/test/java/com/multind/bitpongo-api/auth
 git commit -m "feat: migrate user and WordPress authentication APIs"
 ```
 
 ### 任务 6：建立交易所领域端口和 Binance 官方适配器
 
 **文件：**
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/ExchangeGateway.java`
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/ExchangeGatewayRegistry.java`
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/ExchangeCredentials.java`
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/AccountBalance.java`
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/MarketRules.java`
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/OrderResult.java`
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/OrderSizingService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/BinanceSpotClient.java`
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/BinanceExchangeGateway.java`
-- 创建：`src/test/java/com/multind/zhitoubao/exchange/OrderSizingServiceTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/exchange/BinanceExchangeGatewayTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/exchange/ExchangeGatewayRegistryTest.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/ExchangeGateway.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/ExchangeGatewayRegistry.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/ExchangeCredentials.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/AccountBalance.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/MarketRules.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/OrderResult.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/OrderSizingService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/BinanceSpotClient.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/BinanceExchangeGateway.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/exchange/OrderSizingServiceTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/exchange/BinanceExchangeGatewayTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/exchange/ExchangeGatewayRegistryTest.java`
 
 **接口：**
 - 消费：Binance Spot Connector、`BusinessException`。
@@ -601,19 +601,19 @@ zhitoubao:
 - [ ] **步骤 7：提交**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/exchange src/test/java/com/multind/zhitoubao/exchange src/main/resources/application.yml
+git add src/main/java/com/multind/bitpongo-api/exchange src/test/java/com/multind/bitpongo-api/exchange src/main/resources/application.yml
 git commit -m "feat: add Binance exchange gateway"
 ```
 
 ### 任务 7：迁移交易所 REST API
 
 **文件：**
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/ExchangeApplicationService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/ExchangeController.java`
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/ExchangeDtos.java`
-- 创建：`src/main/java/com/multind/zhitoubao/exchange/CredentialMasker.java`
-- 创建：`src/test/java/com/multind/zhitoubao/exchange/ExchangeControllerContractTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/exchange/CredentialMaskerTest.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/ExchangeApplicationService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/ExchangeController.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/ExchangeDtos.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/exchange/CredentialMasker.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/exchange/ExchangeControllerContractTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/exchange/CredentialMaskerTest.java`
 
 **接口：**
 - 消费：`ExchangeRepository`、`ExchangeGatewayRegistry`、`AuthenticatedUser`。
@@ -660,23 +660,23 @@ record MinimumAmountRequest(long exchangeId, List<String> coins) {}
 - [ ] **步骤 5：提交**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/exchange src/test/java/com/multind/zhitoubao/exchange
+git add src/main/java/com/multind/bitpongo-api/exchange src/test/java/com/multind/bitpongo-api/exchange
 git commit -m "feat: migrate exchange REST APIs"
 ```
 
 ### 任务 8：实现 Binance 行情缓存和连接生命周期
 
 **文件：**
-- 创建：`src/main/java/com/multind/zhitoubao/market/PriceCache.java`
-- 创建：`src/main/java/com/multind/zhitoubao/market/MarketPrice.java`
-- 创建：`src/main/java/com/multind/zhitoubao/market/TickerEvent.java`
-- 创建：`src/main/java/com/multind/zhitoubao/market/SymbolNormalizer.java`
-- 创建：`src/main/java/com/multind/zhitoubao/market/BinanceMarketStreamClient.java`
-- 创建：`src/main/java/com/multind/zhitoubao/market/BinanceMarketStreamLifecycle.java`
-- 创建：`src/main/java/com/multind/zhitoubao/market/MarketStreamHealthIndicator.java`
-- 创建：`src/test/java/com/multind/zhitoubao/market/PriceCacheTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/market/SymbolNormalizerTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/market/BinanceMarketStreamLifecycleTest.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/market/PriceCache.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/market/MarketPrice.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/market/TickerEvent.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/market/SymbolNormalizer.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/market/BinanceMarketStreamClient.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/market/BinanceMarketStreamLifecycle.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/market/MarketStreamHealthIndicator.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/market/PriceCacheTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/market/SymbolNormalizerTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/market/BinanceMarketStreamLifecycleTest.java`
 
 **接口：**
 - 消费：官方 `SpotWebSocketStreams`，应用 `Clock` 和调度执行器。
@@ -732,17 +732,17 @@ interface BinanceMarketStreamClient {
 - [ ] **步骤 7：提交**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/market src/test/java/com/multind/zhitoubao/market
+git add src/main/java/com/multind/bitpongo-api/market src/test/java/com/multind/bitpongo-api/market
 git commit -m "feat: add resilient Binance market stream"
 ```
 
 ### 任务 9：迁移前端价格 WebSocket
 
 **文件：**
-- 创建：`src/main/java/com/multind/zhitoubao/market/PriceWebSocketConfiguration.java`
-- 创建：`src/main/java/com/multind/zhitoubao/market/PriceWebSocketHandler.java`
-- 创建：`src/main/java/com/multind/zhitoubao/market/PriceSubscription.java`
-- 创建：`src/test/java/com/multind/zhitoubao/market/PriceWebSocketContractTest.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/market/PriceWebSocketConfiguration.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/market/PriceWebSocketHandler.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/market/PriceSubscription.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/market/PriceWebSocketContractTest.java`
 
 **接口：**
 - 消费：`PriceCache`、`SymbolNormalizer`。
@@ -782,19 +782,19 @@ void subscriptionReturnsOneMessagePerAvailableSymbol() {
 - [ ] **步骤 5：提交**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/market src/test/java/com/multind/zhitoubao/market
+git add src/main/java/com/multind/bitpongo-api/market src/test/java/com/multind/bitpongo-api/market
 git commit -m "feat: migrate price WebSocket contract"
 ```
 
 ### 任务 10：迁移策略创建与活动策略接口
 
 **文件：**
-- 创建：`src/main/java/com/multind/zhitoubao/strategy/StrategyApplicationService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/strategy/StrategyController.java`
-- 创建：`src/main/java/com/multind/zhitoubao/strategy/StrategyDtos.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/PlanScheduleService.java`
-- 创建：`src/test/java/com/multind/zhitoubao/strategy/StrategyApplicationServiceTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/strategy/StrategyControllerContractTest.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/strategy/StrategyApplicationService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/strategy/StrategyController.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/strategy/StrategyDtos.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/PlanScheduleService.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/strategy/StrategyApplicationServiceTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/strategy/StrategyControllerContractTest.java`
 
 **接口：**
 - 消费：`StrategyRepository`、`PlanRepository`、`CoinRepository`、`AuthenticatedUser`；调度通过 `PlanScheduleService.schedule(planId, cron)`。
@@ -854,19 +854,19 @@ public interface PlanScheduleService {
 - [ ] **步骤 5：提交**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/{strategy,scheduler} src/test/java/com/multind/zhitoubao/strategy
+git add src/main/java/com/multind/bitpongo-api/{strategy,scheduler} src/test/java/com/multind/bitpongo-api/strategy
 git commit -m "feat: migrate strategy APIs"
 ```
 
 ### 任务 11：迁移计划查询、状态和估值
 
 **文件：**
-- 创建：`src/main/java/com/multind/zhitoubao/plan/PlanApplicationService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/plan/PlanController.java`
-- 创建：`src/main/java/com/multind/zhitoubao/plan/PlanDtos.java`
-- 创建：`src/main/java/com/multind/zhitoubao/plan/PortfolioCalculator.java`
-- 创建：`src/test/java/com/multind/zhitoubao/plan/PortfolioCalculatorTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/plan/PlanControllerContractTest.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/plan/PlanApplicationService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/plan/PlanController.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/plan/PlanDtos.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/plan/PortfolioCalculator.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/plan/PortfolioCalculatorTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/plan/PlanControllerContractTest.java`
 
 **接口：**
 - 消费：计划、订单、币种、快照 Repository；`PriceCache`；`PlanScheduleService`。
@@ -911,23 +911,23 @@ void calculatesPortfolioWithBigDecimal() {
 - [ ] **步骤 5：提交**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/plan src/test/java/com/multind/zhitoubao/plan
+git add src/main/java/com/multind/bitpongo-api/plan src/test/java/com/multind/bitpongo-api/plan
 git commit -m "feat: migrate plan APIs and valuation"
 ```
 
 ### 任务 12：实现 Quartz 持久化与任务恢复
 
 **文件：**
-- 修改：`src/main/java/com/multind/zhitoubao/scheduler/PlanScheduleService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/QuartzPlanScheduleService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/ScheduledPurchaseUseCase.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/AssetSnapshotUseCase.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/PlanPurchaseJob.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/AssetSnapshotJob.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/ScheduleReconciler.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/QuartzHealthIndicator.java`
-- 创建：`src/test/java/com/multind/zhitoubao/scheduler/QuartzPlanScheduleServiceTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/scheduler/ScheduleReconcilerIntegrationTest.java`
+- 修改：`src/main/java/com/multind/bitpongo-api/scheduler/PlanScheduleService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/QuartzPlanScheduleService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/ScheduledPurchaseUseCase.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/AssetSnapshotUseCase.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/PlanPurchaseJob.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/AssetSnapshotJob.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/ScheduleReconciler.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/QuartzHealthIndicator.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/scheduler/QuartzPlanScheduleServiceTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/scheduler/ScheduleReconcilerIntegrationTest.java`
 - 修改：`src/main/resources/application.yml`
 
 **接口：**
@@ -991,20 +991,20 @@ public interface AssetSnapshotUseCase {
 - [ ] **步骤 6：提交**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/scheduler src/test/java/com/multind/zhitoubao/scheduler src/main/resources/application.yml
+git add src/main/java/com/multind/bitpongo-api/scheduler src/test/java/com/multind/bitpongo-api/scheduler src/main/resources/application.yml
 git commit -m "feat: add persistent Quartz scheduling"
 ```
 
 ### 任务 13：实现定投执行、幂等下单和对账
 
 **文件：**
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/ScheduledPurchaseService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/OrderIdFactory.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/OrderPersistenceService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/scheduler/OrderReconciliationService.java`
-- 创建：`src/test/java/com/multind/zhitoubao/scheduler/OrderIdFactoryTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/scheduler/ScheduledPurchaseServiceTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/scheduler/OrderReconciliationServiceTest.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/ScheduledPurchaseService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/OrderIdFactory.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/OrderPersistenceService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/scheduler/OrderReconciliationService.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/scheduler/OrderIdFactoryTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/scheduler/ScheduledPurchaseServiceTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/scheduler/OrderReconciliationServiceTest.java`
 
 **接口：**
 - 消费：`ExchangeGateway`、`OrderSizingService`、`PriceCache`、计划/交易所/订单及 `OrderIntentRepository`、`PortfolioCalculator`。
@@ -1054,21 +1054,21 @@ void orderIdIsStableForSameScheduledFire() {
 - [ ] **步骤 7：提交**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/scheduler src/test/java/com/multind/zhitoubao/scheduler
+git add src/main/java/com/multind/bitpongo-api/scheduler src/test/java/com/multind/bitpongo-api/scheduler
 git commit -m "feat: migrate scheduled purchase execution"
 ```
 
 ### 任务 14：迁移资产快照、通知配置和钉钉接口
 
 **文件：**
-- 创建：`src/main/java/com/multind/zhitoubao/plan/AssetSnapshotService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/notification/NotificationApplicationService.java`
-- 创建：`src/main/java/com/multind/zhitoubao/notification/DingTalkClient.java`
-- 创建：`src/main/java/com/multind/zhitoubao/notification/HttpDingTalkClient.java`
-- 创建：`src/main/java/com/multind/zhitoubao/notification/NotificationController.java`
-- 创建：`src/test/java/com/multind/zhitoubao/plan/AssetSnapshotServiceTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/notification/NotificationControllerContractTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/notification/HttpDingTalkClientTest.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/plan/AssetSnapshotService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/notification/NotificationApplicationService.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/notification/DingTalkClient.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/notification/HttpDingTalkClient.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/notification/NotificationController.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/plan/AssetSnapshotServiceTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/notification/NotificationControllerContractTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/notification/HttpDingTalkClientTest.java`
 
 **接口：**
 - 消费：`PlanRepository`、`SnapshotRepository`、`DictRepository`、`ExchangeGatewayRegistry`。
@@ -1112,18 +1112,18 @@ interface DingTalkClient {
 - [ ] **步骤 7：提交**
 
 ```bash
-git add src/main/java/com/multind/zhitoubao/{plan,notification} src/test/java/com/multind/zhitoubao/{plan,notification}
+git add src/main/java/com/multind/bitpongo-api/{plan,notification} src/test/java/com/multind/bitpongo-api/{plan,notification}
 git commit -m "feat: migrate snapshots and notifications"
 ```
 
 ### 任务 15：完成可观测性、部署、契约矩阵和全量验收
 
 **文件：**
-- 创建：`src/main/java/com/multind/zhitoubao/common/web/StructuredLoggingFilter.java`
-- 创建：`src/main/java/com/multind/zhitoubao/infrastructure/DatabaseHealthIndicator.java`
-- 创建：`src/test/java/com/multind/zhitoubao/contract/PythonApiContractTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/security/ProductionTradingGuardTest.java`
-- 创建：`src/test/java/com/multind/zhitoubao/security/SecretScanTest.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/common/web/StructuredLoggingFilter.java`
+- 创建：`src/main/java/com/multind/bitpongo-api/infrastructure/DatabaseHealthIndicator.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/contract/PythonApiContractTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/security/ProductionTradingGuardTest.java`
+- 创建：`src/test/java/com/multind/bitpongo-api/security/SecretScanTest.java`
 - 创建：`Dockerfile`
 - 创建：`compose.yml`
 - 创建：`.env.example`
@@ -1194,7 +1194,7 @@ README 必须包含 Java 26 安装、`./mvnw verify`、本地 MySQL、现有库�
 运行：
 
 ```bash
-docker build -t zhitoubao:local .
+docker build -t bitpongo-api:local .
 docker compose up -d --build
 ./scripts/smoke-test.sh http://localhost:8000
 docker compose ps

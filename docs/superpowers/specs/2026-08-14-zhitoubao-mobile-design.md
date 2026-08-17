@@ -4,12 +4,12 @@
 
 状态：已完成分段确认和自检，等待设计文档审阅
 
-涉及仓库：`zhitoubaomobile`、`zhitoubaofront`、`zhitoubao`
+涉及仓库：`bitpongo-mobile`、`bitpongo`、`zhitoubao`
 
 ## 1. 目标与范围
 
-在 `/Volumes/ExternalDrive/Code/github/zhitoubaomobile` 新建独立 Flutter 工程，为现有
-`zhitoubaofront` 提供面向 Apple App Store 和 Google Play 的移动端容器。
+在 `/Volumes/ExternalDrive/Code/github/bitpongo-mobile` 新建独立 Flutter 工程，为现有
+`bitpongo` 提供面向 Apple App Store 和 Google Play 的移动端容器。
 
 首版不是简单 WebView 壳，而是包含以下原生增强能力：
 
@@ -40,7 +40,7 @@
 
 移动端使用两个独立构建参数：
 
-- `WEB_BASE_URL`：线上 `zhitoubaofront` 地址；
+- `WEB_BASE_URL`：线上 `bitpongo` 地址；
 - `API_BASE_URL`：`zhitoubao` 后端地址。
 
 开发启动示例：
@@ -73,7 +73,7 @@ HTTPS `API_BASE_URL`。HTTP 只通过 debug 平台配置为明确的本地开发
 
 ### 3.2 内置前端服务
 
-`zhitoubaofront` 使用 Vue Router 的 `createWebHistory`。移动端通过
+`bitpongo` 使用 Vue Router 的 `createWebHistory`。移动端通过
 `127.0.0.1:<随机端口>` 提供 `assets/web_bundle`，并对非静态资源路由回退到
 `index.html`，从而兼容深层路由、刷新和资源相对路径。
 
@@ -113,7 +113,7 @@ Flutter 原生层负责：
 ## 6. 内置前端同步与版本管理
 
 移动端工程提供脚本，从相邻仓库
-`/Volumes/ExternalDrive/Code/github/zhitoubaofront` 构建并同步前端：
+`/Volumes/ExternalDrive/Code/github/bitpongo` 构建并同步前端：
 
 1. 校验前端路径、依赖工具和构建参数；
 2. 使用移动端专用环境变量构建前端；
@@ -133,7 +133,7 @@ Flutter 原生层负责：
 
 ### 7.1 用户流程
 
-`zhitoubaofront` 在“我的/账号设置”增加独立危险操作区域：
+`bitpongo` 在“我的/账号设置”增加独立危险操作区域：
 
 1. 用户点击“注销账号”；
 2. 页面说明策略停止、交易所凭据删除和历史数据匿名保留等影响；
@@ -170,7 +170,7 @@ Flutter 原生层负责：
 ## 8. 工程结构
 
 ```text
-zhitoubaomobile/
+bitpongo-mobile/
 ├── lib/
 │   ├── app/
 │   ├── config/
@@ -247,8 +247,8 @@ zhitoubaomobile/
 
 实施将分别在三个仓库提交：
 
-- `zhitoubaomobile`：Flutter 工程、原生平台配置、内置前端、同步脚本、测试和文档；
-- `zhitoubaofront`：移动端构建配置、Bridge 适配和账号注销界面；
+- `bitpongo-mobile`：Flutter 工程、原生平台配置、内置前端、同步脚本、测试和文档；
+- `bitpongo`：移动端构建配置、Bridge 适配和账号注销界面；
 - `zhitoubao`：账号注销接口、迁移、认证状态校验和测试。
 
 每个仓库独立验证和提交，避免跨仓库混合提交。正式上线域名、签名证书、商店账号、隐私政策

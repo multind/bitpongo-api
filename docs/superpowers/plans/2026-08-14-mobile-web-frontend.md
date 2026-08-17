@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Make `zhitoubaofront` configurable inside the Flutter loopback server, expose a narrow native bridge adapter, and add the password-confirmed account deletion UI.
+**Goal:** Make `bitpongo` configurable inside the Flutter loopback server, expose a narrow native bridge adapter, and add the password-confirmed account deletion UI.
 
 **Architecture:** Load a small runtime config script before Vue so the same static bundle can receive an absolute API URL from Flutter. Keep native integration behind a typed adapter and implement deletion as a normal authenticated HTTP flow that also works in a browser.
 
@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Work in `/Volumes/ExternalDrive/Code/github/zhitoubaofront` and preserve existing browser behavior.
+- Work in `/Volumes/ExternalDrive/Code/github/bitpongo` and preserve existing browser behavior.
 - Runtime `apiBaseUrl` wins over `VITE_URL_PREFIX`; browser deployments without runtime config keep using `VITE_URL_PREFIX`.
 - The mobile embedded bundle must receive an absolute HTTP(S) API URL; production Flutter validates HTTPS.
 - Native bridge calls are optional and feature-detected; the web app must run normally without Flutter.
