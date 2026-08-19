@@ -1,5 +1,6 @@
 package com.multind.bitpongo.exchange;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -31,10 +32,13 @@ public class ExchangeEntity {
     public void setName(String name) { this.name = name; }
     public String getExchange() { return exchange; }
     public void setExchange(String exchange) { this.exchange = exchange; }
+    @JsonIgnore
     public String getAccessKey() { return accessKey; }
     public void setAccessKey(String accessKey) { this.accessKey = accessKey; }
+    @JsonIgnore
     public String getSecretKey() { return secretKey; }
     public void setSecretKey(String secretKey) { this.secretKey = secretKey; }
+    @JsonIgnore
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
     public String getStatus() { return status; }

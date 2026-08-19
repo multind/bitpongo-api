@@ -1,6 +1,7 @@
 package com.multind.bitpongo.strategy;
 
 import com.multind.bitpongo.plan.PlanEntity;
+import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -60,5 +61,6 @@ public class CoinEntity {
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
     public Long getPlanId() { return planId; }
     public void setPlanId(Long planId) { this.planId = planId; }
+    @JsonIgnore
     public PlanEntity getPlan() { return plan; }
 }
