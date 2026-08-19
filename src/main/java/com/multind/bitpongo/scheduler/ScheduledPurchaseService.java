@@ -71,7 +71,11 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
             String marketSymbol = coin.getSymbol().toUpperCase() + "USDT";
             String internalSymbol = coin.getSymbol().toUpperCase() + "/USDT";
             BigDecimal price = prices.getFresh(exchange.getExchange(), internalSymbol, clock.instant()).orElse(null);
-            if (price == null || shouldSkipAverageDown(planId, strategy, coin, internalSymbol, price)) continue;
+            if (price == null) {
+                log.warn("无新鲜行情，跳过买入 planId={} coin={}", planId, coin.getSymbol());
+                continue;
+            }
+            if (shouldSkipAverageDown(planId, strategy, coin, internalSymbol, price)) continue;
             String clientOrderId = orderIds.create(planId, marketSymbol, scheduledFireTime);
             if (intents.findByClientOrderId(clientOrderId).isPresent()) continue;
             BigDecimal quantity = sizing.calculate(BigDecimal.valueOf(strategy.getInstalment()),
