@@ -24,8 +24,17 @@ spring:
       initialize-schema: never
     properties:
       org.quartz.scheduler.instanceId: AUTO
+      # JobStoreTX 自管事务并提交；Spring Boot 默认的 LocalDataSourceJobStore(CMT) 依赖容器事务，
+      # 在事务外触发时状态更新无法提交，触发器会进入 ERROR 状态、计划任务永不执行。
+      org.quartz.jobStore.class: org.quartz.impl.jdbcjobstore.JobStoreTX
+      org.quartz.jobStore.dataSource: quartzDataSource
       org.quartz.jobStore.isClustered: true
       org.quartz.jobStore.misfireThreshold: 60000
+      org.quartz.dataSource.quartzDataSource.provider: hikaricp
+      org.quartz.dataSource.quartzDataSource.driver: com.mysql.cj.jdbc.Driver
+      org.quartz.dataSource.quartzDataSource.URL: ${DATABASE_URL:jdbc:mysql://127.0.0.1:3306/zhitoubao?useSSL=false&allowPublicKeyRetrieval=true&serverTimezone=Asia/Shanghai}
+      org.quartz.dataSource.quartzDataSource.user: ${DATABASE_USERNAME:zhitoubao}
+      org.quartz.dataSource.quartzDataSource.password: ${DATABASE_PASSWORD:}
 
 management:
   endpoint:

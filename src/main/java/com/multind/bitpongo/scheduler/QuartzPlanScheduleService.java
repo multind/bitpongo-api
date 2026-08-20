@@ -11,33 +11,45 @@ import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
 import org.quartz.TriggerBuilder;
 import org.quartz.TriggerKey;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 @Service
-@ConditionalOnBean(Scheduler.class)
 public class QuartzPlanScheduleService implements PlanScheduleService {
+    private static final Logger log = LoggerFactory.getLogger(QuartzPlanScheduleService.class);
     private static final String GROUP = "plans";
-    private final Scheduler scheduler;
+    private final ObjectProvider<Scheduler> schedulerProvider;
     private final TimeZone timeZone;
 
     @Autowired
     public QuartzPlanScheduleService(
-            Scheduler scheduler,
+            ObjectProvider<Scheduler> schedulerProvider,
             @Value("${zhitoubao.scheduling-zone:Asia/Shanghai}") String schedulingZone) {
-        this(scheduler, ZoneId.of(schedulingZone));
+        this(schedulerProvider, ZoneId.of(schedulingZone));
     }
 
-    QuartzPlanScheduleService(Scheduler scheduler, ZoneId schedulingZone) {
-        this.scheduler = scheduler;
+    QuartzPlanScheduleService(ObjectProvider<Scheduler> schedulerProvider, ZoneId schedulingZone) {
+        this.schedulerProvider = schedulerProvider;
         this.timeZone = TimeZone.getTimeZone(schedulingZone);
+    }
+
+    private Scheduler requireScheduler(long planId) {
+        Scheduler scheduler = schedulerProvider.getIfAvailable();
+        if (scheduler == null) {
+            throw new IllegalStateException("Quartz 调度器未就绪，无法注册计划任务: " + planId);
+        }
+        return scheduler;
     }
 
     @Override
     public void schedule(long planId, String cron) {
+        Scheduler scheduler = requireScheduler(planId);
         try {
+            log.info("注册计划触发器 planId={} cron={}", planId, cron);
             JobKey jobKey = jobKey(planId);
             TriggerKey triggerKey = triggerKey(planId);
             CronTrigger trigger = TriggerBuilder.newTrigger()
@@ -65,21 +77,26 @@ public class QuartzPlanScheduleService implements PlanScheduleService {
 
     @Override
     public void pause(long planId) {
+        Scheduler scheduler = requireScheduler(planId);
         run(() -> scheduler.pauseJob(jobKey(planId)), planId);
     }
 
     @Override
     public void resume(long planId, String cron) {
         schedule(planId, cron);
+        Scheduler scheduler = requireScheduler(planId);
         run(() -> scheduler.resumeJob(jobKey(planId)), planId);
     }
 
     @Override
     public void remove(long planId) {
+        Scheduler scheduler = requireScheduler(planId);
         run(() -> scheduler.deleteJob(jobKey(planId)), planId);
     }
 
     public void scheduleAssetSnapshot() {
+        Scheduler scheduler = schedulerProvider.getIfAvailable();
+        if (scheduler == null) return;
         try {
             JobKey key = JobKey.jobKey("job_asset_snapshot", "system");
             if (scheduler.checkExists(key)) return;

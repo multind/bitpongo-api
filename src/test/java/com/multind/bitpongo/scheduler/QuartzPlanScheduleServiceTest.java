@@ -22,7 +22,14 @@ class QuartzPlanScheduleServiceTest {
         scheduler = new StdSchedulerFactory().getScheduler();
         scheduler.start();
         scheduler.clear();
-        service = new QuartzPlanScheduleService(scheduler, ZoneId.of("Asia/Shanghai"));
+        org.springframework.beans.factory.ObjectProvider<Scheduler> provider =
+                new org.springframework.beans.factory.ObjectProvider<>() {
+                    @Override public Scheduler getObject() { return scheduler; }
+                    @Override public Scheduler getObject(java.lang.Object... args) { return scheduler; }
+                    @Override public Scheduler getIfAvailable() { return scheduler; }
+                    @Override public Scheduler getIfUnique() { return scheduler; }
+                };
+        service = new QuartzPlanScheduleService(provider, ZoneId.of("Asia/Shanghai"));
     }
 
     @AfterEach

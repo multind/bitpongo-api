@@ -13,12 +13,13 @@ import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
-@Service
-@ConditionalOnBean(OrderIntentRepository.class)
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+@ConditionalOnBean(JdbcTemplate.class)
 public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
     private static final Logger log = LoggerFactory.getLogger(ScheduledPurchaseService.class);
     private static final Set<String> TERMINAL_ORDER_STATUSES = Set.of("FILLED", "CANCELED", "EXPIRED", "REJECTED");

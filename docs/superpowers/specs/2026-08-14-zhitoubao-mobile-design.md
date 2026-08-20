@@ -25,8 +25,8 @@
 ## 2. 应用身份与平台基线
 
 - 应用名称：`智投宝`
-- Android applicationId：`com.multind.zhitoubao`
-- iOS Bundle ID：`com.multind.zhitoubao`
+- Android applicationId：`com.multind.bitpongo`
+- iOS Bundle ID：`com.multind.bitpongo`
 - iOS 最低版本：15
 - Android 最低版本：API 26（Android 8.0）
 - Android targetSdk：实施时应用市场要求的最新版本

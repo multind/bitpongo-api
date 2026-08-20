@@ -12,8 +12,8 @@
 
 - Project directory: `/Volumes/ExternalDrive/Code/github/bitpongo-mobile`.
 - App name: `智投宝`; Dart package: `bitpongo-mobile`.
-- Android applicationId and namespace: `com.multind.zhitoubao`.
-- iOS Bundle ID: `com.multind.zhitoubao`.
+- Android applicationId and namespace: `com.multind.bitpongo`.
+- iOS Bundle ID: `com.multind.bitpongo`.
 - iOS deployment target: 15.0.
 - Android minSdk: 26; targetSdk uses the latest value generated/required by the current Flutter stable toolchain.
 - Resolve every direct Flutter dependency to the latest stable mutually compatible version at scaffold time; commit `pubspec.lock`.
@@ -518,8 +518,8 @@ git commit -m "feat: bundle zhitoubao web frontend"
 
 - [ ] **Step 1: Configure identity and version floors**
 
-Set Android namespace/applicationId to `com.multind.zhitoubao`, minSdk 26, display name `智投宝`, and portrait
-orientation. Set every iOS build configuration product bundle identifier to `com.multind.zhitoubao`, deployment
+Set Android namespace/applicationId to `com.multind.bitpongo`, minSdk 26, display name `智投宝`, and portrait
+orientation. Set every iOS build configuration product bundle identifier to `com.multind.bitpongo`, deployment
 target and Podfile platform to 15.0, and display name `智投宝`.
 
 - [ ] **Step 2: Add only required permissions and scoped network rules**

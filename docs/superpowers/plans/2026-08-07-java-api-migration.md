@@ -11,7 +11,7 @@
 ## 全局约束
 
 - 使用截至实施日最新稳定 GA 组件，不使用 Milestone、RC、Snapshot 或 Early Access；搭建骨架前再次核对直接依赖版本。
-- Java 包根为 `com.multind.zhitoubao`，Maven 坐标为 `com.multind:zhitoubao:1.0.0-SNAPSHOT`。
+- Java 包根为 `com.multind.bitpongo`，Maven 坐标为 `com.multind:zhitoubao:1.0.0-SNAPSHOT`。
 - 保持现有 REST 路径、HTTP 方法、snake_case 字段、`{code,message,data}` 包装、中文提示和 `/api/ws/price` 消息兼容。
 - 兼容现有 MySQL 表和数据，不删除或重建业务表；`user` 与 `order` 必须显式转义。
 - 金额、价格、数量、手续费和收益率统一使用 `BigDecimal`，并显式指定舍入方式。
@@ -62,7 +62,7 @@ src/test/resources/
 
 **接口：**
 - 消费：无。
-- 产出：可启动的 `ZhitoubaoApplication`、统一配置前缀 `zhitoubao.*`、后续任务可用的 Maven 测试环境。
+- 产出：可启动的 `BitpongoApplication`、统一配置前缀 `zhitoubao.*`、后续任务可用的 Maven 测试环境。
 
 - [ ] **步骤 1：核对实施日稳定版本**
 
@@ -79,7 +79,7 @@ curl -fsSL https://repo1.maven.org/maven2/io/github/binance/binance-spot/maven-m
 - [ ] **步骤 2：先写无法编译的上下文测试**
 
 ```java
-package com.multind.zhitoubao;
+package com.multind.bitpongo;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -96,7 +96,7 @@ class ZhitoubaoApplicationTest {
 
 运行：`mvn -Dtest=ZhitoubaoApplicationTest test`
 
-预期：因缺少 `pom.xml` 或 `ZhitoubaoApplication` 无法构建。
+预期：因缺少 `pom.xml` 或 `BitpongoApplication` 无法构建。
 
 - [ ] **步骤 4：创建最小项目和受控依赖**
 
@@ -124,7 +124,7 @@ class ZhitoubaoApplicationTest {
 应用入口：
 
 ```java
-package com.multind.zhitoubao;
+package com.multind.bitpongo;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

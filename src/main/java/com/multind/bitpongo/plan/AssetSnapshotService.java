@@ -8,14 +8,15 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
-@Service
-@ConditionalOnBean(PlanRepository.class)
+import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
+import org.springframework.jdbc.core.JdbcTemplate;
+
+@ConditionalOnBean(JdbcTemplate.class)
 public class AssetSnapshotService implements AssetSnapshotUseCase {
     private static final Logger log = LoggerFactory.getLogger(AssetSnapshotService.class);
     private final PlanRepository plans;
