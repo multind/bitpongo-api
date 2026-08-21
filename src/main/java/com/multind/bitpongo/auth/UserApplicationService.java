@@ -5,6 +5,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Locale;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -59,7 +60,7 @@ public class UserApplicationService {
     }
 
     @Transactional
-    public UserResponse register(UserCreateRequest request) {
+    public LoginData register(UserCreateRequest request) {
         String email = normalizeEmail(request.email());
         if (users.findByEmail(email).isPresent()) {
             throw new BusinessException(400, "用户已存在");
@@ -73,7 +74,12 @@ public class UserApplicationService {
         user.setStatus("active");
         user.setCreatedAt(now);
         user.setLastLogin(now);
-        return response(users.save(user));
+        try {
+            UserEntity saved = users.saveAndFlush(user);
+            return new LoginData(tokens.issue(saved.getId()), info(saved));
+        } catch (DataIntegrityViolationException exception) {
+            throw new BusinessException(400, "用户已存在");
+        }
     }
 
     @Transactional(readOnly = true)

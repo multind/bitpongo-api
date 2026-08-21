@@ -33,8 +33,8 @@ public class UserController {
     }
 
     @PostMapping("/register")
-    public UserResponse register(@Valid @RequestBody UserCreateRequest request) {
-        return users.register(request);
+    public ApiResponse<LoginData> register(@Valid @RequestBody UserCreateRequest request) {
+        return ApiResponse.success(users.register(request));
     }
 
     @GetMapping("/profile")

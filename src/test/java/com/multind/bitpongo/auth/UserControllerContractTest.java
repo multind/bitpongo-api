@@ -4,6 +4,7 @@ import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
@@ -64,6 +65,13 @@ class UserControllerContractTest {
             }
             return saved;
         });
+        when(users.saveAndFlush(any(UserEntity.class))).thenAnswer(invocation -> {
+            UserEntity saved = invocation.getArgument(0);
+            if (saved.getId() == null) {
+                saved.setId(9L);
+            }
+            return saved;
+        });
     }
 
     @Test
@@ -110,24 +118,52 @@ class UserControllerContractTest {
     }
 
     @Test
-    void registerCreatesPythonCompatibleUserResponse() throws Exception {
+    void registrationCreatesSessionAndNormalizesEmail() throws Exception {
         when(users.findByEmail("new@example.com")).thenReturn(Optional.empty());
 
         mvc.perform(post("/api/users/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"新用户\",\"email\":\"new@example.com\",\"password\":\"secret\"}"))
+                        .content("{\"name\":\"新用户\",\"email\":\" New@Example.COM \",\"password\":\"abc12345\"}"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.id").value(9))
-                .andExpect(jsonPath("$.email").value("new@example.com"))
-                .andExpect(jsonPath("$.password").doesNotExist());
+                .andExpect(jsonPath("$.code").value(200))
+                .andExpect(jsonPath("$.data.token").isString())
+                .andExpect(jsonPath("$.data.info.id").value(9))
+                .andExpect(jsonPath("$.data.info.email").value("new@example.com"));
+    }
+
+    @Test
+    void registrationRejectsPasswordsThatDoNotMeetTheSecurityRule() throws Exception {
+        for (String password : new String[] {"short1", "abcdefgh", "12345678"}) {
+            mvc.perform(post("/api/users/register")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"name\":\"新用户\",\"email\":\"new@example.com\",\"password\":\""
+                                    + password + "\"}"))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.message")
+                            .value("密码至少8位，且必须同时包含字母和数字"));
+        }
     }
 
     @Test
     void duplicateRegistrationReturnsCompatibleError() throws Exception {
         mvc.perform(post("/api/users/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"重复\",\"email\":\"local@example.com\",\"password\":\"secret\"}"))
+                        .content("{\"name\":\"重复\",\"email\":\"local@example.com\",\"password\":\"abc12345\"}"))
                 .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.message").value("用户已存在"));
+    }
+
+    @Test
+    void concurrentDuplicateRegistrationReturnsUserAlreadyExists() throws Exception {
+        when(users.findByEmail("race@example.com")).thenReturn(Optional.empty());
+        when(users.saveAndFlush(any(UserEntity.class)))
+                .thenThrow(new DataIntegrityViolationException("duplicate email"));
+
+        mvc.perform(post("/api/users/register")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"竞争用户\",\"email\":\"race@example.com\",\"password\":\"abc12345\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("用户已存在"));
     }
 
