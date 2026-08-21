@@ -41,7 +41,6 @@ class StrategyControllerContractTest {
     @MockitoBean ExchangeRepository exchanges;
     @MockitoBean PlanScheduleService schedules;
     @MockitoBean UserRepository users;
-    @MockitoBean com.multind.bitpongo.auth.DeletedExternalIdentityRepository deletedExternalIdentities;
     @MockitoBean com.multind.bitpongo.auth.AccountDeletionService accountDeletionService;
     @MockitoBean com.multind.bitpongo.plan.PlanApplicationService planApplicationService;
 

@@ -42,7 +42,6 @@ class ExchangeControllerContractTest {
     @MockitoBean private ExchangeRepository exchanges;
     @MockitoBean private ExchangeGatewayRegistry gateways;
     @MockitoBean private com.multind.bitpongo.auth.UserRepository users;
-    @MockitoBean private com.multind.bitpongo.auth.DeletedExternalIdentityRepository deletedExternalIdentities;
     @MockitoBean private com.multind.bitpongo.auth.AccountDeletionService accountDeletionService;
     @MockitoBean private com.multind.bitpongo.plan.PlanApplicationService planApplicationService;
     @MockitoBean private com.multind.bitpongo.strategy.StrategyApplicationService strategyApplicationService;

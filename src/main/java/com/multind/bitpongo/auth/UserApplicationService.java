@@ -20,32 +20,24 @@ public class UserApplicationService {
     private final UserRepository users;
     private final PasswordCompatibilityService passwords;
     private final JwtTokenService tokens;
-    private final WordPressAuthClient wordpress;
-    private final DeletedExternalIdentityRepository tombstones;
     private final Clock clock;
 
     @Autowired
     public UserApplicationService(
             UserRepository users,
             PasswordCompatibilityService passwords,
-            JwtTokenService tokens,
-            WordPressAuthClient wordpress,
-            DeletedExternalIdentityRepository tombstones) {
-        this(users, passwords, tokens, wordpress, tombstones, Clock.systemUTC());
+            JwtTokenService tokens) {
+        this(users, passwords, tokens, Clock.systemUTC());
     }
 
     UserApplicationService(
             UserRepository users,
             PasswordCompatibilityService passwords,
             JwtTokenService tokens,
-            WordPressAuthClient wordpress,
-            DeletedExternalIdentityRepository tombstones,
             Clock clock) {
         this.users = users;
         this.passwords = passwords;
         this.tokens = tokens;
-        this.wordpress = wordpress;
-        this.tombstones = tombstones;
         this.clock = clock;
     }
 
@@ -70,7 +62,6 @@ public class UserApplicationService {
         user.setName(request.name());
         user.setEmail(email);
         user.setPassword(passwords.hash(request.password()));
-        user.setAuthProvider("local");
         user.setStatus("active");
         user.setCreatedAt(now);
         user.setLastLogin(now);
@@ -87,38 +78,6 @@ public class UserApplicationService {
         return users.findById(userId)
                 .map(UserApplicationService::response)
                 .orElseThrow(() -> new BusinessException(401, "无法验证凭据"));
-    }
-
-    @Transactional
-    public LoginData wordpressLogin(UserLoginRequest request) {
-        WordPressSession session = wordpress.login(request.username(), request.password());
-        String subject = String.valueOf(session.userId());
-        if (tombstones.existsByProviderAndSubject("wordpress", subject)) {
-            throw new BusinessException(401, "账号不可用");
-        }
-        LocalDateTime now = now();
-        UserEntity user = users.findById(session.userId())
-                .or(() -> users.findByEmail(normalizeEmail(session.email())))
-                .orElseGet(() -> {
-            UserEntity created = new UserEntity();
-            created.setId(session.userId());
-            created.setEmail(normalizeEmail(session.email()));
-            created.setCreatedAt(now);
-            return created;
-        });
-        if (!user.isActive()) {
-            throw new BusinessException(401, "账号不可用");
-        }
-        user.setName(session.displayName());
-        user.setEmail(normalizeEmail(session.email()));
-        user.setPassword(passwords.hash(request.password()));
-        user.setAuthProvider("wordpress");
-        user.setStatus("active");
-        user.setLastLogin(now);
-        users.save(user);
-        return new LoginData(
-                session.token(),
-                new UserInfo(session.userId(), session.displayName(), normalizeEmail(session.email())));
     }
 
     private LocalDateTime now() {

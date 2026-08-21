@@ -36,8 +36,6 @@ class AccountDeletionServiceTest {
 
     private final UserRepository users = mock(UserRepository.class);
     private final PasswordCompatibilityService passwords = mock(PasswordCompatibilityService.class);
-    private final DeletedExternalIdentityRepository tombstones =
-            mock(DeletedExternalIdentityRepository.class);
     private final PlanRepository plans = mock(PlanRepository.class);
     private final ExchangeRepository exchanges = mock(ExchangeRepository.class);
     private final PlanScheduleService schedules = mock(PlanScheduleService.class);
@@ -47,7 +45,7 @@ class AccountDeletionServiceTest {
     @BeforeEach
     void setUp() {
         service = new AccountDeletionService(
-                users, passwords, tombstones, plans, exchanges, schedules, clock);
+                users, passwords, plans, exchanges, schedules, clock);
     }
 
     @AfterEach
@@ -59,7 +57,7 @@ class AccountDeletionServiceTest {
 
     @Test
     void wrongPasswordLeavesAccountAndTradingDataUnchanged() {
-        UserEntity user = activeUser("local");
+        UserEntity user = activeUser();
         when(users.findById(7L)).thenReturn(Optional.of(user));
         when(passwords.matches("wrong", "stored-hash")).thenReturn(false);
 
@@ -70,13 +68,13 @@ class AccountDeletionServiceTest {
                 });
 
         verify(users, never()).save(any());
-        verifyNoInteractions(plans, exchanges, tombstones, schedules);
+        verifyNoInteractions(plans, exchanges, schedules);
         assertThat(user.getStatus()).isEqualTo("active");
     }
 
     @Test
-    void deletionStopsTradingClearsSecretsAndAnonymizesWordpressAccount() {
-        UserEntity user = activeUser("wordpress");
+    void deletionStopsTradingClearsSecretsAndAnonymizesWithoutExternalIdentity() {
+        UserEntity user = activeUser();
         PlanEntity plan = new PlanEntity();
         plan.setId(11L);
         plan.setStatus("active");
@@ -91,12 +89,10 @@ class AccountDeletionServiceTest {
                 .thenReturn("anonymized-hash");
         when(plans.findAllForAccountDeletion(7L)).thenReturn(List.of(plan));
         when(exchanges.findAllForAccountDeletion(7L)).thenReturn(List.of(exchange));
-        when(tombstones.existsByProviderAndSubject("wordpress", "7")).thenReturn(false);
         TransactionSynchronizationManager.initSynchronization();
 
         service.delete(7L, "secret");
 
-        assertThat(user.getAuthProvider()).isEqualTo("wordpress");
         assertThat(user.getStatus()).isEqualTo("deleted");
         assertThat(user.getDeletedAt()).isEqualTo(NOW);
         assertThat(user.getName()).isEqualTo("已注销用户");
@@ -107,10 +103,6 @@ class AccountDeletionServiceTest {
         assertThat(exchange.getSecretKey()).isNull();
         assertThat(exchange.getPassword()).isNull();
         assertThat(exchange.getStatus()).isEqualTo("deleted");
-        verify(tombstones).save(argThat(value ->
-                "wordpress".equals(value.getProvider())
-                        && "7".equals(value.getSubject())
-                        && NOW.equals(value.getDeletedAt())));
         verify(schedules, never()).pause(anyLong());
 
         List<TransactionSynchronization> synchronizations =
@@ -122,7 +114,7 @@ class AccountDeletionServiceTest {
 
     @Test
     void schedulerFailureAfterCommitDoesNotEscapeOrRestoreAccount() {
-        UserEntity user = activeUser("local");
+        UserEntity user = activeUser();
         PlanEntity first = plan(11L);
         PlanEntity second = plan(12L);
         when(users.findById(7L)).thenReturn(Optional.of(user));
@@ -141,17 +133,15 @@ class AccountDeletionServiceTest {
         assertThatCode(callback::afterCommit).doesNotThrowAnyException();
         verify(schedules).pause(11L);
         verify(schedules).pause(12L);
-        verify(tombstones, never()).save(any());
         assertThat(user.getStatus()).isEqualTo("deleted");
     }
 
-    private static UserEntity activeUser(String provider) {
+    private static UserEntity activeUser() {
         UserEntity user = new UserEntity();
         user.setId(7L);
         user.setName("原用户");
         user.setEmail("old@example.com");
         user.setPassword("stored-hash");
-        user.setAuthProvider(provider);
         user.setStatus("active");
         return user;
     }

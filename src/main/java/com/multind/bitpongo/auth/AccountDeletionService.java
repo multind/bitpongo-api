@@ -30,7 +30,6 @@ public class AccountDeletionService {
 
     private final UserRepository users;
     private final PasswordCompatibilityService passwords;
-    private final DeletedExternalIdentityRepository tombstones;
     private final PlanRepository plans;
     private final ExchangeRepository exchanges;
     private final PlanScheduleService schedules;
@@ -40,25 +39,22 @@ public class AccountDeletionService {
     public AccountDeletionService(
             UserRepository users,
             PasswordCompatibilityService passwords,
-            DeletedExternalIdentityRepository tombstones,
             PlanRepository plans,
             ExchangeRepository exchanges,
             ObjectProvider<PlanScheduleService> schedules) {
-        this(users, passwords, tombstones, plans, exchanges,
+        this(users, passwords, plans, exchanges,
                 schedules.getIfAvailable(), Clock.systemUTC());
     }
 
     AccountDeletionService(
             UserRepository users,
             PasswordCompatibilityService passwords,
-            DeletedExternalIdentityRepository tombstones,
             PlanRepository plans,
             ExchangeRepository exchanges,
             PlanScheduleService schedules,
             Clock clock) {
         this.users = users;
         this.passwords = passwords;
-        this.tombstones = tombstones;
         this.plans = plans;
         this.exchanges = exchanges;
         this.schedules = schedules;
@@ -82,24 +78,8 @@ public class AccountDeletionService {
         userExchanges.forEach(AccountDeletionService::clearCredentials);
 
         LocalDateTime now = LocalDateTime.now(clock);
-        saveExternalIdentityTombstone(user, userId, now);
         anonymize(user, userId, now);
         pausePlansAfterCommit(planIds);
-    }
-
-    private void saveExternalIdentityTombstone(UserEntity user, long userId, LocalDateTime now) {
-        if (!"wordpress".equals(user.getAuthProvider())) {
-            return;
-        }
-        String subject = String.valueOf(userId);
-        if (tombstones.existsByProviderAndSubject("wordpress", subject)) {
-            return;
-        }
-        DeletedExternalIdentityEntity tombstone = new DeletedExternalIdentityEntity();
-        tombstone.setProvider("wordpress");
-        tombstone.setSubject(subject);
-        tombstone.setDeletedAt(now);
-        tombstones.save(tombstone);
     }
 
     private void anonymize(UserEntity user, long userId, LocalDateTime now) {

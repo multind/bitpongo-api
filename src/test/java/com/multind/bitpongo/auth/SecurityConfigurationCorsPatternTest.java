@@ -32,7 +32,6 @@ class SecurityConfigurationCorsPatternTest {
     @MockitoBean private UserApplicationService userApplicationService;
     @MockitoBean private AccountDeletionService accountDeletionService;
     @MockitoBean private UserRepository users;
-    @MockitoBean private DeletedExternalIdentityRepository deletedExternalIdentities;
     @MockitoBean private com.multind.bitpongo.exchange.ExchangeApplicationService exchangeApplicationService;
     @MockitoBean private com.multind.bitpongo.plan.PlanApplicationService planApplicationService;
     @MockitoBean private com.multind.bitpongo.strategy.StrategyApplicationService strategyApplicationService;

@@ -40,7 +40,6 @@ class BitpongoApplicationTest {
     @MockitoBean private JdbcTemplate jdbc;
 
     @MockitoBean private UserRepository users;
-    @MockitoBean private com.multind.bitpongo.auth.DeletedExternalIdentityRepository deletedExternalIdentities;
     @MockitoBean private com.multind.bitpongo.auth.AccountDeletionService accountDeletionService;
     @MockitoBean private ExchangeRepository exchanges;
     @MockitoBean private PlanApplicationService planApplicationService;

@@ -37,7 +37,6 @@ class NotificationControllerContractTest {
     @MockitoBean StrategyApplicationService strategyApplicationService;
     @MockitoBean PlanApplicationService planApplicationService;
     @MockitoBean UserRepository users;
-    @MockitoBean com.multind.bitpongo.auth.DeletedExternalIdentityRepository deletedExternalIdentities;
     @MockitoBean com.multind.bitpongo.auth.AccountDeletionService accountDeletionService;
 
     @Test

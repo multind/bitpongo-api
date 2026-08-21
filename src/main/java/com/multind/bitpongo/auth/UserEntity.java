@@ -26,9 +26,6 @@ public class UserEntity {
     @Column(length = 255)
     private String password;
 
-    @Column(name = "auth_provider", length = 16, nullable = false)
-    private String authProvider = "local";
-
     @Column(length = 16, nullable = false)
     private String status = "active";
 
@@ -49,8 +46,6 @@ public class UserEntity {
     public void setEmail(String email) { this.email = email; }
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
-    public String getAuthProvider() { return authProvider; }
-    public void setAuthProvider(String authProvider) { this.authProvider = authProvider; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public boolean isActive() { return "active".equals(status); }

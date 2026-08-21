@@ -27,8 +27,6 @@ class AuthenticatedUserResolverTest {
     @Autowired private JwtTokenService tokens;
 
     @MockitoBean private UserRepository users;
-    @MockitoBean private DeletedExternalIdentityRepository tombstones;
-    @MockitoBean private WordPressAuthClient wordpress;
     @MockitoBean private AccountDeletionService accountDeletionService;
     @MockitoBean private ExchangeRepository exchanges;
     @MockitoBean private PlanApplicationService planApplicationService;
@@ -47,13 +45,9 @@ class AuthenticatedUserResolverTest {
     }
 
     @Test
-    void wordpressTokenForDeletedSubjectIsRejected() {
-        when(wordpress.resolveUser("wp-token"))
-                .thenReturn(new AuthenticatedUser(7L, "old@example.com", "Old"));
-        when(tombstones.existsByProviderAndSubject("wordpress", "7")).thenReturn(true);
-
+    void externalTokenIsRejectedByLocalJwtValidator() {
         assertThatThrownBy(() -> resolver.resolve("wp-token"))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("账号不可用");
+                .hasMessage("Token 格式无效");
     }
 }

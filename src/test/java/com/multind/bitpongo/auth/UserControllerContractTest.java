@@ -38,8 +38,6 @@ class UserControllerContractTest {
     @Autowired private JwtTokenService tokens;
 
     @MockitoBean private UserRepository users;
-    @MockitoBean private DeletedExternalIdentityRepository tombstones;
-    @MockitoBean private WordPressAuthClient wordpress;
     @MockitoBean private AccountDeletionService accountDeletionService;
     @MockitoBean private com.multind.bitpongo.exchange.ExchangeApplicationService exchangeApplicationService;
     @MockitoBean private com.multind.bitpongo.plan.PlanApplicationService planApplicationService;
@@ -168,32 +166,11 @@ class UserControllerContractTest {
     }
 
     @Test
-    void wordpressLoginKeepsExistingPayload() throws Exception {
-        when(wordpress.login("u@example.com", "secret"))
-                .thenReturn(new WordPressSession("wp-token", 4L, "u@example.com", "WP 用户"));
-        when(users.findByEmail("u@example.com")).thenReturn(Optional.empty());
-
+    void removedWordpressLoginRouteReturnsNotFound() throws Exception {
         mvc.perform(post("/api/users/v1/login")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"username\":\"u@example.com\",\"password\":\"secret\"}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.code").value(200))
-                .andExpect(jsonPath("$.data.token").value("wp-token"))
-                .andExpect(jsonPath("$.data.info.id").value(4))
-                .andExpect(jsonPath("$.data.info.email").value("u@example.com"));
-    }
-
-    @Test
-    void wordpressLoginCannotRestoreDeletedSubject() throws Exception {
-        when(wordpress.login("u@example.com", "secret"))
-                .thenReturn(new WordPressSession("wp-token", 4L, "u@example.com", "WP 用户"));
-        when(tombstones.existsByProviderAndSubject("wordpress", "4")).thenReturn(true);
-
-        mvc.perform(post("/api/users/v1/login")
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"username\":\"u@example.com\",\"password\":\"secret\"}"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.message").value("账号不可用"));
+                .andExpect(status().isNotFound());
     }
 
     @Test

@@ -41,8 +41,12 @@ class LegacySchemaCompatibilityTest {
         assertThat(plan.getStatus()).isEqualTo("active");
         assertThat(plan.getTotalFunds()).isEqualByComparingTo("100.50");
         assertThat(jdbc.queryForObject(
-                "select auth_provider from user where id = 1", String.class)).isEqualTo("local");
-        assertThat(jdbc.queryForObject(
                 "select status from user where id = 1", String.class)).isEqualTo("active");
+        Integer authProviderColumns = jdbc.queryForObject(
+                "select count(*) from information_schema.columns "
+                        + "where table_schema = database() and table_name = 'user' "
+                        + "and column_name = 'auth_provider'",
+                Integer.class);
+        assertThat(authProviderColumns).isZero();
     }
 }

@@ -49,9 +49,4 @@ public class UserController {
         accountDeletion.delete(user.id(), request.password());
         return ApiResponse.success(null);
     }
-
-    @PostMapping("/v1/login")
-    public ApiResponse<LoginData> wordpressLogin(@Valid @RequestBody UserLoginRequest request) {
-        return ApiResponse.success(users.wordpressLogin(request));
-    }
 }
