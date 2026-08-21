@@ -20,6 +20,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 })
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
+@MockitoBean(types = {
+        com.multind.bitpongo.plan.AssetSnapshotService.class,
+        com.multind.bitpongo.scheduler.OrderPersistenceService.class,
+        com.multind.bitpongo.scheduler.OrderReconciliationService.class,
+        com.multind.bitpongo.scheduler.ScheduledPurchaseService.class
+})
 class SecurityConfigurationCorsPatternTest {
 
     @Autowired private MockMvc mvc;
