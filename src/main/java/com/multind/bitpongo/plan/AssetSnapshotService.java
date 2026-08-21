@@ -13,10 +13,7 @@ import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.support.TransactionTemplate;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.jdbc.core.JdbcTemplate;
-
-@ConditionalOnBean(JdbcTemplate.class)
+@Service
 public class AssetSnapshotService implements AssetSnapshotUseCase {
     private static final Logger log = LoggerFactory.getLogger(AssetSnapshotService.class);
     private final PlanRepository plans;
@@ -28,14 +25,16 @@ public class AssetSnapshotService implements AssetSnapshotUseCase {
 
     @Autowired
     public AssetSnapshotService(
-            PlanRepository plans, SnapshotRepository snapshots, ExchangeRepository exchanges,
-            ExchangeGatewayRegistry gateways, ObjectProvider<PlatformTransactionManager> transactionManager) {
+            PlanRepository plans, SnapshotRepository snapshots,
+            ExchangeRepository exchanges, ExchangeGatewayRegistry gateways,
+            ObjectProvider<PlatformTransactionManager> transactionManager) {
         this(plans, snapshots, exchanges, gateways, transactionManager.getIfAvailable(), Clock.systemUTC());
     }
 
     AssetSnapshotService(
-            PlanRepository plans, SnapshotRepository snapshots, ExchangeRepository exchanges,
-            ExchangeGatewayRegistry gateways, PlatformTransactionManager transactionManager, Clock clock) {
+            PlanRepository plans, SnapshotRepository snapshots,
+            ExchangeRepository exchanges, ExchangeGatewayRegistry gateways,
+            PlatformTransactionManager transactionManager, Clock clock) {
         this.plans = plans; this.snapshots = snapshots; this.exchanges = exchanges;
         this.gateways = gateways; this.clock = clock;
         this.transactions = transactionManager == null ? null : new TransactionTemplate(transactionManager);

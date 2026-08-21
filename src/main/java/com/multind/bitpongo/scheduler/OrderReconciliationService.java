@@ -18,10 +18,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.jdbc.core.JdbcTemplate;
-
-@ConditionalOnBean(JdbcTemplate.class)
+@Service
 public class OrderReconciliationService {
     private static final Logger log = LoggerFactory.getLogger(OrderReconciliationService.class);
     private static final List<String> RECOVERABLE = List.of(
@@ -39,16 +36,18 @@ public class OrderReconciliationService {
 
     @Autowired
     public OrderReconciliationService(
-            OrderIntentRepository intents, PlanRepository plans, ExchangeRepository exchanges,
-            ExchangeGatewayRegistry gateways, OrderPersistenceService persistence,
+            OrderIntentRepository intents, PlanRepository plans,
+            ExchangeRepository exchanges, ExchangeGatewayRegistry gateways,
+            OrderPersistenceService persistence,
             @Value("${zhitoubao.orders.reconciliation-stale-age:PT30S}") Duration staleAge,
             @Value("${zhitoubao.orders.reconciliation-max-attempts:20}") int maxAttempts) {
         this(intents, plans, exchanges, gateways, persistence, Clock.systemUTC(), staleAge, maxAttempts);
     }
 
     OrderReconciliationService(
-            OrderIntentRepository intents, PlanRepository plans, ExchangeRepository exchanges,
-            ExchangeGatewayRegistry gateways, OrderPersistenceService persistence,
+            OrderIntentRepository intents, PlanRepository plans,
+            ExchangeRepository exchanges, ExchangeGatewayRegistry gateways,
+            OrderPersistenceService persistence,
             Clock clock, Duration staleAge, int maxAttempts) {
         this.intents = intents; this.plans = plans; this.exchanges = exchanges;
         this.gateways = gateways; this.persistence = persistence;

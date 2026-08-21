@@ -16,12 +16,12 @@ import java.time.ZoneId;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Propagation;
+import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-@ConditionalOnBean(JdbcTemplate.class)
+@Service
 public class OrderPersistenceService {
     private final OrderIntentRepository intents;
     private final OrderRepository orders;
@@ -34,20 +34,23 @@ public class OrderPersistenceService {
     @Autowired
     public OrderPersistenceService(
             OrderIntentRepository intents, OrderRepository orders,
-            CoinRepository coins, PlanRepository plans, JdbcTemplate jdbc,
+            CoinRepository coins, PlanRepository plans,
+            JdbcTemplate jdbc,
             @Value("${zhitoubao.scheduling-zone:Asia/Shanghai}") String schedulingZone) {
         this(intents, orders, coins, plans, jdbc, Clock.systemUTC(), ZoneId.of(schedulingZone));
     }
 
     OrderPersistenceService(
             OrderIntentRepository intents, OrderRepository orders,
-            CoinRepository coins, PlanRepository plans, JdbcTemplate jdbc, Clock clock) {
+            CoinRepository coins, PlanRepository plans,
+            JdbcTemplate jdbc, Clock clock) {
         this(intents, orders, coins, plans, jdbc, clock, clock.getZone());
     }
 
     OrderPersistenceService(
             OrderIntentRepository intents, OrderRepository orders,
-            CoinRepository coins, PlanRepository plans, JdbcTemplate jdbc,
+            CoinRepository coins, PlanRepository plans,
+            JdbcTemplate jdbc,
             Clock clock, ZoneId schedulingZone) {
         this.intents = intents;
         this.orders = orders;

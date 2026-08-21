@@ -30,7 +30,8 @@ class OrderPersistenceServiceTest {
         current.setStatus("RECONCILING"); current.setUpdatedAt(LocalDateTime.parse("2026-08-09T00:01:30"));
         when(intents.findByIdForUpdate(1L)).thenReturn(Optional.of(current));
         OrderPersistenceService service = new OrderPersistenceService(
-                intents, orders, mock(CoinRepository.class), mock(PlanRepository.class), mock(JdbcTemplate.class),
+                intents, orders, mock(CoinRepository.class),
+                mock(PlanRepository.class), mock(JdbcTemplate.class),
                 Clock.systemUTC());
         OrderIntentEntity stale = new OrderIntentEntity(); stale.setId(1L);
         OrderResult result = new OrderResult("BTCUSDT", "99", "client-1", "FILLED",
@@ -52,7 +53,8 @@ class OrderPersistenceServiceTest {
         plan.setId(42L);
         when(plans.findById(42L)).thenReturn(Optional.of(plan));
         OrderPersistenceService service = new OrderPersistenceService(
-                intents, mock(OrderRepository.class), mock(CoinRepository.class), plans, mock(JdbcTemplate.class),
+                intents, mock(OrderRepository.class),
+                mock(CoinRepository.class), plans, mock(JdbcTemplate.class),
                 Clock.fixed(Instant.parse("2026-08-09T00:00:00Z"), ZoneId.of("UTC")),
                 ZoneId.of("Asia/Shanghai"));
         OrderIntentEntity intent = new OrderIntentEntity();
@@ -81,7 +83,8 @@ class OrderPersistenceServiceTest {
         when(coins.findByIdAndUserId(5L, 7L)).thenReturn(Optional.of(coin));
         when(plans.findById(42L)).thenReturn(Optional.of(plan));
         OrderPersistenceService service = new OrderPersistenceService(
-                intents, orders, coins, plans, mock(JdbcTemplate.class), Clock.systemUTC());
+                intents, orders, coins, plans,
+                mock(JdbcTemplate.class), Clock.systemUTC());
         OrderResult result = new OrderResult("BTCUSDT", "99", "client-1", "FILLED",
                 new BigDecimal("0.1"), new BigDecimal("10"), new BigDecimal("100"),
                 Map.of("BTC", new BigDecimal("0.001"), "USDT", new BigDecimal("0.5")));

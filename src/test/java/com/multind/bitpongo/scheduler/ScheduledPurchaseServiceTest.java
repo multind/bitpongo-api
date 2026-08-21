@@ -55,9 +55,10 @@ class ScheduledPurchaseServiceTest {
                 new OrderResult("BTCUSDT", "99", inv.getArgument(3), "FILLED",
                         inv.getArgument(2), new BigDecimal("12.4"), new BigDecimal("62000"),
                         Map.of()));
-        service = new ScheduledPurchaseService(plans, strategies, coins, orders, exchanges, intents,
-                gateways, new OrderSizingService(), prices, new OrderIdFactory(), persistence,
-                Clock.fixed(fire, ZoneOffset.UTC));
+        service = new ScheduledPurchaseService(
+                plans, strategies, coins, orders,
+                exchanges, intents, gateways, new OrderSizingService(), prices,
+                new OrderIdFactory(), persistence, Clock.fixed(fire, ZoneOffset.UTC));
     }
 
     @Test

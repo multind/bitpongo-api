@@ -16,10 +16,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
 
-import org.springframework.boot.autoconfigure.condition.ConditionalOnBean;
-import org.springframework.jdbc.core.JdbcTemplate;
-
-@ConditionalOnBean(JdbcTemplate.class)
+@Service
 public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
     private static final Logger log = LoggerFactory.getLogger(ScheduledPurchaseService.class);
     private static final Set<String> TERMINAL_ORDER_STATUSES = Set.of("FILLED", "CANCELED", "EXPIRED", "REJECTED");
@@ -38,8 +35,9 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
 
     @Autowired
     public ScheduledPurchaseService(
-            PlanRepository plans, StrategyRepository strategies, CoinRepository coins,
-            OrderRepository orders, ExchangeRepository exchanges, OrderIntentRepository intents,
+            PlanRepository plans, StrategyRepository strategies,
+            CoinRepository coins, OrderRepository orders,
+            ExchangeRepository exchanges, OrderIntentRepository intents,
             ExchangeGatewayRegistry gateways, OrderSizingService sizing, PriceCache prices,
             OrderIdFactory orderIds, OrderPersistenceService persistence) {
         this(plans, strategies, coins, orders, exchanges, intents, gateways, sizing, prices,
@@ -47,8 +45,9 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
     }
 
     ScheduledPurchaseService(
-            PlanRepository plans, StrategyRepository strategies, CoinRepository coins,
-            OrderRepository orders, ExchangeRepository exchanges, OrderIntentRepository intents,
+            PlanRepository plans, StrategyRepository strategies,
+            CoinRepository coins, OrderRepository orders,
+            ExchangeRepository exchanges, OrderIntentRepository intents,
             ExchangeGatewayRegistry gateways, OrderSizingService sizing, PriceCache prices,
             OrderIdFactory orderIds, OrderPersistenceService persistence, Clock clock) {
         this.plans = plans; this.strategies = strategies; this.coins = coins; this.orders = orders;
@@ -123,8 +122,8 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
     }
 
     private OrderIntentEntity claim(
-            PlanEntity plan, CoinEntity coin, String symbol, BigDecimal quantity,
-            String clientOrderId, Instant fireTime) {
+            PlanEntity plan, CoinEntity coin, String symbol,
+            BigDecimal quantity, String clientOrderId, Instant fireTime) {
         LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), clock.getZone());
         OrderIntentEntity intent = new OrderIntentEntity();
         intent.setClientOrderId(clientOrderId); intent.setPlanId(plan.getId()); intent.setCoinId(coin.getId());

@@ -167,7 +167,8 @@ class OrderReconciliationServiceTest {
     private static OrderReconciliationService service(
             OrderIntentRepository intents, PlanRepository plans, ExchangeRepository exchanges,
             ExchangeGatewayRegistry gateways, OrderPersistenceService persistence) {
-        return new OrderReconciliationService(intents, plans, exchanges, gateways, persistence,
-                Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofSeconds(30), 20);
+        return new OrderReconciliationService(
+                intents, plans, exchanges, gateways,
+                persistence, Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofSeconds(30), 20);
     }
 }
