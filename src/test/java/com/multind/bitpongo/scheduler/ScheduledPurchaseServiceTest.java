@@ -11,6 +11,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
@@ -92,5 +93,40 @@ class ScheduledPurchaseServiceTest {
 
         verify(persistence).mark(any(OrderIntentEntity.class), eq("PENDING_RECONCILIATION"));
         verify(persistence, never()).confirm(any(), any());
+    }
+
+    @Test
+    void freshWebsocketPriceDoesNotCallRestTicker() {
+        service.execute(42L, fire);
+
+        verify(gateway, never()).latestPrice(anyString());
+        verify(gateway).marketBuy(any(), eq("BTCUSDT"), any(), any());
+    }
+
+    @Test
+    void staleWebsocketPriceFallsBackToRestTickerAndRefreshesCache() {
+        prices.put("binance", "BTC/USDT", new BigDecimal("61000"),
+                fire.minus(Duration.ofMinutes(2)));
+        when(gateway.latestPrice("BTCUSDT")).thenReturn(new BigDecimal("62000"));
+
+        service.execute(42L, fire);
+
+        verify(gateway).latestPrice("BTCUSDT");
+        verify(gateway).marketBuy(any(), eq("BTCUSDT"), any(), any());
+        assertThat(prices.getFresh("binance", "BTC/USDT", fire))
+                .contains(new BigDecimal("62000"));
+    }
+
+    @Test
+    void restTickerFailureDoesNotCreateOrSubmitOrder() {
+        prices.put("binance", "BTC/USDT", new BigDecimal("61000"),
+                fire.minus(Duration.ofMinutes(2)));
+        when(gateway.latestPrice("BTCUSDT"))
+                .thenThrow(new RuntimeException("ticker unavailable"));
+
+        service.execute(42L, fire);
+
+        verify(intents, never()).saveAndFlush(any());
+        verify(gateway, never()).marketBuy(any(), anyString(), any(), any());
     }
 }

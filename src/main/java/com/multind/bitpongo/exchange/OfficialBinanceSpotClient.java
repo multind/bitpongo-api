@@ -14,6 +14,7 @@ import com.binance.connector.client.spot.rest.model.NewOrderRespType;
 import com.binance.connector.client.spot.rest.model.NewOrderResponse;
 import com.binance.connector.client.spot.rest.model.NotionalFilter;
 import com.binance.connector.client.spot.rest.model.OrderType;
+import com.binance.connector.client.spot.rest.model.TickerPriceResponse;
 import com.binance.connector.client.spot.rest.model.Side;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -78,6 +79,17 @@ public class OfficialBinanceSpotClient implements BinanceSpotClient {
                     decimal(lot.getStepSize()),
                     decimal(lot.getMinQty()),
                     decimal(lot.getMaxQty()));
+        } catch (ApiException exception) {
+            throw translate(exception);
+        }
+    }
+
+    @Override
+    public BigDecimal latestPrice(String symbol) {
+        try {
+            TickerPriceResponse response = publicApi().tickerPrice(symbol, null, null).getData();
+            String price = response.getTickerPriceResponse1().getPrice();
+            return decimal(price);
         } catch (ApiException exception) {
             throw translate(exception);
         }

@@ -25,11 +25,13 @@ class BinanceExchangeGatewayTest {
                 bd("0.1"), bd("6000"), bd("60000"), Map.of());
         when(client.account(credentials)).thenReturn(balance);
         when(client.marketRules("BTCUSDT")).thenReturn(rules);
+        when(client.latestPrice("BTCUSDT")).thenReturn(bd("62000"));
         when(client.marketBuy(credentials, "BTCUSDT", bd("0.1"), "client-1")).thenReturn(order);
         when(client.findOrder(credentials, "BTCUSDT", "client-1")).thenReturn(Optional.of(order));
 
         assertThat(gateway.verifyCredentials(credentials)).isEqualTo(balance);
         assertThat(gateway.getMarketRules("btcusdt")).isEqualTo(rules);
+        assertThat(gateway.latestPrice("btcusdt")).isEqualByComparingTo("62000");
         assertThat(gateway.marketBuy(credentials, "btcusdt", bd("0.1"), "client-1")).isEqualTo(order);
         assertThat(gateway.findOrder(credentials, "btcusdt", "client-1")).contains(order);
     }

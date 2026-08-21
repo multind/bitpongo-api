@@ -24,6 +24,15 @@ public class BinanceExchangeGateway implements ExchangeGateway {
     }
 
     @Override
+    public BigDecimal latestPrice(String symbol) {
+        try {
+            return client.latestPrice(normalizeSymbol(symbol));
+        } catch (BinanceClientException exception) {
+            throw map(exception, false);
+        }
+    }
+
+    @Override
     public MarketRules getMarketRules(String symbol) {
         try {
             return client.marketRules(normalizeSymbol(symbol));

@@ -72,8 +72,14 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
             String internalSymbol = coin.getSymbol().toUpperCase() + "/USDT";
             BigDecimal price = prices.getFresh(exchange.getExchange(), internalSymbol, clock.instant()).orElse(null);
             if (price == null) {
-                log.warn("无新鲜行情，跳过买入 planId={} coin={}", planId, coin.getSymbol());
-                continue;
+                try {
+                    price = gateway.latestPrice(marketSymbol);
+                    prices.put(exchange.getExchange(), internalSymbol, price, clock.instant());
+                } catch (RuntimeException failure) {
+                    log.warn("无新鲜行情且 REST 取价失败，跳过买入 planId={} coin={}",
+                            planId, coin.getSymbol(), failure);
+                    continue;
+                }
             }
             if (shouldSkipAverageDown(planId, strategy, coin, internalSymbol, price)) continue;
             String clientOrderId = orderIds.create(planId, marketSymbol, scheduledFireTime);
