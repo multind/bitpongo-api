@@ -14,8 +14,8 @@
     <groupId>com.multind</groupId>
     <artifactId>bitpongo-api</artifactId>
     <version>1.0.0-SNAPSHOT</version>
-    <name>zhitoubao</name>
-    <description>智投宝后端 API</description>
+    <name>bitpongo</name>
+    <description>Bitpongo API</description>
 
     <properties>
         <java.version>26</java.version>
