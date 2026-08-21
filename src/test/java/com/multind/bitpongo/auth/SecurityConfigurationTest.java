@@ -49,11 +49,11 @@ class SecurityConfigurationTest {
     @MockitoBean private com.multind.bitpongo.strategy.StrategyApplicationService strategyApplicationService;
 
     @Test
-    void compatibilityPublicPathsRemainAnonymous() throws Exception {
+    void publicPathsRemainAnonymousAndRemovedWordpressRouteStaysUnavailable() throws Exception {
         mvc.perform(get("/")).andExpect(status().isOk());
         mvc.perform(get("/health")).andExpect(status().isOk());
         mvc.perform(post("/api/users/login")).andExpect(status().isBadRequest());
-        mvc.perform(post("/api/users/v1/login")).andExpect(status().isBadRequest());
+        mvc.perform(post("/api/users/v1/login")).andExpect(status().isNotFound());
         mvc.perform(post("/api/users/register")).andExpect(status().isBadRequest());
     }
 
