@@ -4,7 +4,7 @@
 
 **Goal:** Align the Binance Spot 11.0.1 market stream integration with the official example while keeping its Jetty 11.0.26 client stack coherent under Spring Boot 4.1.0.
 
-**Architecture:** Continue using the existing `BinanceMarketStreamClient` abstraction and official `SpotWebSocketStreams` adapter. Replace artifact-by-artifact Jetty exclusions with one inherited Maven version property, then verify the resolved graph rather than maintaining a duplicated dependency list.
+**Architecture:** Continue using the existing `BinanceMarketStreamClient` abstraction and official `SpotWebSocketStreams` adapter. Replace artifact-by-artifact Jetty exclusions with a child-project Jetty 11 BOM import that does not override Spring Boot's Jetty EE11 BOM, then verify the resolved graph rather than maintaining a duplicated dependency list.
 
 **Tech Stack:** Java 26, Spring Boot 4.1.0, Maven, Binance Spot Connector 11.0.1, Jetty WebSocket Client 11.0.26, JUnit 5.
 
@@ -38,11 +38,13 @@ Expected: the current graph resolves Jetty 11.0.26 through explicit direct depen
 
 - [ ] **Step 2: Replace the repeated configuration**
 
-Add this property beside `binance-spot.version`:
+Add an independent property beside `binance-spot.version`:
 
 ```xml
-<jetty.version>11.0.26</jetty.version>
+<binance-jetty.version>11.0.26</binance-jetty.version>
 ```
+
+Import `org.eclipse.jetty:jetty-bom:${binance-jetty.version}` in the project's `dependencyManagement`; do not override Spring Boot's `jetty.version`, because Boot also uses it for `jetty-ee11-bom`.
 
 Keep the Binance dependency as:
 
@@ -146,4 +148,3 @@ Expected: only the approved dependency/API alignment appears; all Jetty artifact
 git add pom.xml src/main/java/com/multind/bitpongo/market/OfficialBinanceMarketStreamClient.java docs/superpowers/specs/2026-08-21-binance-websocket-dependency-design.md docs/superpowers/plans/2026-08-21-binance-websocket-dependency.md
 git commit -m "fix: align Binance websocket dependencies"
 ```
-

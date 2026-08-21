@@ -2,6 +2,7 @@ package com.multind.bitpongo.market;
 
 import com.binance.connector.client.spot.websocket.stream.SpotWebSocketStreamsUtil;
 import com.binance.connector.client.spot.websocket.stream.api.SpotWebSocketStreams;
+import com.binance.connector.client.spot.websocket.stream.model.AllMiniTickerRequest;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Instant;
@@ -36,7 +37,7 @@ public class OfficialBinanceMarketStreamClient implements BinanceMarketStreamCli
             Runnable onClosed) {
         var configuration = SpotWebSocketStreamsUtil.getClientConfiguration(streamPath);
         SpotWebSocketStreams streams = new SpotWebSocketStreams(configuration);
-        var queue = streams.allMiniTicker();
+        var queue = streams.allMiniTicker(new AllMiniTickerRequest());
         AtomicBoolean closed = new AtomicBoolean();
         Thread reader = Thread.ofVirtual().name("binance-all-mini-ticker").start(() -> {
             try {

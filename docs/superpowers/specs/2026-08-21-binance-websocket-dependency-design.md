@@ -6,7 +6,7 @@
 
 ## 方案选择
 
-采用项目级 Jetty 版本覆盖：保留 `io.github.binance:binance-spot:11.0.1` 的正常传递依赖，在 Spring Boot 父工程属性中将 `jetty.version` 固定为 Binance Connector 使用的 `11.0.26`。项目使用 Tomcat 作为 Web 容器，因此该覆盖只服务于 Binance WebSocket 客户端，不引入 Jetty 服务端。
+采用项目级 Jetty BOM 覆盖：保留 `io.github.binance:binance-spot:11.0.1` 的正常传递依赖，并在子项目的 `dependencyManagement` 中导入 `org.eclipse.jetty:jetty-bom:11.0.26`。不覆盖 Spring Boot 的 `jetty.version`，避免同时改变 Boot 所需的 `jetty-ee11-bom:12.1.10`。项目使用 Tomcat 作为 Web 容器，因此 Jetty 11 仅服务于 Binance WebSocket 客户端。
 
 未采用以下方案：
 
@@ -15,7 +15,7 @@
 
 ## 代码调整
 
-- POM 保留 `binance-spot:11.0.1`，新增 `jetty.version=11.0.26`。
+- POM 保留 `binance-spot:11.0.1`，新增独立的 `binance-jetty.version=11.0.26` 并导入对应 Jetty BOM。
 - 删除 Binance 依赖上的 Jetty exclusions 以及重复的 Jetty 直接依赖。
 - 使用官方 `AllMiniTickerExample` 的调用形式：创建 `AllMiniTickerRequest` 并传给 `allMiniTicker(request)`。
 - 保留现有虚拟线程读取、失败回调、关闭逻辑和多交易所抽象，不扩大本次范围。
@@ -25,4 +25,3 @@
 - 编译测试验证 11.0.1 API 调用兼容。
 - Maven dependency tree 中所有 `org.eclipse.jetty` 和 `org.eclipse.jetty.websocket` 组件必须解析为 11.0.26，不能混入 12.x。
 - 运行行情客户端相关单元测试和项目完整测试。
-
