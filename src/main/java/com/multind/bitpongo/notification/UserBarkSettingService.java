@@ -13,6 +13,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.TransactionDefinition;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionOperations;
 import org.springframework.transaction.support.TransactionTemplate;
@@ -28,7 +29,7 @@ public class UserBarkSettingService {
     private final NotificationOutboxRepository outbox;
     private final BarkPushUrlParser parser;
     private final BarkCredentialCipher injectedCipher;
-    private final BarkClient bark;
+    private final BarkTestSender testSender;
     private final NotificationMessageRenderer renderer;
     private final BarkProperties properties;
     private final TransactionOperations readTransactions;
@@ -38,13 +39,13 @@ public class UserBarkSettingService {
     public UserBarkSettingService(
             ObjectProvider<UserBarkSettingRepository> settings,
             ObjectProvider<NotificationOutboxRepository> outbox,
-            BarkClient bark,
+            BarkTestSender testSender,
             NotificationMessageRenderer renderer,
             BarkProperties properties,
             ObjectProvider<PlatformTransactionManager> transactionManager) {
         this(settings.getIfAvailable(), outbox.getIfAvailable(),
                 new BarkPushUrlParser(properties), null,
-                bark, renderer, properties, transactionManager.getIfAvailable(),
+                testSender, renderer, properties, transactionManager.getIfAvailable(),
                 Clock.systemUTC());
     }
 
@@ -57,7 +58,8 @@ public class UserBarkSettingService {
             NotificationMessageRenderer renderer,
             BarkProperties properties,
             Clock clock) {
-        this(settings, outbox, parser, cipher, bark, renderer, properties, null, clock);
+        this(settings, outbox, parser, cipher, new BarkTestSender(bark),
+                renderer, properties, null, clock);
     }
 
     UserBarkSettingService(
@@ -65,7 +67,7 @@ public class UserBarkSettingService {
             NotificationOutboxRepository outbox,
             BarkPushUrlParser parser,
             BarkCredentialCipher cipher,
-            BarkClient bark,
+            BarkTestSender testSender,
             NotificationMessageRenderer renderer,
             BarkProperties properties,
             PlatformTransactionManager transactionManager,
@@ -74,7 +76,7 @@ public class UserBarkSettingService {
         this.outbox = outbox;
         this.parser = parser;
         this.injectedCipher = cipher;
-        this.bark = bark;
+        this.testSender = testSender;
         this.renderer = renderer;
         this.properties = properties;
         this.readTransactions = readTransactions(transactionManager);
@@ -152,7 +154,7 @@ public class UserBarkSettingService {
             });
         }
 
-        bark.send(delivery.target(), delivery.message());
+        testSender.send(delivery.target(), delivery.message());
         return true;
     }
 
@@ -261,6 +263,7 @@ public class UserBarkSettingService {
         }
         TransactionTemplate transactions = new TransactionTemplate(transactionManager);
         transactions.setReadOnly(true);
+        transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
         return transactions;
     }
 

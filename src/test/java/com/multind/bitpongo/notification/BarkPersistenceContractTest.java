@@ -8,6 +8,8 @@ import com.multind.bitpongo.auth.UserEntity;
 import com.multind.bitpongo.auth.UserRepository;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -21,8 +23,10 @@ import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
@@ -74,6 +78,9 @@ class BarkPersistenceContractTest {
 
     @Autowired
     private PasswordCompatibilityService passwords;
+
+    @Autowired
+    private PlatformTransactionManager transactionManager;
 
     @Autowired
     private RecordingBarkClient recordingBarkClient;
@@ -280,6 +287,35 @@ class BarkPersistenceContractTest {
         assertThat(recordingBarkClient.transactionActiveDuringSend()).isFalse();
     }
 
+    @Test
+    void testSendSuspendsOuterTransactionForStoredAndTemporaryTargets() {
+        long userId = createUser("bark-send-outer-transaction@example.com", "unused-password");
+        UserBarkSettingEntity setting = new UserBarkSettingEntity();
+        setting.setUserId(userId);
+        setting.setServerUrl("https://localhost");
+        setting.setDeviceKeyCiphertext(new BarkCredentialCipher(
+                "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")
+                .encrypt("saved-fake-test-device-key"));
+        setting.setEnabled(true);
+        setting.setLocale("zh-CN");
+        setting.setTimezone("Asia/Shanghai");
+        barkSettings.saveAndFlush(setting);
+        recordingBarkClient.reset();
+        TransactionTemplate outerTransaction = new TransactionTemplate(transactionManager);
+
+        outerTransaction.executeWithoutResult(status -> {
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+            barkSettingService.sendTest(userId, null);
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+            barkSettingService.sendTest(
+                    userId, "https://localhost/temporary-fake-test-device-key");
+            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isTrue();
+        });
+
+        assertThat(recordingBarkClient.transactionStatesDuringSend())
+                .containsExactly(false, false);
+    }
+
     private long createUser() {
         return createUser("bark-test@example.com", "secret");
     }
@@ -377,27 +413,28 @@ class BarkPersistenceContractTest {
     }
 
     static final class RecordingBarkClient implements BarkClient {
-        private boolean called;
-        private boolean transactionActiveDuringSend;
+        private final List<Boolean> transactionStatesDuringSend = new ArrayList<>();
 
         @Override
         public void send(BarkTarget target, BarkMessage message) {
-            called = true;
-            transactionActiveDuringSend =
-                    TransactionSynchronizationManager.isActualTransactionActive();
+            transactionStatesDuringSend.add(
+                    TransactionSynchronizationManager.isActualTransactionActive());
         }
 
         void reset() {
-            called = false;
-            transactionActiveDuringSend = false;
+            transactionStatesDuringSend.clear();
         }
 
         boolean wasCalled() {
-            return called;
+            return !transactionStatesDuringSend.isEmpty();
         }
 
         boolean transactionActiveDuringSend() {
-            return transactionActiveDuringSend;
+            return transactionStatesDuringSend.getLast();
+        }
+
+        List<Boolean> transactionStatesDuringSend() {
+            return List.copyOf(transactionStatesDuringSend);
         }
     }
 }
