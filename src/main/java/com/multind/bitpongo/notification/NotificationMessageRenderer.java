@@ -20,11 +20,15 @@ public final class NotificationMessageRenderer {
             "(?i)\\bBearer\\s+\\S+");
     private static final Pattern EMAIL = Pattern.compile(
             "(?i)\\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\\.[A-Z]{2,}\\b");
+    private static final String CREDENTIAL_NAME =
+            "(?:(?:[a-z0-9]+[_-])*(?:access(?:[_-]?(?:key|token))?"
+                    + "|secret(?:[_-]?key)?|device[_-]?key|token|key)"
+                    + "|(?:api|client|refresh)[_-]?(?:key|secret|token))";
     private static final Pattern ASSIGNED_CREDENTIAL = Pattern.compile(
-            "(?i)\\b(access(?:[_-]?(?:key|token))?|secret(?:[_-]?key)?|device[_-]?key|token|key)"
+            "(?i)\\b(" + CREDENTIAL_NAME + ")"
                     + "\\s*[:=]\\s*(?:\\\"[^\\\"]*\\\"|'[^']*'|[^\\s,;]+)");
     private static final Pattern BARE_CREDENTIAL = Pattern.compile(
-            "(?i)\\b(access[ _-]?(?:key|token)|secret(?:[ _-]?key)?|device[ _-]?key|token|key)"
+            "(?i)\\b(" + CREDENTIAL_NAME + ")"
                     + "\\s+(?:\\\"[^\\\"]*\\\"|'[^']*'|[^\\s,;]+)");
     private static final DateTimeFormatter TIME =
             DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss VV", Locale.ROOT);

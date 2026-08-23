@@ -84,6 +84,26 @@ class NotificationMessageRendererTest {
         assertThat(message.call()).isFalse();
     }
 
+    @Test
+    void redactsCompoundCredentialFieldNamesFromRenderedErrorText() {
+        NotificationEvent event = new NotificationEvent(
+                NotificationEventType.TRADE_FAILED,
+                7L,
+                11L,
+                null,
+                Instant.parse("2026-08-23T01:02:03Z"),
+                "trade-failed-compound-credentials",
+                Map.of("error", "api_key=fake-api-key client_secret: fake-client-secret "
+                        + "refresh_token fake-refresh-token"));
+
+        BarkMessage message = renderer.render(event, "en-US", "UTC", null);
+
+        assertThat(message.body())
+                .doesNotContain("fake-api-key", "fake-client-secret", "fake-refresh-token")
+                .contains("api_key=<redacted>", "client_secret=<redacted>",
+                        "refresh_token <redacted>");
+    }
+
     private static Stream<Arguments> localizedMessages() {
         return Stream.of(
                 Arguments.of("zh-CN", "Asia/Shanghai", "交易失败",

@@ -11,6 +11,8 @@ import okhttp3.mockwebserver.RecordedRequest;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import tools.jackson.core.type.TypeReference;
 import tools.jackson.databind.json.JsonMapper;
 
@@ -101,6 +103,15 @@ class HttpBarkClientTest {
         server.enqueue(new MockResponse().setResponseCode(200)
                 .setBody("{\"code\":400,\"message\":\"fake-device-key rejected\"}"));
         assertGenericFailure(() -> client.send(target, message()));
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"200.5", "4294967496"})
+    void rejectsNonIntegerOrOverflowingCodesThatTruncateTo200(String code) {
+        server.enqueue(new MockResponse().setResponseCode(200)
+                .setBody("{\"code\":" + code + ",\"message\":\"not exact integer 200\"}"));
+        assertGenericFailure(() -> client.send(target, message()));
+        assertThat(server.getRequestCount()).isEqualTo(1);
     }
 
     private HttpBarkClient clientRevalidatingAs(BarkTarget revalidatedTarget) {

@@ -1,6 +1,7 @@
 package com.multind.bitpongo.notification;
 
 import com.multind.bitpongo.common.api.BusinessException;
+import java.math.BigInteger;
 import java.net.URI;
 import java.net.URLEncoder;
 import java.net.http.HttpClient;
@@ -105,9 +106,18 @@ public final class HttpBarkClient implements BarkClient {
         }
         Map<String, Object> result = json.readValue(response.body(), new TypeReference<>() {});
         Object code = result.get("code");
-        if (!(code instanceof Number number) || number.intValue() != 200) {
+        if (!isSuccessCode(code)) {
             throw sendFailure();
         }
+    }
+
+    private static boolean isSuccessCode(Object code) {
+        if (code instanceof Byte || code instanceof Short
+                || code instanceof Integer || code instanceof Long) {
+            return ((Number) code).longValue() == 200L;
+        }
+        return code instanceof BigInteger integer
+                && integer.equals(BigInteger.valueOf(200L));
     }
 
     private static String pushUrl(BarkTarget target) {
