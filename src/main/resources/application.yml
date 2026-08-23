@@ -47,6 +47,15 @@ management:
 
 zhitoubao:
   scheduling-zone: ${SCHEDULING_ZONE:Asia/Shanghai}
+  notifications:
+    bark:
+      user-notifications-enabled: ${BARK_USER_NOTIFICATIONS_ENABLED:true}
+      admin-push-url: ${BARK_ADMIN_PUSH_URL:}
+      allowed-hosts: ${BARK_ALLOWED_HOSTS:api.day.app}
+      allow-private-hosts: ${BARK_ALLOW_PRIVATE_HOSTS:false}
+      credential-encryption-key: ${BARK_CREDENTIAL_ENCRYPTION_KEY:}
+      notify-on-startup: ${BARK_NOTIFY_ON_STARTUP:false}
+      app-public-url: ${APP_PUBLIC_URL:}
   cors:
     allowed-origins: ${BACKEND_CORS_ORIGINS:*}
   jwt:

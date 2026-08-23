@@ -9,5 +9,8 @@ spring:
 zhitoubao:
   jwt:
     secret-key: test-only-jwt-secret
+  notifications:
+    bark:
+      credential-encryption-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
   market:
     stream-enabled: false
