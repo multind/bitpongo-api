@@ -63,7 +63,7 @@ class AccountDeletionServiceTest {
 
         assertThatThrownBy(() -> service.delete(7L, "wrong"))
                 .isInstanceOfSatisfying(BusinessException.class, error -> {
-                    assertThat(error.getCode()).isEqualTo(401);
+                    assertThat(error.getCode()).isEqualTo(400);
                     assertThat(error.getMessage()).isEqualTo("密码错误");
                 });
 

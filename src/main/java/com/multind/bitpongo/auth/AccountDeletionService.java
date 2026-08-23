@@ -67,7 +67,7 @@ public class AccountDeletionService {
                 .filter(UserEntity::isActive)
                 .orElseThrow(() -> new BusinessException(401, "账号不可用"));
         if (!passwords.matches(password, user.getPassword())) {
-            throw new BusinessException(401, "密码错误");
+            throw new BusinessException(400, "密码错误");
         }
 
         List<PlanEntity> userPlans = plans.findAllForAccountDeletion(userId);
