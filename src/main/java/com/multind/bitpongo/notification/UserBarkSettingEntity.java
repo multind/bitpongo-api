@@ -5,6 +5,8 @@ import jakarta.persistence.Entity;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import org.hibernate.annotations.Generated;
+import org.hibernate.generator.EventType;
 
 @Entity
 @Table(name = "user_bark_setting")
@@ -33,6 +35,7 @@ public class UserBarkSettingEntity {
     private LocalDateTime createdAt;
 
     @Column(name = "updated_at", insertable = false, updatable = false)
+    @Generated(event = {EventType.INSERT, EventType.UPDATE})
     private LocalDateTime updatedAt;
 
     public Long getUserId() { return userId; }

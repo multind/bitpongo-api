@@ -3,6 +3,7 @@ package com.multind.bitpongo.auth;
 import com.multind.bitpongo.common.api.BusinessException;
 import com.multind.bitpongo.exchange.ExchangeEntity;
 import com.multind.bitpongo.exchange.ExchangeRepository;
+import com.multind.bitpongo.notification.UserBarkSettingService;
 import com.multind.bitpongo.plan.PlanEntity;
 import com.multind.bitpongo.plan.PlanRepository;
 import com.multind.bitpongo.scheduler.PlanScheduleService;
@@ -33,6 +34,7 @@ public class AccountDeletionService {
     private final PlanRepository plans;
     private final ExchangeRepository exchanges;
     private final PlanScheduleService schedules;
+    private final UserBarkSettingService barkSettings;
     private final Clock clock;
 
     @Autowired
@@ -41,9 +43,10 @@ public class AccountDeletionService {
             PasswordCompatibilityService passwords,
             PlanRepository plans,
             ExchangeRepository exchanges,
-            ObjectProvider<PlanScheduleService> schedules) {
+            ObjectProvider<PlanScheduleService> schedules,
+            UserBarkSettingService barkSettings) {
         this(users, passwords, plans, exchanges,
-                schedules.getIfAvailable(), Clock.systemUTC());
+                schedules.getIfAvailable(), barkSettings, Clock.systemUTC());
     }
 
     AccountDeletionService(
@@ -52,12 +55,14 @@ public class AccountDeletionService {
             PlanRepository plans,
             ExchangeRepository exchanges,
             PlanScheduleService schedules,
+            UserBarkSettingService barkSettings,
             Clock clock) {
         this.users = users;
         this.passwords = passwords;
         this.plans = plans;
         this.exchanges = exchanges;
         this.schedules = schedules;
+        this.barkSettings = barkSettings;
         this.clock = clock;
     }
 
@@ -74,6 +79,7 @@ public class AccountDeletionService {
         List<ExchangeEntity> userExchanges = exchanges.findAllForAccountDeletion(userId);
         List<Long> planIds = userPlans.stream().map(PlanEntity::getId).toList();
 
+        barkSettings.deleteForUser(userId);
         userPlans.forEach(plan -> plan.setStatus("stop"));
         userExchanges.forEach(AccountDeletionService::clearCredentials);
 

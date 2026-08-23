@@ -1,5 +1,9 @@
 package com.multind.bitpongo.notification;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.multind.bitpongo.auth.JwtTokenService;
+import com.multind.bitpongo.auth.UserEntity;
+import com.multind.bitpongo.auth.UserRepository;
 import jakarta.persistence.EntityManager;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -7,20 +11,32 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @Testcontainers
 @SpringBootTest(properties = {
         "zhitoubao.jwt.secret-key=bark-persistence-contract-test-secret",
+        "zhitoubao.notifications.bark.allowed-hosts=localhost",
+        "zhitoubao.notifications.bark.allow-private-hosts=true",
+        "zhitoubao.notifications.bark.credential-encryption-key="
+                + "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
         "zhitoubao.market.stream-enabled=false",
         "spring.quartz.auto-startup=false"
 })
+@AutoConfigureMockMvc
 class BarkPersistenceContractTest {
 
     @Container
@@ -40,6 +56,20 @@ class BarkPersistenceContractTest {
 
     @Autowired
     private NotificationOutboxRepository outbox;
+
+    @Autowired
+    private UserBarkSettingService barkSettingService;
+
+    @Autowired
+    private UserRepository users;
+
+    @Autowired
+    private MockMvc mvc;
+
+    @Autowired
+    private JwtTokenService tokens;
+
+    private final ObjectMapper json = new ObjectMapper();
 
     @Test
     void migratesBarkSettingAndLeasedOutboxSchemaWithDispatchIndexes() {
@@ -66,7 +96,7 @@ class BarkPersistenceContractTest {
     @Transactional
     void persistsEncryptedBarkTargetAndJsonOutboxPayloadThroughRepositories() {
         long userId = createUser();
-        LocalDateTime now = LocalDateTime.of(2026, 8, 23, 12, 0);
+        LocalDateTime now = LocalDateTime.of(2000, 1, 1, 0, 0);
 
         UserBarkSettingEntity setting = new UserBarkSettingEntity();
         setting.setUserId(userId);
@@ -120,10 +150,131 @@ class BarkPersistenceContractTest {
                 "SYSTEM_RECOVERED", "SERVICE_STARTED", "BARK_TEST");
     }
 
+    @Test
+    @Transactional
+    void createAndUpdateResponsesReturnDatabaseGeneratedUpdateTimeAndEncryptedTarget()
+            throws Exception {
+        long userId = createUser();
+
+        MvcResult createdResult = mvc.perform(put("/api/users/notifications/bark")
+                        .header("Authorization", bearer(userId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"push_url":"https://localhost/obvious-fake-device-key",
+                                 "enabled":true,"locale":"zh-CN","timezone":"Asia/Shanghai"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.updated_at").isNotEmpty())
+                .andExpect(jsonPath("$.data.masked_push_url").value("https://localhost/****-key"))
+                .andReturn();
+        LocalDateTime createdAt = responseUpdatedAt(createdResult);
+
+        assertThat(createdAt).isNotNull();
+        assertThat(createdResult.getResponse().getContentAsString())
+                .doesNotContain("obvious-fake-device-key");
+        entityManager.clear();
+        UserBarkSettingEntity stored = barkSettings.findByUserId(userId).orElseThrow();
+        assertThat(stored.getDeviceKeyCiphertext())
+                .startsWith("v1:")
+                .doesNotContain("obvious-fake-device-key");
+        assertThat(stored.getUpdatedAt()).isEqualTo(createdAt);
+
+        LocalDateTime oldUpdatedAt = LocalDateTime.of(2000, 1, 1, 0, 0);
+        jdbc.update("update user_bark_setting set updated_at = ? where user_id = ?",
+                oldUpdatedAt, userId);
+        entityManager.clear();
+
+        MvcResult updatedResult = mvc.perform(put("/api/users/notifications/bark")
+                        .header("Authorization", bearer(userId))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"enabled":false,"locale":"en-US","timezone":"UTC"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.updated_at").isNotEmpty())
+                .andReturn();
+        LocalDateTime updatedAt = responseUpdatedAt(updatedResult);
+
+        assertThat(updatedAt).isAfter(oldUpdatedAt);
+        assertThat(updatedAt).isEqualTo(jdbc.queryForObject(
+                "select updated_at from user_bark_setting where user_id = ?",
+                LocalDateTime.class,
+                userId));
+    }
+
+    @Test
+    @Transactional
+    void deletingBarkSettingSkipsPendingAndSendingButPreservesSentHistory() {
+        long userId = createUser();
+        UserEntity managedUser = users.findById(userId).orElseThrow();
+        LocalDateTime now = LocalDateTime.of(2000, 1, 1, 0, 0);
+        UserBarkSettingEntity setting = new UserBarkSettingEntity();
+        setting.setUserId(userId);
+        setting.setServerUrl("https://api.day.app");
+        setting.setDeviceKeyCiphertext("obvious-test-ciphertext");
+        barkSettings.saveAndFlush(setting);
+
+        NotificationOutboxEntity pending = message(userId, "delete-pending", now);
+        NotificationOutboxEntity sending = message(userId, "delete-sending", now);
+        sending.setStatus(NotificationOutboxStatus.SENDING);
+        sending.setLeaseUntil(now.plusMinutes(1));
+        NotificationOutboxEntity sent = message(userId, "delete-sent", now);
+        sent.setStatus(NotificationOutboxStatus.SENT);
+        outbox.saveAllAndFlush(java.util.List.of(pending, sending, sent));
+
+        barkSettingService.deleteForUser(userId);
+        managedUser.setName("已清理通知的测试用户");
+        managedUser.setStatus("deleted");
+        entityManager.flush();
+        entityManager.clear();
+
+        assertThat(users.findById(userId).orElseThrow().getStatus()).isEqualTo("deleted");
+        assertThat(barkSettings.findByUserId(userId)).isEmpty();
+        NotificationOutboxEntity skippedPending = outbox.findById(pending.getId()).orElseThrow();
+        assertThat(skippedPending.getStatus()).isEqualTo(NotificationOutboxStatus.SKIPPED);
+        assertThat(skippedPending.getUpdatedAt()).isAfter(now);
+        NotificationOutboxEntity skippedSending = outbox.findById(sending.getId()).orElseThrow();
+        assertThat(skippedSending.getStatus()).isEqualTo(NotificationOutboxStatus.SKIPPED);
+        assertThat(skippedSending.getLeaseUntil()).isNull();
+        assertThat(skippedSending.getUpdatedAt()).isAfter(now);
+        assertThat(outbox.findById(sent.getId()).orElseThrow().getStatus())
+                .isEqualTo(NotificationOutboxStatus.SENT);
+        assertThat(outbox.findById(sent.getId()).orElseThrow().getUpdatedAt()).isEqualTo(now);
+    }
+
     private long createUser() {
         jdbc.update("insert into user (name, email, password) values (?, ?, ?)",
                 "Bark Test", "bark-test@example.com", "secret");
         return jdbc.queryForObject("select id from user where email = ?", Long.class, "bark-test@example.com");
+    }
+
+    private String bearer(long userId) {
+        return "Bearer " + tokens.issue(userId);
+    }
+
+    private LocalDateTime responseUpdatedAt(MvcResult result) throws Exception {
+        String value = json.readTree(result.getResponse().getContentAsByteArray())
+                .at("/data/updated_at")
+                .asText();
+        return LocalDateTime.parse(value);
+    }
+
+    private static NotificationOutboxEntity message(
+            long userId, String dedupeKey, LocalDateTime now) {
+        NotificationOutboxEntity message = new NotificationOutboxEntity();
+        message.setEventType(NotificationEventType.TRADE_FAILED);
+        message.setRecipientType(NotificationRecipientType.USER);
+        message.setUserId(userId);
+        message.setTitleKey("notification.trade_failed.title");
+        message.setBodyPayload(Map.of("symbol", "BTCUSDT"));
+        message.setDedupeKey(dedupeKey);
+        message.setPriority("HIGH");
+        message.setStatus(NotificationOutboxStatus.PENDING);
+        message.setAttempts(0);
+        message.setNextAttemptAt(now);
+        message.setCreatedAt(now);
+        message.setUpdatedAt(now);
+        return message;
     }
 
     private java.util.List<String> columnsFor(String table) {

@@ -3,6 +3,7 @@ package com.multind.bitpongo.auth;
 import com.multind.bitpongo.common.api.BusinessException;
 import com.multind.bitpongo.exchange.ExchangeEntity;
 import com.multind.bitpongo.exchange.ExchangeRepository;
+import com.multind.bitpongo.notification.UserBarkSettingService;
 import com.multind.bitpongo.plan.PlanEntity;
 import com.multind.bitpongo.plan.PlanRepository;
 import com.multind.bitpongo.scheduler.PlanScheduleService;
@@ -39,13 +40,14 @@ class AccountDeletionServiceTest {
     private final PlanRepository plans = mock(PlanRepository.class);
     private final ExchangeRepository exchanges = mock(ExchangeRepository.class);
     private final PlanScheduleService schedules = mock(PlanScheduleService.class);
+    private final UserBarkSettingService barkSettings = mock(UserBarkSettingService.class);
     private final Clock clock = Clock.fixed(Instant.parse("2026-08-14T07:30:00Z"), ZoneOffset.UTC);
     private AccountDeletionService service;
 
     @BeforeEach
     void setUp() {
         service = new AccountDeletionService(
-                users, passwords, plans, exchanges, schedules, clock);
+                users, passwords, plans, exchanges, schedules, barkSettings, clock);
     }
 
     @AfterEach
@@ -68,7 +70,7 @@ class AccountDeletionServiceTest {
                 });
 
         verify(users, never()).save(any());
-        verifyNoInteractions(plans, exchanges, schedules);
+        verifyNoInteractions(plans, exchanges, schedules, barkSettings);
         assertThat(user.getStatus()).isEqualTo("active");
     }
 
@@ -103,6 +105,7 @@ class AccountDeletionServiceTest {
         assertThat(exchange.getSecretKey()).isNull();
         assertThat(exchange.getPassword()).isNull();
         assertThat(exchange.getStatus()).isEqualTo("deleted");
+        verify(barkSettings).deleteForUser(7L);
         verify(schedules, never()).pause(anyLong());
 
         List<TransactionSynchronization> synchronizations =
