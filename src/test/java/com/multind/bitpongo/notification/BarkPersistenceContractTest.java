@@ -1,7 +1,9 @@
 package com.multind.bitpongo.notification;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.multind.bitpongo.auth.AccountDeletionService;
 import com.multind.bitpongo.auth.JwtTokenService;
+import com.multind.bitpongo.auth.PasswordCompatibilityService;
 import com.multind.bitpongo.auth.UserEntity;
 import com.multind.bitpongo.auth.UserRepository;
 import jakarta.persistence.EntityManager;
@@ -10,13 +12,17 @@ import java.util.Map;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
@@ -62,6 +68,15 @@ class BarkPersistenceContractTest {
 
     @Autowired
     private UserRepository users;
+
+    @Autowired
+    private AccountDeletionService accountDeletion;
+
+    @Autowired
+    private PasswordCompatibilityService passwords;
+
+    @Autowired
+    private RecordingBarkClient recordingBarkClient;
 
     @Autowired
     private MockMvc mvc;
@@ -203,10 +218,9 @@ class BarkPersistenceContractTest {
     }
 
     @Test
-    @Transactional
-    void deletingBarkSettingSkipsPendingAndSendingButPreservesSentHistory() {
-        long userId = createUser();
-        UserEntity managedUser = users.findById(userId).orElseThrow();
+    void accountDeletionDeletesBarkSettingAndSkipsOnlyUnfinishedNotifications() {
+        String originalPasswordHash = passwords.hash("secret");
+        long userId = createUser("account-delete-bark@example.com", originalPasswordHash);
         LocalDateTime now = LocalDateTime.of(2000, 1, 1, 0, 0);
         UserBarkSettingEntity setting = new UserBarkSettingEntity();
         setting.setUserId(userId);
@@ -222,13 +236,16 @@ class BarkPersistenceContractTest {
         sent.setStatus(NotificationOutboxStatus.SENT);
         outbox.saveAllAndFlush(java.util.List.of(pending, sending, sent));
 
-        barkSettingService.deleteForUser(userId);
-        managedUser.setName("已清理通知的测试用户");
-        managedUser.setStatus("deleted");
-        entityManager.flush();
-        entityManager.clear();
+        accountDeletion.delete(userId, "secret");
 
-        assertThat(users.findById(userId).orElseThrow().getStatus()).isEqualTo("deleted");
+        UserEntity deletedUser = users.findById(userId).orElseThrow();
+        assertThat(deletedUser.getStatus()).isEqualTo("deleted");
+        assertThat(deletedUser.getName()).isEqualTo("已注销用户");
+        assertThat(deletedUser.getEmail())
+                .startsWith("deleted+" + userId + "+")
+                .endsWith("@invalid.local");
+        assertThat(deletedUser.getPassword()).isNotEqualTo(originalPasswordHash);
+        assertThat(deletedUser.getDeletedAt()).isNotNull();
         assertThat(barkSettings.findByUserId(userId)).isEmpty();
         NotificationOutboxEntity skippedPending = outbox.findById(pending.getId()).orElseThrow();
         assertThat(skippedPending.getStatus()).isEqualTo(NotificationOutboxStatus.SKIPPED);
@@ -242,10 +259,35 @@ class BarkPersistenceContractTest {
         assertThat(outbox.findById(sent.getId()).orElseThrow().getUpdatedAt()).isEqualTo(now);
     }
 
+    @Test
+    void testSendCallsExternalClientOutsideDatabaseTransaction() {
+        long userId = createUser("bark-send-transaction@example.com", "unused-password");
+        UserBarkSettingEntity setting = new UserBarkSettingEntity();
+        setting.setUserId(userId);
+        setting.setServerUrl("https://localhost");
+        setting.setDeviceKeyCiphertext(new BarkCredentialCipher(
+                "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")
+                .encrypt("fake-test-device-key"));
+        setting.setEnabled(true);
+        setting.setLocale("zh-CN");
+        setting.setTimezone("Asia/Shanghai");
+        barkSettings.saveAndFlush(setting);
+        recordingBarkClient.reset();
+
+        barkSettingService.sendTest(userId, null);
+
+        assertThat(recordingBarkClient.wasCalled()).isTrue();
+        assertThat(recordingBarkClient.transactionActiveDuringSend()).isFalse();
+    }
+
     private long createUser() {
+        return createUser("bark-test@example.com", "secret");
+    }
+
+    private long createUser(String email, String password) {
         jdbc.update("insert into user (name, email, password) values (?, ?, ?)",
-                "Bark Test", "bark-test@example.com", "secret");
-        return jdbc.queryForObject("select id from user where email = ?", Long.class, "bark-test@example.com");
+                "Bark Test", email, password);
+        return jdbc.queryForObject("select id from user where email = ?", Long.class, email);
     }
 
     private String bearer(long userId) {
@@ -322,5 +364,40 @@ class BarkPersistenceContractTest {
                 table,
                 index);
         return nonUnique != null && nonUnique == 0;
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class RecordingBarkClientConfiguration {
+
+        @Bean
+        @Primary
+        RecordingBarkClient recordingBarkClient() {
+            return new RecordingBarkClient();
+        }
+    }
+
+    static final class RecordingBarkClient implements BarkClient {
+        private boolean called;
+        private boolean transactionActiveDuringSend;
+
+        @Override
+        public void send(BarkTarget target, BarkMessage message) {
+            called = true;
+            transactionActiveDuringSend =
+                    TransactionSynchronizationManager.isActualTransactionActive();
+        }
+
+        void reset() {
+            called = false;
+            transactionActiveDuringSend = false;
+        }
+
+        boolean wasCalled() {
+            return called;
+        }
+
+        boolean transactionActiveDuringSend() {
+            return transactionActiveDuringSend;
+        }
     }
 }

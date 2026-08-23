@@ -12,7 +12,10 @@ import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionOperations;
+import org.springframework.transaction.support.TransactionTemplate;
 
 @Service
 public class UserBarkSettingService {
@@ -28,6 +31,7 @@ public class UserBarkSettingService {
     private final BarkClient bark;
     private final NotificationMessageRenderer renderer;
     private final BarkProperties properties;
+    private final TransactionOperations readTransactions;
     private final Clock clock;
 
     @Autowired
@@ -36,10 +40,12 @@ public class UserBarkSettingService {
             ObjectProvider<NotificationOutboxRepository> outbox,
             BarkClient bark,
             NotificationMessageRenderer renderer,
-            BarkProperties properties) {
+            BarkProperties properties,
+            ObjectProvider<PlatformTransactionManager> transactionManager) {
         this(settings.getIfAvailable(), outbox.getIfAvailable(),
                 new BarkPushUrlParser(properties), null,
-                bark, renderer, properties, Clock.systemUTC());
+                bark, renderer, properties, transactionManager.getIfAvailable(),
+                Clock.systemUTC());
     }
 
     UserBarkSettingService(
@@ -51,6 +57,19 @@ public class UserBarkSettingService {
             NotificationMessageRenderer renderer,
             BarkProperties properties,
             Clock clock) {
+        this(settings, outbox, parser, cipher, bark, renderer, properties, null, clock);
+    }
+
+    UserBarkSettingService(
+            UserBarkSettingRepository settings,
+            NotificationOutboxRepository outbox,
+            BarkPushUrlParser parser,
+            BarkCredentialCipher cipher,
+            BarkClient bark,
+            NotificationMessageRenderer renderer,
+            BarkProperties properties,
+            PlatformTransactionManager transactionManager,
+            Clock clock) {
         this.settings = settings;
         this.outbox = outbox;
         this.parser = parser;
@@ -58,6 +77,7 @@ public class UserBarkSettingService {
         this.bark = bark;
         this.renderer = renderer;
         this.properties = properties;
+        this.readTransactions = readTransactions(transactionManager);
         this.clock = clock;
     }
 
@@ -117,19 +137,27 @@ public class UserBarkSettingService {
         outbox.skipPendingAndSendingByUserId(userId);
     }
 
-    @Transactional(readOnly = true)
     public boolean sendTest(long userId, String pushUrl) {
         requirePersistence();
-        UserBarkSettingEntity setting = null;
-        BarkTarget target;
+        TestDelivery delivery;
         if (pushUrl != null && !pushUrl.isBlank()) {
-            target = parser.parse(pushUrl);
+            delivery = prepareTestDelivery(userId, parser.parse(pushUrl), null);
         } else {
-            setting = settings.findByUserId(userId)
-                    .orElseThrow(() -> new BusinessException(400, "Bark Push URL 尚未配置"));
-            target = parser.parse(fullPushUrl(setting));
+            delivery = readTransactions.execute(status -> {
+                UserBarkSettingEntity setting = settings.findByUserId(userId)
+                        .orElseThrow(() -> new BusinessException(
+                                400, "Bark Push URL 尚未配置"));
+                return prepareTestDelivery(
+                        userId, parser.parse(fullPushUrl(setting)), setting);
+            });
         }
 
+        bark.send(delivery.target(), delivery.message());
+        return true;
+    }
+
+    private TestDelivery prepareTestDelivery(
+            long userId, BarkTarget target, UserBarkSettingEntity setting) {
         String locale = setting == null ? DEFAULT_LOCALE : setting.getLocale();
         String timezone = setting == null ? DEFAULT_TIMEZONE : setting.getTimezone();
         NotificationEvent event = new NotificationEvent(
@@ -142,8 +170,7 @@ public class UserBarkSettingService {
                 Map.of());
         BarkMessage message = renderer.render(
                 event, locale, timezone, blankToNull(properties.appPublicUrl()));
-        bark.send(target, message);
-        return true;
+        return new TestDelivery(target, message);
     }
 
     private BarkCredentialCipher cipher() {
@@ -225,6 +252,19 @@ public class UserBarkSettingService {
 
     private static String blankToNull(String value) {
         return value == null || value.isBlank() ? null : value;
+    }
+
+    private static TransactionOperations readTransactions(
+            PlatformTransactionManager transactionManager) {
+        if (transactionManager == null) {
+            return TransactionOperations.withoutTransaction();
+        }
+        TransactionTemplate transactions = new TransactionTemplate(transactionManager);
+        transactions.setReadOnly(true);
+        return transactions;
+    }
+
+    private record TestDelivery(BarkTarget target, BarkMessage message) {
     }
 
     public record SettingView(
