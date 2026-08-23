@@ -32,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         "zhitoubao.notifications.bark.allow-private-hosts=true",
         "zhitoubao.notifications.bark.credential-encryption-key="
                 + "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+        "zhitoubao.notifications.bark.dispatch-enabled=false",
         "zhitoubao.notifications.bark.dispatch-delay=24h",
         "zhitoubao.notifications.bark.dispatch-initial-delay=24h",
         "zhitoubao.market.stream-enabled=false",
@@ -78,13 +79,13 @@ class NotificationOutboxLeaseIntegrationTest {
         int leasedCount;
 
         try (ExecutorService workers = Executors.newFixedThreadPool(2)) {
-            Future<List<Long>> first = workers.submit(
+            Future<List<NotificationOutboxLeaseService.Lease>> first = workers.submit(
                     () -> leaseInsideHeldTransaction(bothLeasedBeforeCommit));
-            Future<List<Long>> second = workers.submit(
+            Future<List<NotificationOutboxLeaseService.Lease>> second = workers.submit(
                     () -> leaseInsideHeldTransaction(bothLeasedBeforeCommit));
 
-            List<Long> firstIds = first.get();
-            List<Long> secondIds = second.get();
+            List<Long> firstIds = ids(first.get());
+            List<Long> secondIds = ids(second.get());
             Set<Long> overlap = new HashSet<>(firstIds);
             overlap.retainAll(secondIds);
 
@@ -124,7 +125,9 @@ class NotificationOutboxLeaseIntegrationTest {
         insertMessage("lease-future", NotificationOutboxStatus.PENDING,
                 NOW.plusSeconds(1), null);
 
-        assertThat(leases.leaseDue(NOW)).containsExactly(expired);
+        assertThat(leases.leaseDue(NOW))
+                .extracting(NotificationOutboxLeaseService.Lease::id)
+                .containsExactly(expired);
         assertThat(jdbc.queryForObject(
                 "select lease_until from notification_outbox where id = ?",
                 LocalDateTime.class,
@@ -138,7 +141,9 @@ class NotificationOutboxLeaseIntegrationTest {
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
 
         transaction.executeWithoutResult(status -> {
-            assertThat(leases.leaseDue(NOW)).containsExactly(messageId);
+            assertThat(leases.leaseDue(NOW))
+                    .extracting(NotificationOutboxLeaseService.Lease::id)
+                    .containsExactly(messageId);
             assertThat(jdbc.queryForObject(
                     "select status from notification_outbox where id = ?",
                     String.class,
@@ -154,13 +159,18 @@ class NotificationOutboxLeaseIntegrationTest {
                 "select lease_until is null from notification_outbox where id = ?",
                 Boolean.class,
                 messageId)).isTrue();
+        assertThat(jdbc.queryForObject(
+                "select lease_token is null from notification_outbox where id = ?",
+                Boolean.class,
+                messageId)).isTrue();
     }
 
-    private List<Long> leaseInsideHeldTransaction(CountDownLatch bothLeasedBeforeCommit) {
+    private List<NotificationOutboxLeaseService.Lease> leaseInsideHeldTransaction(
+            CountDownLatch bothLeasedBeforeCommit) {
         TransactionTemplate transaction = new TransactionTemplate(transactionManager);
         transaction.setIsolationLevel(TransactionDefinition.ISOLATION_READ_COMMITTED);
         return transaction.execute(status -> {
-            List<Long> ids = leases.leaseDue(NOW);
+            List<NotificationOutboxLeaseService.Lease> leased = leases.leaseDue(NOW);
             bothLeasedBeforeCommit.countDown();
             try {
                 bothLeasedBeforeCommit.await();
@@ -168,8 +178,12 @@ class NotificationOutboxLeaseIntegrationTest {
                 Thread.currentThread().interrupt();
                 throw new AssertionError(exception);
             }
-            return ids;
+            return leased;
         });
+    }
+
+    private static List<Long> ids(List<NotificationOutboxLeaseService.Lease> leased) {
+        return leased.stream().map(NotificationOutboxLeaseService.Lease::id).toList();
     }
 
     private long insertMessage(

@@ -7,9 +7,7 @@ import java.time.Clock;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
-import java.util.LinkedHashMap;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
@@ -26,24 +24,28 @@ class NotificationOutboxEnqueuer {
     private final NotificationOutboxRepository outbox;
     private final NotificationAudienceResolver audiences;
     private final BarkEventPolicy policies;
+    private final NotificationPayloadSanitizer payloads;
     private final Clock clock;
 
     @Autowired
     NotificationOutboxEnqueuer(
             NotificationOutboxRepository outbox,
             NotificationAudienceResolver audiences,
-            BarkEventPolicy policies) {
-        this(outbox, audiences, policies, Clock.systemUTC());
+            BarkEventPolicy policies,
+            NotificationPayloadSanitizer payloads) {
+        this(outbox, audiences, policies, payloads, Clock.systemUTC());
     }
 
     NotificationOutboxEnqueuer(
             NotificationOutboxRepository outbox,
             NotificationAudienceResolver audiences,
             BarkEventPolicy policies,
+            NotificationPayloadSanitizer payloads,
             Clock clock) {
         this.outbox = Objects.requireNonNull(outbox, "outbox");
         this.audiences = Objects.requireNonNull(audiences, "audiences");
         this.policies = Objects.requireNonNull(policies, "policies");
+        this.payloads = Objects.requireNonNull(payloads, "payloads");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -72,7 +74,7 @@ class NotificationOutboxEnqueuer {
         message.setUserId(audience.userId());
         message.setTitleKey("notification."
                 + event.type().name().toLowerCase(Locale.ROOT) + ".title");
-        message.setBodyPayload(payload(event));
+        message.setBodyPayload(payloads.sanitize(event));
         message.setDedupeKey(dedupeKey);
         message.setPriority(priority(policies.policy(event).level()));
         message.setStatus(NotificationOutboxStatus.PENDING);
@@ -81,23 +83,6 @@ class NotificationOutboxEnqueuer {
         message.setCreatedAt(now);
         message.setUpdatedAt(now);
         return message;
-    }
-
-    private static Map<String, Object> payload(NotificationEvent event) {
-        Map<String, Object> payload = new LinkedHashMap<>();
-        putIfNotNull(payload, "userId", event.userId());
-        putIfNotNull(payload, "planId", event.planId());
-        putIfNotNull(payload, "intentId", event.intentId());
-        putIfNotNull(payload, "occurredAt",
-                event.occurredAt() == null ? null : event.occurredAt().toString());
-        payload.put("attributes", event.attributes() == null ? Map.of() : event.attributes());
-        return payload;
-    }
-
-    private static void putIfNotNull(Map<String, Object> payload, String name, Object value) {
-        if (value != null) {
-            payload.put(name, value);
-        }
     }
 
     private static String priority(String level) {

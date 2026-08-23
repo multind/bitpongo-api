@@ -37,7 +37,7 @@ class UserBarkSettingServiceTest {
     void setUp() throws Exception {
         BarkProperties properties = new BarkProperties(
                 true, "", Set.of("api.day.app"), false,
-                TEST_ENCRYPTION_KEY, false, "https://app.example.test");
+                TEST_ENCRYPTION_KEY, true, false, "https://app.example.test");
         BarkPushUrlParser parser = new BarkPushUrlParser(
                 Set.of("api.day.app"), false,
                 host -> new InetAddress[] {InetAddress.getByName("8.8.8.8")});

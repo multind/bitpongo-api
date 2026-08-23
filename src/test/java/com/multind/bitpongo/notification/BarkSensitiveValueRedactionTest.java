@@ -17,6 +17,7 @@ class BarkSensitiveValueRedactionTest {
                 Set.of("api.day.app"),
                 false,
                 "sensitive-encryption-key-marker",
+                true,
                 false,
                 "redacted-public-origin");
 

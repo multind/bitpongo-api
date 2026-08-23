@@ -59,6 +59,7 @@ class BarkPropertiesBindingTest {
                 .isEqualTo(Set.of("one.example.test:8443", "two.example.test"));
         assertThat(properties.allowPrivateHosts()).isTrue();
         assertThat(properties.credentialEncryptionKey()).isEqualTo("redacted-test-encryption-key");
+        assertThat(properties.dispatchEnabled()).isTrue();
         assertThat(properties.notifyOnStartup()).isTrue();
         assertThat(properties.appPublicUrl()).isEqualTo("redacted-public-origin");
     }

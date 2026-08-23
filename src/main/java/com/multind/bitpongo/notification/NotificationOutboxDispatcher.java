@@ -10,7 +10,6 @@ import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 
@@ -48,34 +47,34 @@ public class NotificationOutboxDispatcher {
         this.clock = clock.getIfAvailable(Clock::systemUTC);
     }
 
-    @Scheduled(
-            fixedDelayString = "${zhitoubao.notifications.bark.dispatch-delay:5s}",
-            initialDelayString = "${zhitoubao.notifications.bark.dispatch-initial-delay:5s}")
     public void dispatchDue() {
-        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
-        final List<Long> ids;
+        final List<NotificationOutboxLeaseService.Lease> claimed;
         try {
-            ids = leases.leaseDue(now);
+            claimed = leases.leaseDue(now());
         } catch (Exception exception) {
             log.warn("Bark outbox 领取失败 errorType={}",
                     exception.getClass().getSimpleName());
             return;
         }
-        ids.forEach(id -> dispatchOne(id, now));
+        claimed.forEach(this::dispatchOne);
     }
 
-    private void dispatchOne(long id, LocalDateTime now) {
+    void dispatchOne(NotificationOutboxLeaseService.Lease lease) {
         NotificationOutboxDeliveryStore.LeasedNotification delivery = null;
         try {
+            LocalDateTime renewalTime = now();
+            if (!leases.renew(lease, renewalTime)) {
+                return;
+            }
             Optional<NotificationOutboxDeliveryStore.LeasedNotification> loaded =
-                    deliveries.load(id);
+                    deliveries.load(lease);
             if (loaded.isEmpty()) {
                 return;
             }
             delivery = loaded.orElseThrow();
             BarkTarget target = target(delivery);
             if (target == null) {
-                deliveries.markSkipped(id, now);
+                deliveries.markSkipped(lease, now());
                 return;
             }
             BarkMessage message = renderer.render(
@@ -84,12 +83,13 @@ public class NotificationOutboxDispatcher {
                     delivery.timezone(),
                     blankToNull(properties.appPublicUrl()));
             sender.send(target, message);
-            deliveries.markSent(id, now);
+            deliveries.markSent(lease, now());
         } catch (Exception exception) {
+            LocalDateTime completionTime = now();
             int previousAttempts = delivery == null
-                    ? deliveries.currentAttempts(id).orElse(0)
+                    ? deliveries.currentAttempts(lease).orElse(0)
                     : delivery.attempts();
-            markFailure(id, previousAttempts + 1, now, exception);
+            markFailure(lease, previousAttempts + 1, completionTime, exception);
         }
     }
 
@@ -109,22 +109,30 @@ public class NotificationOutboxDispatcher {
     }
 
     private void markFailure(
-            long id,
+            NotificationOutboxLeaseService.Lease lease,
             int attempts,
             LocalDateTime now,
             Exception exception) {
         String lastError = sanitizedError(exception);
         try {
             if (retries.isDead(attempts)) {
-                deliveries.markDead(id, attempts, lastError, now);
+                deliveries.markDead(lease, attempts, lastError, now);
             } else {
                 deliveries.markRetry(
-                        id, attempts, retries.nextAttemptAt(now, attempts), lastError, now);
+                        lease,
+                        attempts,
+                        retries.nextAttemptAt(now, attempts),
+                        lastError,
+                        now);
             }
         } catch (Exception persistenceFailure) {
             log.warn("Bark outbox 状态更新失败 messageId={} errorType={}",
-                    id, persistenceFailure.getClass().getSimpleName());
+                    lease.id(), persistenceFailure.getClass().getSimpleName());
         }
+    }
+
+    private LocalDateTime now() {
+        return LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
     }
 
     private static String sanitizedError(Exception exception) {

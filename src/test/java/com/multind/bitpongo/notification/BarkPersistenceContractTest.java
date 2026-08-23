@@ -21,6 +21,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Primary;
 import org.springframework.http.MediaType;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.MvcResult;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -43,10 +44,12 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         "zhitoubao.notifications.bark.allow-private-hosts=true",
         "zhitoubao.notifications.bark.credential-encryption-key="
                 + "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+        "zhitoubao.notifications.bark.dispatch-enabled=false",
         "zhitoubao.market.stream-enabled=false",
         "spring.quartz.auto-startup=false"
 })
 @AutoConfigureMockMvc
+@DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
 class BarkPersistenceContractTest {
 
     @Container
@@ -101,7 +104,7 @@ class BarkPersistenceContractTest {
         assertThat(columnsFor("notification_outbox")).containsExactlyInAnyOrder(
                 "id", "event_type", "recipient_type", "user_id", "title_key", "body_payload",
                 "dedupe_key", "priority", "status", "attempts", "next_attempt_at", "lease_until",
-                "last_error", "created_at", "sent_at", "updated_at");
+                "lease_token", "last_error", "created_at", "sent_at", "updated_at");
         assertThat(columnType("notification_outbox", "body_payload")).isEqualTo("json");
         assertThat(foreignKeyCount("user_bark_setting", "user_id")).isEqualTo(1);
         assertThat(foreignKeyCount("notification_outbox", "user_id")).isEqualTo(1);
@@ -112,6 +115,10 @@ class BarkPersistenceContractTest {
                 .containsExactly("status", "next_attempt_at", "lease_until");
         assertThat(indexColumns("notification_outbox", "ix_notification_outbox_user"))
                 .containsExactly("user_id", "status");
+        assertThat(indexColumns("notification_outbox", "ix_notification_outbox_lease_order"))
+                .containsExactly(
+                        "priority", "created_at", "id", "status",
+                        "next_attempt_at", "lease_until");
     }
 
     @Test

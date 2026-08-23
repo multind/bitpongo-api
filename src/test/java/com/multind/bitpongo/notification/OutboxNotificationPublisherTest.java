@@ -32,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
         "zhitoubao.notifications.bark.allow-private-hosts=true",
         "zhitoubao.notifications.bark.credential-encryption-key="
                 + "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+        "zhitoubao.notifications.bark.dispatch-enabled=false",
         "zhitoubao.notifications.bark.dispatch-delay=24h",
         "zhitoubao.notifications.bark.dispatch-initial-delay=24h",
         "zhitoubao.market.stream-enabled=false",
@@ -69,6 +70,7 @@ class OutboxNotificationPublisherTest {
     @Test
     void publishingTheSameDedupeKeyTwicePersistsOneOutboxRecord() {
         long userId = createUser("publisher-sequential@example.com");
+        enableBarkFor(userId);
         NotificationEvent event = event(userId, "trade:plan-7:fire-20260823:BTC");
 
         publisher.publish(event);
@@ -87,6 +89,7 @@ class OutboxNotificationPublisherTest {
     @Test
     void concurrentPublishersRacingOnTheSameDedupeKeyPersistOneRecord() throws Exception {
         long userId = createUser("publisher-concurrent@example.com");
+        enableBarkFor(userId);
         NotificationEvent event = event(userId, "trade:plan-8:fire-20260823:ETH");
         CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
@@ -106,6 +109,7 @@ class OutboxNotificationPublisherTest {
     @Test
     void enqueueCommitsIndependentlyWhenOuterBusinessTransactionRollsBack() {
         long userId = createUser("publisher-requires-new@example.com");
+        enableBarkFor(userId);
         NotificationEvent event = event(userId, "trade:plan-9:rollback-proof");
         TransactionTemplate outer = new TransactionTemplate(transactionManager);
 
@@ -168,6 +172,7 @@ class OutboxNotificationPublisherTest {
                 Set.of("localhost"),
                 true,
                 "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=",
+                true,
                 false,
                 "https://app.example.com");
         NotificationAudienceResolver resolver = new NotificationAudienceResolver(
@@ -194,6 +199,12 @@ class OutboxNotificationPublisherTest {
         jdbc.update("insert into user (name, email, password) values (?, ?, ?)",
                 "Outbox Test", email, "unused");
         return jdbc.queryForObject("select id from user where email = ?", Long.class, email);
+    }
+
+    private void enableBarkFor(long userId) {
+        jdbc.update("insert into user_bark_setting "
+                        + "(user_id, server_url, device_key_ciphertext, enabled) values (?, ?, ?, ?)",
+                userId, "https://localhost", "fixture-ciphertext", true);
     }
 
     private void createPlan(long userId, String status) {

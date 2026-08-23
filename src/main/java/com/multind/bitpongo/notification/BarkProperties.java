@@ -11,6 +11,7 @@ public record BarkProperties(
         Set<String> allowedHosts,
         boolean allowPrivateHosts,
         String credentialEncryptionKey,
+        boolean dispatchEnabled,
         boolean notifyOnStartup,
         String appPublicUrl) {
 
@@ -22,6 +23,7 @@ public record BarkProperties(
                 + ", allowedHosts=" + allowedHosts
                 + ", allowPrivateHosts=" + allowPrivateHosts
                 + ", credentialEncryptionKey=<redacted>"
+                + ", dispatchEnabled=" + dispatchEnabled
                 + ", notifyOnStartup=" + notifyOnStartup
                 + ", appPublicUrl=" + appPublicUrl
                 + ']';

@@ -54,6 +54,7 @@ zhitoubao:
       allowed-hosts: ${BARK_ALLOWED_HOSTS:api.day.app}
       allow-private-hosts: ${BARK_ALLOW_PRIVATE_HOSTS:false}
       credential-encryption-key: ${BARK_CREDENTIAL_ENCRYPTION_KEY:}
+      dispatch-enabled: ${BARK_DISPATCH_ENABLED:true}
       notify-on-startup: ${BARK_NOTIFY_ON_STARTUP:false}
       app-public-url: ${APP_PUBLIC_URL:}
   cors:

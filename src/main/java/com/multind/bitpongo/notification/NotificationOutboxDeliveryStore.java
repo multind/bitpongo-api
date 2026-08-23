@@ -5,6 +5,7 @@ import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
@@ -21,74 +22,103 @@ class NotificationOutboxDeliveryStore {
     private final NotificationOutboxRepository outbox;
     private final UserBarkSettingRepository settings;
     private final JdbcTemplate jdbc;
+    private final String adminTimezone;
 
     NotificationOutboxDeliveryStore(
             NotificationOutboxRepository outbox,
             UserBarkSettingRepository settings,
-            JdbcTemplate jdbc) {
+            JdbcTemplate jdbc,
+            @Value("${zhitoubao.scheduling-zone:Asia/Shanghai}") String adminTimezone) {
         this.outbox = outbox;
         this.settings = settings;
         this.jdbc = jdbc;
+        this.adminTimezone = adminTimezone;
     }
 
     @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    public Optional<LeasedNotification> load(long id) {
-        return outbox.findById(id)
+    public Optional<LeasedNotification> load(NotificationOutboxLeaseService.Lease lease) {
+        if (!owned(lease)) {
+            return Optional.empty();
+        }
+        return outbox.findById(lease.id())
                 .filter(message -> message.getStatus() == NotificationOutboxStatus.SENDING)
                 .map(this::snapshot);
     }
 
     @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
-    public Optional<Integer> currentAttempts(long id) {
-        return outbox.findById(id).map(NotificationOutboxEntity::getAttempts);
+    public Optional<Integer> currentAttempts(NotificationOutboxLeaseService.Lease lease) {
+        return jdbc.query("""
+                        select attempts from notification_outbox
+                         where id = ? and lease_token = ? and status = 'SENDING'
+                        """,
+                result -> result.next()
+                        ? Optional.of(result.getInt("attempts"))
+                        : Optional.empty(),
+                lease.id(), lease.token());
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markSent(long id, LocalDateTime now) {
-        jdbc.update("""
+    public boolean markSent(
+            NotificationOutboxLeaseService.Lease lease,
+            LocalDateTime now) {
+        return jdbc.update("""
                 update notification_outbox
                    set status = 'SENT', sent_at = ?, lease_until = null,
-                       last_error = null, updated_at = ?
-                 where id = ? and status = 'SENDING'
-                """, now, now, id);
+                       lease_token = null, last_error = null, updated_at = ?
+                 where id = ? and lease_token = ? and status = 'SENDING'
+                """, now, now, lease.id(), lease.token()) == 1;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markSkipped(long id, LocalDateTime now) {
-        jdbc.update("""
+    public boolean markSkipped(
+            NotificationOutboxLeaseService.Lease lease,
+            LocalDateTime now) {
+        return jdbc.update("""
                 update notification_outbox
-                   set status = 'SKIPPED', lease_until = null, updated_at = ?
-                 where id = ? and status = 'SENDING'
-                """, now, id);
+                   set status = 'SKIPPED', lease_until = null,
+                       lease_token = null, updated_at = ?
+                 where id = ? and lease_token = ? and status = 'SENDING'
+                """, now, lease.id(), lease.token()) == 1;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markRetry(
-            long id,
+    public boolean markRetry(
+            NotificationOutboxLeaseService.Lease lease,
             int attempts,
             LocalDateTime nextAttemptAt,
             String lastError,
             LocalDateTime now) {
-        jdbc.update("""
+        return jdbc.update("""
                 update notification_outbox
                    set status = 'PENDING', attempts = ?, next_attempt_at = ?,
-                       lease_until = null, last_error = ?, updated_at = ?
-                 where id = ? and status = 'SENDING'
-                """, attempts, nextAttemptAt, lastError, now, id);
+                       lease_until = null, lease_token = null,
+                       last_error = ?, updated_at = ?
+                 where id = ? and lease_token = ? and status = 'SENDING'
+                """, attempts, nextAttemptAt, lastError, now,
+                lease.id(), lease.token()) == 1;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
-    public void markDead(
-            long id,
+    public boolean markDead(
+            NotificationOutboxLeaseService.Lease lease,
             int attempts,
             String lastError,
             LocalDateTime now) {
-        jdbc.update("""
+        return jdbc.update("""
                 update notification_outbox
                    set status = 'DEAD', attempts = ?, lease_until = null,
-                       last_error = ?, updated_at = ?
-                 where id = ? and status = 'SENDING'
-                """, attempts, lastError, now, id);
+                       lease_token = null, last_error = ?, updated_at = ?
+                 where id = ? and lease_token = ? and status = 'SENDING'
+                """, attempts, lastError, now,
+                lease.id(), lease.token()) == 1;
+    }
+
+    private boolean owned(NotificationOutboxLeaseService.Lease lease) {
+        Integer count = jdbc.queryForObject("""
+                select count(*) from notification_outbox
+                 where id = ? and lease_token = ? and status = 'SENDING'
+                """, Integer.class, lease.id(), lease.token());
+        return count != null && count == 1;
     }
 
     private LeasedNotification snapshot(NotificationOutboxEntity message) {
@@ -96,7 +126,7 @@ class NotificationOutboxDeliveryStore {
         if (message.getRecipientType() == NotificationRecipientType.ADMIN) {
             return new LeasedNotification(
                     message.getId(), message.getAttempts(), message.getRecipientType(), event,
-                    null, null, DEFAULT_LOCALE, DEFAULT_TIMEZONE);
+                    null, null, DEFAULT_LOCALE, adminTimezone);
         }
         UserBarkSettingEntity setting = settings.findByUserId(message.getUserId())
                 .filter(UserBarkSettingEntity::isEnabled)
