@@ -14,11 +14,19 @@ import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 import org.junit.jupiter.api.Test;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.fail;
 
 class BinanceMarketStreamLifecycleTest {
     private static final Duration ROTATION = Duration.ofHours(23).plusMinutes(50);
@@ -153,6 +161,86 @@ class BinanceMarketStreamLifecycleTest {
         assertThat(f.notifications.attempts).isEqualTo(2);
     }
 
+    @Test
+    void blockedAudienceSnapshotDoesNotBlockTickerAndPublishesOutageBeforeRecovery()
+            throws Exception {
+        BlockingAudienceSupplier audiences = new BlockingAudienceSupplier();
+        RecordingPublisher publisher = new RecordingPublisher();
+        Fixture f = new Fixture(audiences, publisher);
+        ExecutorService executor = Executors.newCachedThreadPool();
+        f.lifecycle.start();
+        f.client.fail(new IllegalStateException("closed"));
+        Future<?> threshold = executor.submit(() -> f.scheduler.advance(MAX_SILENCE));
+        try {
+            audiences.awaitEntered();
+            Future<?> ticker = executor.submit(
+                    () -> f.client.emit(ticker("BTCUSDT", "62000")));
+            ticker.get(1, TimeUnit.SECONDS);
+            assertThat(f.cache.get("binance", "BTC/USDT")).isPresent();
+            assertThat(publisher.events).isEmpty();
+            audiences.release();
+            threshold.get(1, TimeUnit.SECONDS);
+            assertThat(publisher.events).extracting(NotificationEvent::type)
+                    .containsExactly(NotificationEventType.MARKET_OUTAGE,
+                            NotificationEventType.SYSTEM_RECOVERED);
+        } finally {
+            audiences.release();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void blockedOutagePublishDoesNotBlockTickerAndDefersRecoveryUntilPublishCompletes()
+            throws Exception {
+        BlockingOutagePublisher publisher = new BlockingOutagePublisher();
+        Fixture f = new Fixture(() -> AUDIENCE, publisher);
+        ExecutorService executor = Executors.newCachedThreadPool();
+        f.lifecycle.start();
+        f.client.fail(new IllegalStateException("closed"));
+        Future<?> threshold = executor.submit(() -> f.scheduler.advance(MAX_SILENCE));
+        try {
+            publisher.awaitOutageEntered();
+            Future<?> ticker = executor.submit(
+                    () -> f.client.emit(ticker("BTCUSDT", "62000")));
+            ticker.get(1, TimeUnit.SECONDS);
+            assertThat(f.cache.get("binance", "BTC/USDT")).isPresent();
+            assertThat(publisher.events).extracting(NotificationEvent::type)
+                    .containsExactly(NotificationEventType.MARKET_OUTAGE);
+            publisher.releaseOutage();
+            threshold.get(1, TimeUnit.SECONDS);
+            assertThat(publisher.events).extracting(NotificationEvent::type)
+                    .containsExactly(NotificationEventType.MARKET_OUTAGE,
+                            NotificationEventType.SYSTEM_RECOVERED);
+        } finally {
+            publisher.releaseOutage();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void stopReturnsWhileAudienceSnapshotIsBlockedAndPreventsLatePublish()
+            throws Exception {
+        BlockingAudienceSupplier audiences = new BlockingAudienceSupplier();
+        RecordingPublisher publisher = new RecordingPublisher();
+        Fixture f = new Fixture(audiences, publisher);
+        ExecutorService executor = Executors.newCachedThreadPool();
+        f.lifecycle.start();
+        f.client.fail(new IllegalStateException("closed"));
+        Future<?> threshold = executor.submit(() -> f.scheduler.advance(MAX_SILENCE));
+        try {
+            audiences.awaitEntered();
+            Future<?> stopped = executor.submit(() -> f.lifecycle.stop());
+            stopped.get(1, TimeUnit.SECONDS);
+            assertThat(f.lifecycle.isRunning()).isFalse();
+            audiences.release();
+            threshold.get(1, TimeUnit.SECONDS);
+            assertThat(publisher.events).isEmpty();
+        } finally {
+            audiences.release();
+            executor.shutdownNow();
+        }
+    }
+
     private static TickerEvent ticker(String symbol, String price) {
         return new TickerEvent(symbol, new BigDecimal(price), START.plusSeconds(10));
     }
@@ -163,9 +251,24 @@ class BinanceMarketStreamLifecycleTest {
         final FakeScheduler scheduler = new FakeScheduler(clock);
         final PriceCache cache = new PriceCache(Duration.ofSeconds(60));
         final RecordingPublisher notifications = new RecordingPublisher();
-        final BinanceMarketStreamLifecycle lifecycle = new BinanceMarketStreamLifecycle(
-                client, cache, new SymbolNormalizer(), scheduler, notifications,
-                () -> AUDIENCE, ROTATION, MAX_SILENCE, clock, () -> "cycle-8");
+        final BinanceMarketStreamLifecycle lifecycle;
+
+        Fixture() {
+            this.lifecycle = lifecycle(() -> AUDIENCE, notifications);
+        }
+
+        Fixture(Supplier<NotificationAudienceContext> audiences,
+                NotificationPublisher publisher) {
+            this.lifecycle = lifecycle(audiences, publisher);
+        }
+
+        private BinanceMarketStreamLifecycle lifecycle(
+                Supplier<NotificationAudienceContext> audiences,
+                NotificationPublisher publisher) {
+            return new BinanceMarketStreamLifecycle(client, cache, new SymbolNormalizer(),
+                    scheduler, publisher, audiences, ROTATION, MAX_SILENCE,
+                    clock, () -> "cycle-8");
+        }
     }
 
     private static final class RecordingPublisher implements NotificationPublisher {
@@ -176,6 +279,59 @@ class BinanceMarketStreamLifecycleTest {
             attempts++;
             if (throwOnPublish) throw new IllegalStateException("outbox unavailable");
             events.add(event);
+        }
+    }
+
+    private static final class BlockingAudienceSupplier
+            implements Supplier<NotificationAudienceContext> {
+        private final CountDownLatch entered = new CountDownLatch(1);
+        private final CountDownLatch released = new CountDownLatch(1);
+
+        @Override
+        public NotificationAudienceContext get() {
+            entered.countDown();
+            await(released);
+            return AUDIENCE;
+        }
+
+        void awaitEntered() {
+            await(entered);
+        }
+
+        void release() {
+            released.countDown();
+        }
+    }
+
+    private static final class BlockingOutagePublisher implements NotificationPublisher {
+        private final List<NotificationEvent> events = new CopyOnWriteArrayList<>();
+        private final CountDownLatch outageEntered = new CountDownLatch(1);
+        private final CountDownLatch outageReleased = new CountDownLatch(1);
+
+        @Override
+        public void publish(NotificationEvent event) {
+            events.add(event);
+            if (event.type() == NotificationEventType.MARKET_OUTAGE) {
+                outageEntered.countDown();
+                await(outageReleased);
+            }
+        }
+
+        void awaitOutageEntered() {
+            await(outageEntered);
+        }
+
+        void releaseOutage() {
+            outageReleased.countDown();
+        }
+    }
+
+    private static void await(CountDownLatch latch) {
+        try {
+            if (!latch.await(1, TimeUnit.SECONDS)) fail("latch was not released");
+        } catch (InterruptedException interrupted) {
+            Thread.currentThread().interrupt();
+            throw new AssertionError(interrupted);
         }
     }
 

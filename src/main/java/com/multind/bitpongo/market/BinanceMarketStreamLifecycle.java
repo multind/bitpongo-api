@@ -126,7 +126,7 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
         }
     }
 
-    private synchronized void onTicker(long connectionGeneration, TickerEvent event) {
+    private void onTicker(long connectionGeneration, TickerEvent event) {
         if (!running || connectionGeneration != generation || event == null
                 || event.price() == null || event.price().signum() <= 0
                 || event.eventTime() == null) {
@@ -138,18 +138,34 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
         } catch (IllegalArgumentException ignored) {
             return;
         }
-        prices.put("binance", internal, event.price(), event.eventTime());
-        lastMessageAt = event.eventTime();
-        recoverFromOutage();
+        NotificationEvent recovery;
+        synchronized (this) {
+            if (!running || connectionGeneration != generation) return;
+            prices.put("binance", internal, event.price(), event.eventTime());
+            lastMessageAt = event.eventTime();
+            recovery = recoverFromOutageLocked();
+        }
+        if (recovery != null) safePublish(recovery);
     }
 
-    private void recoverFromOutage() {
+    private NotificationEvent recoverFromOutageLocked() {
         OutageCycle cycle = outageCycle;
-        if (cycle == null) return;
-        cancelOutage();
+        if (cycle == null) return null;
+        if (!cycle.announcementStarted) {
+            cancelOutage();
+            outageCycle = null;
+            return null;
+        }
+        if (!cycle.publishComplete) {
+            cycle.recoveryPending = true;
+            return null;
+        }
         outageCycle = null;
-        if (!cycle.announced) return;
-        safePublish(new NotificationEvent(
+        return recoveryEvent(cycle);
+    }
+
+    private NotificationEvent recoveryEvent(OutageCycle cycle) {
+        return new NotificationEvent(
                 NotificationEventType.SYSTEM_RECOVERED,
                 null,
                 null,
@@ -157,7 +173,7 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
                 clock.instant(),
                 "system-recovered:" + cycle.id,
                 Map.of("status", "RECOVERED", "originalEventType", "MARKET_OUTAGE"),
-                cycle.audience));
+                cycle.audience);
     }
 
     private synchronized void onFailure(long connectionGeneration, Throwable failure) {
@@ -183,30 +199,56 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
         outageScheduled = scheduler.schedule(() -> announceOutage(id), healthMaxSilence);
     }
 
-    private synchronized void announceOutage(String cycleId) {
-        if (!running || outageCycle == null || !outageCycle.id.equals(cycleId)
-                || outageCycle.announced) {
-            return;
+    private void announceOutage(String cycleId) {
+        OutageCycle cycle;
+        synchronized (this) {
+            if (!running || outageCycle == null || !outageCycle.id.equals(cycleId)
+                    || outageCycle.announcementStarted) {
+                return;
+            }
+            outageScheduled = null;
+            cycle = outageCycle;
+            cycle.announcementStarted = true;
         }
-        outageScheduled = null;
-        outageCycle.announced = true;
+
+        NotificationAudienceContext audience;
         try {
-            outageCycle.audience = Objects.requireNonNull(
+            audience = Objects.requireNonNull(
                     marketOutageAudience.get(), "market outage audience");
         } catch (RuntimeException failure) {
             log.warn("行情告警接收人快照失败 errorType={}",
                     failure.getClass().getSimpleName());
-            outageCycle.audience = new NotificationAudienceContext(Set.of(), false);
+            audience = new NotificationAudienceContext(Set.of(), false);
         }
-        safePublish(new NotificationEvent(
-                NotificationEventType.MARKET_OUTAGE,
-                null,
-                null,
-                null,
-                clock.instant(),
-                "market-outage:" + outageCycle.id,
-                Map.of("status", "UNAVAILABLE"),
-                outageCycle.audience));
+
+        NotificationEvent outage;
+        synchronized (this) {
+            if (!running || outageCycle != cycle) return;
+            cycle.audience = audience;
+            cycle.outagePublishing = true;
+            outage = new NotificationEvent(
+                    NotificationEventType.MARKET_OUTAGE,
+                    null,
+                    null,
+                    null,
+                    clock.instant(),
+                    "market-outage:" + cycle.id,
+                    Map.of("status", "UNAVAILABLE"),
+                    cycle.audience);
+        }
+        safePublish(outage);
+
+        NotificationEvent recovery = null;
+        synchronized (this) {
+            if (!running || outageCycle != cycle) return;
+            cycle.outagePublishing = false;
+            cycle.publishComplete = true;
+            if (cycle.recoveryPending) {
+                outageCycle = null;
+                recovery = recoveryEvent(cycle);
+            }
+        }
+        if (recovery != null) safePublish(recovery);
     }
 
     private void safePublish(NotificationEvent event) {
@@ -283,7 +325,10 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
         private final String id;
         @SuppressWarnings("unused")
         private final Instant startedAt;
-        private boolean announced;
+        private boolean announcementStarted;
+        private boolean outagePublishing;
+        private boolean publishComplete;
+        private boolean recoveryPending;
         private NotificationAudienceContext audience;
 
         private OutageCycle(String id, Instant startedAt) {
