@@ -321,6 +321,40 @@ class BinanceMarketStreamLifecycleTest {
                         NotificationEventType.SYSTEM_RECOVERED);
     }
 
+    @Test
+    void blockedRecoveryPublishDoesNotBlockFailureOrClearTheNewOutageCycle()
+            throws Exception {
+        BlockingRecoveryPublisher publisher = new BlockingRecoveryPublisher();
+        Fixture f = new Fixture(() -> AUDIENCE, publisher);
+        ExecutorService executor = Executors.newCachedThreadPool();
+        f.lifecycle.start();
+        f.client.fail(new IllegalStateException("initial failure"));
+        f.scheduler.advance(MAX_SILENCE);
+        Future<?> ticker = executor.submit(
+                () -> f.client.emit(ticker("BTCUSDT", "62000")));
+        try {
+            publisher.awaitRecoveryEntered();
+            Future<?> failed = executor.submit(
+                    () -> f.client.fail(new IllegalStateException("next failure")));
+            failed.get(1, TimeUnit.SECONDS);
+
+            publisher.releaseRecovery();
+            ticker.get(1, TimeUnit.SECONDS);
+            assertThat(publisher.events).extracting(NotificationEvent::type)
+                    .containsExactly(NotificationEventType.MARKET_OUTAGE,
+                            NotificationEventType.SYSTEM_RECOVERED);
+
+            f.scheduler.advance(MAX_SILENCE);
+            assertThat(publisher.events).extracting(NotificationEvent::type)
+                    .containsExactly(NotificationEventType.MARKET_OUTAGE,
+                            NotificationEventType.SYSTEM_RECOVERED,
+                            NotificationEventType.MARKET_OUTAGE);
+        } finally {
+            publisher.releaseRecovery();
+            executor.shutdownNow();
+        }
+    }
+
     private static TickerEvent ticker(String symbol, String price) {
         return new TickerEvent(symbol, new BigDecimal(price), START.plusSeconds(10));
     }
@@ -403,6 +437,29 @@ class BinanceMarketStreamLifecycleTest {
 
         void releaseOutage() {
             outageReleased.countDown();
+        }
+    }
+
+    private static final class BlockingRecoveryPublisher implements NotificationPublisher {
+        private final List<NotificationEvent> events = new CopyOnWriteArrayList<>();
+        private final CountDownLatch recoveryEntered = new CountDownLatch(1);
+        private final CountDownLatch recoveryReleased = new CountDownLatch(1);
+
+        @Override
+        public void publish(NotificationEvent event) {
+            events.add(event);
+            if (event.type() == NotificationEventType.SYSTEM_RECOVERED) {
+                recoveryEntered.countDown();
+                await(recoveryReleased);
+            }
+        }
+
+        void awaitRecoveryEntered() {
+            await(recoveryEntered);
+        }
+
+        void releaseRecovery() {
+            recoveryReleased.countDown();
         }
     }
 
