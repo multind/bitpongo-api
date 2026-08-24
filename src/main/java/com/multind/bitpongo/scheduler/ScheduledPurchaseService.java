@@ -2,13 +2,19 @@ package com.multind.bitpongo.scheduler;
 
 import com.multind.bitpongo.exchange.*;
 import com.multind.bitpongo.market.PriceCache;
+import com.multind.bitpongo.notification.NotificationEvent;
+import com.multind.bitpongo.notification.NotificationEventType;
+import com.multind.bitpongo.notification.NotificationPublisher;
 import com.multind.bitpongo.plan.*;
 import com.multind.bitpongo.strategy.*;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -20,6 +26,7 @@ import org.springframework.stereotype.Service;
 public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
     private static final Logger log = LoggerFactory.getLogger(ScheduledPurchaseService.class);
     private static final Set<String> TERMINAL_ORDER_STATUSES = Set.of("FILLED", "CANCELED", "EXPIRED", "REJECTED");
+    private static final Set<String> DEFINITE_FAILURE_STATUSES = Set.of("CANCELED", "EXPIRED", "REJECTED");
     private final PlanRepository plans;
     private final StrategyRepository strategies;
     private final CoinRepository coins;
@@ -31,6 +38,7 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
     private final PriceCache prices;
     private final OrderIdFactory orderIds;
     private final OrderPersistenceService persistence;
+    private final NotificationPublisher notifications;
     private final Clock clock;
 
     @Autowired
@@ -39,9 +47,10 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
             CoinRepository coins, OrderRepository orders,
             ExchangeRepository exchanges, OrderIntentRepository intents,
             ExchangeGatewayRegistry gateways, OrderSizingService sizing, PriceCache prices,
-            OrderIdFactory orderIds, OrderPersistenceService persistence) {
+            OrderIdFactory orderIds, OrderPersistenceService persistence,
+            NotificationPublisher notifications) {
         this(plans, strategies, coins, orders, exchanges, intents, gateways, sizing, prices,
-                orderIds, persistence, Clock.systemUTC());
+                orderIds, persistence, notifications, Clock.systemUTC());
     }
 
     ScheduledPurchaseService(
@@ -49,11 +58,12 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
             CoinRepository coins, OrderRepository orders,
             ExchangeRepository exchanges, OrderIntentRepository intents,
             ExchangeGatewayRegistry gateways, OrderSizingService sizing, PriceCache prices,
-            OrderIdFactory orderIds, OrderPersistenceService persistence, Clock clock) {
+            OrderIdFactory orderIds, OrderPersistenceService persistence,
+            NotificationPublisher notifications, Clock clock) {
         this.plans = plans; this.strategies = strategies; this.coins = coins; this.orders = orders;
         this.exchanges = exchanges; this.intents = intents; this.gateways = gateways;
         this.sizing = sizing; this.prices = prices; this.orderIds = orderIds;
-        this.persistence = persistence; this.clock = clock;
+        this.persistence = persistence; this.notifications = notifications; this.clock = clock;
     }
 
     @Override
@@ -66,6 +76,9 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
         ExchangeGateway gateway = gateways.require(exchange.getExchange());
         ExchangeCredentials credentials = new ExchangeCredentials(
                 exchange.getAccessKey(), exchange.getSecretKey(), exchange.getPassword());
+        List<String> succeededSymbols = new ArrayList<>();
+        List<String> failedSymbols = new ArrayList<>();
+        List<String> skippedSymbols = new ArrayList<>();
         persistence.beginTrigger(planId, scheduledFireTime);
         for (CoinEntity coin : coins.findByPlanIdAndUserId(planId, plan.getUserId())) {
             String marketSymbol = coin.getSymbol().toUpperCase() + "USDT";
@@ -78,6 +91,7 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
                 } catch (RuntimeException failure) {
                     log.warn("无新鲜行情且 REST 取价失败，跳过买入 planId={} coin={}",
                             planId, coin.getSymbol(), failure);
+                    skippedSymbols.add(marketSymbol);
                     continue;
                 }
             }
@@ -94,8 +108,12 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
                 String resultStatus = result.status() == null ? "" : result.status().toUpperCase(Locale.ROOT);
                 if (TERMINAL_ORDER_STATUSES.contains(resultStatus) && result.quantity().signum() > 0) {
                     persistence.confirm(intent, result);
-                } else if (Set.of("CANCELED", "EXPIRED", "REJECTED").contains(resultStatus)) {
+                    if ("FILLED".equals(resultStatus)) {
+                        succeededSymbols.add(marketSymbol);
+                    }
+                } else if (DEFINITE_FAILURE_STATUSES.contains(resultStatus)) {
                     persistence.mark(intent, resultStatus);
+                    failedSymbols.add(marketSymbol);
                 } else {
                     persistence.mark(intent, "PENDING_RECONCILIATION");
                 }
@@ -103,14 +121,46 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
                 persistence.mark(intent, "PENDING_RECONCILIATION");
             } catch (RuntimeException failure) {
                 persistence.mark(intent, "FAILED");
+                failedSymbols.add(marketSymbol);
                 log.error("计划币种下单失败，planId={}, coinId={}", planId, coin.getId(), failure);
             }
         }
+        publishOutcome(NotificationEventType.TRADE_SUCCEEDED, plan, scheduledFireTime,
+                "trade-success:", "FILLED", succeededSymbols);
+        publishOutcome(NotificationEventType.TRADE_FAILED, plan, scheduledFireTime,
+                "trade-failed:", "FAILED", failedSymbols);
+        publishOutcome(NotificationEventType.PLAN_EXECUTION_SKIPPED, plan, scheduledFireTime,
+                "plan-skipped:", "PRICE_UNAVAILABLE", skippedSymbols);
     }
 
     @Override
     public void updateNextFireTime(long planId, Instant nextFireTime) {
         persistence.updateNextFireTime(planId, nextFireTime);
+    }
+
+    private void publishOutcome(
+            NotificationEventType type,
+            PlanEntity plan,
+            Instant scheduledFireTime,
+            String dedupePrefix,
+            String status,
+            List<String> symbols) {
+        if (symbols.isEmpty()) return;
+        List<String> stableSymbols = symbols.stream().distinct().sorted().toList();
+        NotificationEvent event = new NotificationEvent(
+                type,
+                plan.getUserId(),
+                plan.getId(),
+                null,
+                scheduledFireTime,
+                dedupePrefix + plan.getId() + ":" + scheduledFireTime,
+                Map.of("symbols", stableSymbols, "status", status));
+        try {
+            notifications.publish(event);
+        } catch (RuntimeException failure) {
+            log.warn("计划执行通知发布失败 planId={} eventType={} errorType={}",
+                    plan.getId(), type, failure.getClass().getSimpleName());
+        }
     }
 
     private boolean shouldSkipAverageDown(

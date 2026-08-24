@@ -40,6 +40,7 @@ import static org.assertj.core.api.Assertions.assertThat;
         OrderRepository.class,
         OrderIntentRepository.class,
         JdbcTemplate.class,
+        NotificationPublisher.class,
         UserRepository.class,
         AccountDeletionService.class,
         ExchangeRepository.class,

@@ -2,6 +2,7 @@ package com.multind.bitpongo;
 
 import com.multind.bitpongo.auth.UserRepository;
 import com.multind.bitpongo.exchange.ExchangeRepository;
+import com.multind.bitpongo.notification.NotificationPublisher;
 import com.multind.bitpongo.plan.AssetSnapshotService;
 import com.multind.bitpongo.plan.PlanApplicationService;
 import com.multind.bitpongo.plan.PlanRepository;
@@ -38,6 +39,7 @@ class BitpongoApplicationTest {
     @MockitoBean private OrderRepository orders;
     @MockitoBean private OrderIntentRepository intents;
     @MockitoBean private JdbcTemplate jdbc;
+    @MockitoBean private NotificationPublisher notifications;
 
     @MockitoBean private UserRepository users;
     @MockitoBean private com.multind.bitpongo.auth.AccountDeletionService accountDeletionService;

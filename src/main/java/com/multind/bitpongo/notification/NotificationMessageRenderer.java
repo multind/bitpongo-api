@@ -70,7 +70,10 @@ public final class NotificationMessageRenderer {
         add(lines, language.intentId, event.intentId());
 
         Map<String, Object> attributes = event.attributes() == null ? Map.of() : event.attributes();
-        addSanitized(lines, language.symbol, attributes.get("symbol"));
+        Object symbols = attributes.containsKey("symbol")
+                ? attributes.get("symbol")
+                : joinedSymbols(attributes.get("symbols"));
+        addSanitized(lines, language.symbol, symbols);
         Object status = attributes.containsKey("status")
                 ? attributes.get("status")
                 : attributes.get("resultStatus");
@@ -82,6 +85,17 @@ public final class NotificationMessageRenderer {
             lines.add(language.error + sanitizeError(String.valueOf(error)));
         }
         return String.join("\n", lines);
+    }
+
+    private static String joinedSymbols(Object value) {
+        if (!(value instanceof List<?> values)) {
+            return null;
+        }
+        return values.stream()
+                .filter(String.class::isInstance)
+                .map(String.class::cast)
+                .limit(50)
+                .collect(java.util.stream.Collectors.joining(", "));
     }
 
     private static void add(List<String> lines, String label, Object value) {

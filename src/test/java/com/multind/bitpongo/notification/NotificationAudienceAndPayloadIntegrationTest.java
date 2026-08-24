@@ -1,6 +1,7 @@
 package com.multind.bitpongo.notification;
 
 import java.time.Instant;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.BeforeEach;
@@ -223,6 +224,60 @@ class NotificationAudienceAndPayloadIntegrationTest {
                 .doesNotContain(rawToken, rawUrl);
     }
 
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void aggregatedSymbolsSurviveTheRealOutboxRoundTripWithinSafetyBounds() {
+        long user = createUser("payload-aggregate-symbols");
+        configureUser(user, true);
+        String rawUrl = "https://private.example/device-key";
+        String rawSecret = "super-secret-value";
+        List<Object> rawSymbols = new ArrayList<>();
+        rawSymbols.add("BTCUSDT");
+        rawSymbols.add("ETHUSDT");
+        rawSymbols.add("X".repeat(80));
+        rawSymbols.add(rawUrl);
+        rawSymbols.add("accessKey=" + rawSecret);
+        rawSymbols.add(Map.of("nested", "must-not-survive"));
+        rawSymbols.add(42);
+        for (int index = 0; index < 60; index++) {
+            rawSymbols.add("COIN" + index + "USDT");
+        }
+        publisher.publish(new NotificationEvent(
+                NotificationEventType.TRADE_SUCCEEDED,
+                user,
+                7L,
+                null,
+                Instant.parse("2026-08-23T04:00:00Z"),
+                "payload:aggregate-symbols",
+                Map.of("symbols", rawSymbols, "status", "FILLED")));
+
+        NotificationOutboxEntity stored = outbox.findAll().getFirst();
+        Map<String, Object> attributes = (Map<String, Object>)
+                stored.getBodyPayload().get("attributes");
+        List<String> symbols = (List<String>) attributes.get("symbols");
+        String json = jdbc.queryForObject(
+                "select cast(body_payload as char) from notification_outbox where id = ?",
+                String.class,
+                stored.getId());
+
+        assertThat(symbols).hasSize(50);
+        assertThat(symbols.subList(0, 2)).containsExactly("BTCUSDT", "ETHUSDT");
+        assertThat(symbols.get(2).codePointCount(0, symbols.get(2).length())).isEqualTo(32);
+        assertThat(symbols).contains("<redacted-uri>", "accessKey=<redacted>")
+                .allSatisfy(symbol -> assertThat(symbol.codePointCount(0, symbol.length()))
+                        .isLessThanOrEqualTo(32));
+        assertThat(json).doesNotContain(
+                rawUrl, rawSecret, "must-not-survive", "nested");
+
+        NotificationEvent fromStorage = new NotificationEvent(
+                stored.getEventType(), user, 7L, null,
+                Instant.parse("2026-08-23T04:00:00Z"),
+                stored.getDedupeKey(), attributes);
+        assertThat(renderer.render(fromStorage, "en-US", "UTC", null).body())
+                .contains("Symbol: BTCUSDT, ETHUSDT", "Result: FILLED")
+                .doesNotContain(rawUrl, rawSecret, "must-not-survive");
+    }
     private void assertRecipients(org.assertj.core.groups.Tuple... expected) {
         assertThat(outbox.findAll())
                 .extracting(

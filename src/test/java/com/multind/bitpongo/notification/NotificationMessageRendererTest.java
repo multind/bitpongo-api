@@ -1,6 +1,8 @@
 package com.multind.bitpongo.notification;
 
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Map;
 import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -102,6 +104,64 @@ class NotificationMessageRendererTest {
                 .doesNotContain("fake-api-key", "fake-client-secret", "fake-refresh-token")
                 .contains("api_key=<redacted>", "client_secret=<redacted>",
                         "refresh_token <redacted>");
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    void sanitizerKeepsOnlyBoundedFlatRedactedSymbolStringsForAggregates() {
+        List<Object> rawSymbols = new ArrayList<>();
+        rawSymbols.add("BTCUSDT");
+        rawSymbols.add("X".repeat(80));
+        rawSymbols.add("https://private.example/device-key");
+        rawSymbols.add(Map.of("nested", "must-not-survive"));
+        for (int index = 0; index < 60; index++) {
+            rawSymbols.add("COIN" + index + "USDT");
+        }
+        NotificationEvent event = new NotificationEvent(
+                NotificationEventType.TRADE_SUCCEEDED,
+                7L,
+                11L,
+                null,
+                Instant.parse("2026-08-23T01:02:03Z"),
+                "trade-success:11:2026-08-23T01:02:03Z",
+                Map.of(
+                        "symbols", rawSymbols,
+                        "status", "FILLED",
+                        "deviceKey", "must-not-survive"));
+
+        Map<String, Object> payload = new NotificationPayloadSanitizer().sanitize(event);
+        Map<String, Object> attributes = (Map<String, Object>) payload.get("attributes");
+        List<String> symbols = (List<String>) attributes.get("symbols");
+
+        assertThat(symbols).hasSize(50);
+        assertThat(symbols.get(0)).isEqualTo("BTCUSDT");
+        assertThat(symbols.get(1)).hasSize(32);
+        assertThat(symbols.get(2)).isEqualTo("<redacted-uri>");
+        assertThat(symbols).doesNotContain("must-not-survive");
+        assertThat(attributes).containsEntry("status", "FILLED")
+                .doesNotContainKey("deviceKey");
+    }
+
+    @Test
+    void rendersAggregatedSymbolsRetainedByTheOutboxSanitizer() {
+        NotificationEvent event = new NotificationEvent(
+                NotificationEventType.TRADE_SUCCEEDED,
+                7L,
+                11L,
+                null,
+                Instant.parse("2026-08-23T01:02:03Z"),
+                "trade-success:11:2026-08-23T01:02:03Z",
+                Map.of("symbols", List.of("BTCUSDT", "ETHUSDT"), "status", "FILLED"));
+        Map<String, Object> payload = new NotificationPayloadSanitizer().sanitize(event);
+        @SuppressWarnings("unchecked")
+        Map<String, Object> attributes = (Map<String, Object>) payload.get("attributes");
+        NotificationEvent fromOutbox = new NotificationEvent(
+                event.type(), event.userId(), event.planId(), event.intentId(),
+                event.occurredAt(), event.dedupeKey(), attributes);
+
+        BarkMessage message = renderer.render(fromOutbox, "zh-CN", "UTC", null);
+
+        assertThat(message.body()).contains("币种：BTCUSDT, ETHUSDT", "结果：FILLED");
     }
 
     private static Stream<Arguments> localizedMessages() {

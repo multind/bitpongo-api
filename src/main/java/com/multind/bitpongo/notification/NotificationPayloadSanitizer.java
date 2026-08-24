@@ -1,7 +1,9 @@
 package com.multind.bitpongo.notification;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
@@ -10,12 +12,16 @@ import org.springframework.stereotype.Component;
 @Component
 final class NotificationPayloadSanitizer {
 
+    private static final int MAX_SYMBOLS = 50;
+    private static final int MAX_SYMBOL_CODE_POINTS = 32;
     private static final Set<String> ERROR_FIELDS = Set.of(
             "status", "resultStatus", "error", "errorSummary");
+    private static final Set<String> PLAN_FIELDS = Set.of(
+            "symbols", "status", "resultStatus", "error", "errorSummary");
     private static final Set<String> TRADE_FIELDS = Set.of(
-            "symbol", "status", "resultStatus", "error", "errorSummary");
+            "symbol", "symbols", "status", "resultStatus", "error", "errorSummary");
     private static final Set<String> SUCCESS_FIELDS = Set.of(
-            "symbol", "status", "resultStatus");
+            "symbol", "symbols", "status", "resultStatus");
     private static final Set<String> RECOVERY_FIELDS = Set.of(
             "status", "resultStatus");
     private static final Set<NotificationEventType> RECOVERABLE_FAULT_TYPES = Set.of(
@@ -40,7 +46,12 @@ final class NotificationPayloadSanitizer {
         Map<String, Object> sanitized = new LinkedHashMap<>();
         for (String field : allowedFields(event.type())) {
             Object value = source.get(field);
-            if (value != null) {
+            if ("symbols".equals(field)) {
+                List<String> symbols = sanitizedSymbols(value);
+                if (!symbols.isEmpty()) {
+                    sanitized.put(field, symbols);
+                }
+            } else if (value != null) {
                 sanitized.put(field, NotificationMessageRenderer.sanitizeError(
                         String.valueOf(value)));
             }
@@ -53,6 +64,27 @@ final class NotificationPayloadSanitizer {
             }
         }
         return Collections.unmodifiableMap(sanitized);
+    }
+
+    private static List<String> sanitizedSymbols(Object value) {
+        if (!(value instanceof List<?> values)) {
+            return List.of();
+        }
+        List<String> symbols = new ArrayList<>();
+        for (Object candidate : values) {
+            if (!(candidate instanceof String symbol)) {
+                continue;
+            }
+            String sanitized = NotificationMessageRenderer.sanitizeError(symbol);
+            int[] codePoints = sanitized.codePoints()
+                    .limit(MAX_SYMBOL_CODE_POINTS)
+                    .toArray();
+            symbols.add(new String(codePoints, 0, codePoints.length));
+            if (symbols.size() == MAX_SYMBOLS) {
+                break;
+            }
+        }
+        return List.copyOf(symbols);
     }
 
     private static NotificationEventType recoverableFaultType(Object value) {
@@ -73,8 +105,8 @@ final class NotificationPayloadSanitizer {
 
     private static Set<String> allowedFields(NotificationEventType type) {
         return switch (type) {
-            case SCHEDULER_FATAL, MARKET_OUTAGE, PLAN_EXECUTION_SKIPPED,
-                    ASSET_SNAPSHOT_FAILED -> ERROR_FIELDS;
+            case SCHEDULER_FATAL, MARKET_OUTAGE, ASSET_SNAPSHOT_FAILED -> ERROR_FIELDS;
+            case PLAN_EXECUTION_SKIPPED -> PLAN_FIELDS;
             case ORDER_MANUAL_REVIEW, TRADE_FAILED -> TRADE_FIELDS;
             case TRADE_SUCCEEDED -> SUCCESS_FIELDS;
             case SYSTEM_RECOVERED -> RECOVERY_FIELDS;
