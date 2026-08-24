@@ -14,4 +14,13 @@ class OfficialBinanceMarketStreamClientTest {
                 OfficialBinanceMarketStreamClient.normalizeStreamPath("wss://stream.binance.com:9443/ws"))
                 .isEqualTo("/ws");
     }
+
+    @Test
+    void appliesTheConfiguredTextMessageLimitToTheBinanceConnector() {
+        var client = new OfficialBinanceMarketStreamClient(
+                "wss://stream.binance.com:9443", 1_048_576L);
+
+        assertThat(client.createClientConfiguration().getMessageMaxSize())
+                .isEqualTo(1_048_576L);
+    }
 }

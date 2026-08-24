@@ -1,5 +1,6 @@
 package com.multind.bitpongo.market;
 
+import com.binance.connector.client.common.websocket.configuration.WebSocketClientConfiguration;
 import com.binance.connector.client.spot.websocket.stream.SpotWebSocketStreamsUtil;
 import com.binance.connector.client.spot.websocket.stream.api.SpotWebSocketStreams;
 import com.binance.connector.client.spot.websocket.stream.model.AllMiniTickerRequest;
@@ -14,10 +15,13 @@ import org.springframework.stereotype.Component;
 @Component
 public class OfficialBinanceMarketStreamClient implements BinanceMarketStreamClient {
     private final String streamPath;
+    private final long messageMaxSize;
 
     public OfficialBinanceMarketStreamClient(
-            @Value("${zhitoubao.binance.market-stream-url:wss://stream.binance.com:9443}") String streamUrl) {
+            @Value("${zhitoubao.binance.market-stream-url:wss://stream.binance.com:9443}") String streamUrl,
+            @Value("${zhitoubao.binance.market-stream-max-message-size:1048576}") long messageMaxSize) {
         this.streamPath = normalizeStreamPath(streamUrl);
+        this.messageMaxSize = messageMaxSize;
     }
 
     /**
@@ -30,12 +34,18 @@ public class OfficialBinanceMarketStreamClient implements BinanceMarketStreamCli
         return path == null ? "" : path;
     }
 
+    WebSocketClientConfiguration createClientConfiguration() {
+        var configuration = SpotWebSocketStreamsUtil.getClientConfiguration(streamPath);
+        configuration.setMessageMaxSize(messageMaxSize);
+        return configuration;
+    }
+
     @Override
     public StreamHandle connect(
             Consumer<TickerEvent> onTicker,
             Consumer<Throwable> onFailure,
             Runnable onClosed) {
-        var configuration = SpotWebSocketStreamsUtil.getClientConfiguration(streamPath);
+        var configuration = createClientConfiguration();
         SpotWebSocketStreams streams = new SpotWebSocketStreams(configuration);
         var queue = streams.allMiniTicker(new AllMiniTickerRequest());
         AtomicBoolean closed = new AtomicBoolean();

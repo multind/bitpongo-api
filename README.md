@@ -87,7 +87,9 @@ BINANCE_LIVE_TRADING=false
 BINANCE_TESTNET_REST_BASE_URL=https://testnet.binance.vision
 BINANCE_PRODUCTION_REST_BASE_URL=https://api.binance.com
 BINANCE_MARKET_STREAM_URL=wss://stream.binance.com:9443
+BINANCE_MARKET_STREAM_MAX_MESSAGE_SIZE=1048576
 ```
+`BINANCE_MARKET_STREAM_MAX_MESSAGE_SIZE` 控制行情 WebSocket 单条文本消息上限，默认 1 MiB，以容纳 Binance 全市场 mini ticker 批次。
 
 交易所密钥仍由现有 `/api/exchanges/**` 接口按用户保存。Testnet 与生产密钥不可混用。启用真实交易前必须同时完成：
 
