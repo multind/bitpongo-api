@@ -100,6 +100,67 @@ BINANCE_MARKET_STREAM_URL=wss://stream.binance.com:9443
 
 为兼容现有 Python 数据库，当前交易所 API Key/Secret 仍沿用原表明文列；生产部署应限制数据库账号与备份访问，并尽快迁移到 KMS/信封加密和密钥轮换。REST 响应和日志不会输出完整密钥。
 
+## Bark 通知部署
+
+Bark 分为用户通道和管理员通道。用户保存自己的 Bark URL，接收所属交易、计划和资产事件；管理员地址由 `BARK_ADMIN_PUSH_URL` 注入，接收系统、调度、行情和人工复核告警。Bark URL 与其中的 Device Key 都是 Secret，不得写入日志、工单、镜像、测试夹具或 Git。
+
+为用户 Device Key 生成独立的 32 字节 AES 密钥，不要复用 JWT Secret：
+
+```bash
+openssl rand -base64 32
+```
+
+将输出安全地保存到秘密管理系统，再注入 `BARK_CREDENTIAL_ENCRYPTION_KEY`；`.env.example` 中该值有意留空。部署变量如下：
+
+```dotenv
+BARK_USER_NOTIFICATIONS_ENABLED=true
+BARK_ADMIN_PUSH_URL=
+BARK_ALLOWED_HOSTS=api.day.app
+BARK_ALLOW_PRIVATE_HOSTS=false
+BARK_CREDENTIAL_ENCRYPTION_KEY=
+BARK_NOTIFY_ON_STARTUP=false
+BARK_DISPATCH_ENABLED=true
+APP_PUBLIC_URL=
+```
+
+默认只允许 `api.day.app`，并通过 `BARK_ALLOW_PRIVATE_HOSTS=false` 阻止 loopback、link-local 和私网目标。使用自建服务时，必须在 `BARK_ALLOWED_HOSTS` 中精确列出主机；非 443 端口使用精确的 `host:port`。确需内网自建服务时，还要经过安全复核后显式设置 `BARK_ALLOW_PRIVATE_HOSTS=true`。地址只接受 HTTPS，客户端不跟随重定向。
+
+### 用户设置 API
+
+四个路由均要求当前用户的 Bearer Token，且从认证身份取用户 ID：
+
+- `GET /api/users/notifications/bark`：查询配置状态，只返回掩码地址。
+- `PUT /api/users/notifications/bark`：保存或更新地址、启用状态、语言和时区。
+- `DELETE /api/users/notifications/bark`：删除配置，并跳过该用户尚未发送的通知。
+- `POST /api/users/notifications/bark/test`：同步发送普通测试通知；临时地址不落库。
+
+接口永不返回完整 URL、Device Key 或密文。用户主动测试同步返回结果；业务事件在业务状态提交后写入 MySQL Outbox。Dispatcher 使用租约领取记录，失败按 30 秒、2 分钟、10 分钟、30 分钟退避重试，最多 10 次；稳定 `dedupe_key` 和数据库唯一约束负责去重。通知入队或发送失败不会回滚交易、计划、快照或对账结果。
+
+### 事件响铃摘要
+
+| 事件 | 级别与声音 |
+|---|---|
+| `SCHEDULER_FATAL`、`ORDER_MANUAL_REVIEW` | `critical`、`call=1`、`volume=10`、`sound=alarm` |
+| `TRADE_FAILED`、`MARKET_OUTAGE` | `timeSensitive`、不持续响铃；使用 `alarm` |
+| `PLAN_EXECUTION_SKIPPED` | `timeSensitive`、普通提示音、不持续响铃 |
+| `TRADE_SUCCEEDED`、`ASSET_SNAPSHOT_FAILED`、`BARK_TEST` | `active`；测试和交易成功使用 `minuet` |
+| `SYSTEM_RECOVERED`、`SERVICE_STARTED` | `passive`、无铃声 |
+
+只有需要人工立即处理的 `SCHEDULER_FATAL` 和 `ORDER_MANUAL_REVIEW` 使用 `critical` 与 `call=1`；业务代码不得自行覆盖策略。
+
+### 显式真实联调
+
+真实联调只在前端完成后执行一次。测试类默认跳过，只有隐藏环境变量 `BITPONGO_BARK_SMOKE_URL` 非空时才发送标题为“Bitpongo Bark 接入测试”的普通 `BARK_TEST`。交互输入使用静默模式，命令、Surefire 输出和报告都不得回显地址：
+
+```bash
+read -r -s "BITPONGO_BARK_SMOKE_URL?Bark URL: "
+export BITPONGO_BARK_SMOKE_URL
+./mvnw -Dmaven.repo.local=/Volumes/ExternalDrive/maven-repo/.m2/repository -Dtest=BarkLiveSmokeTest test
+unset BITPONGO_BARK_SMOKE_URL
+```
+
+后端自动验证阶段不得设置该变量，也不得运行真实发送。
+
 ## 兼容接口
 
 完整映射见 [Python—Java 兼容契约矩阵](docs/python-java-contract-matrix.md)。价格 WebSocket 地址仍为 `/api/ws/price`，订阅示例：
@@ -143,7 +204,6 @@ curl -X DELETE http://localhost:8000/api/users/account \
 - 日志包含请求关联 ID 和已认证用户 ID，但不记录请求体、密码、Token、Webhook 或交易所 Secret。
 - 生产 Profile 要求非空数据库凭据和至少 32 字符的 JWT Secret。
 - Compose 不提供生产密码默认值；示例占位值也会被生产启动守卫拒绝。
-- 钉钉测试通知只允许 `https://oapi.dingtalk.com/robot/send`（以及兼容官方 API 域名），拒绝自定义端口和非官方目标。
 - 定投任务使用稳定键 `plans.job_plan_<id>`；启动核对只补齐未来任务，不补跑旧触发。
 - `plan_fire_execution` 以计划 ID 和 Quartz 计划触发时间去重，`triggered_count` 每个火次只增加一次；任务执行后同步下一次触发时间。
 - Binance 返回多币种手续费时，base/USDT 手续费会分别进入净持仓与投入成本核算；为兼容旧 `order` 表，其单值 `fee` 列仅在手续费资产唯一时保存金额，BNB 等第三资产的完整手续费明细尚未单独持久化。

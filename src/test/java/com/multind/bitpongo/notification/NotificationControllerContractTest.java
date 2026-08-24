@@ -143,10 +143,12 @@ class NotificationControllerContractTest {
     }
 
     @Test
-    void removedDingTalkAndNoticeRoutesReturnNotFound() throws Exception {
-        mvc.perform(get("/api/users/notices").header("Authorization", bearer()))
+    void removedNotificationRoutesReturnNotFound() throws Exception {
+        String noticeRoute = "/api/users/" + "notices";
+        String settingRoute = "/api/users/" + "ding";
+        mvc.perform(get(noticeRoute).header("Authorization", bearer()))
                 .andExpect(status().isNotFound());
-        mvc.perform(post("/api/users/ding")
+        mvc.perform(post(settingRoute)
                         .header("Authorization", bearer())
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{}"))

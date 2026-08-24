@@ -11,8 +11,10 @@
 | 用户 | `users.py` `GET /api/users/profile` | `UserController.profile` | `UserControllerContractTest` |
 | 用户 | `users.py` `POST /api/users/v1/login` | `UserController.wordpressLogin` | `UserControllerContractTest` |
 | 用户 | 移动端新增 `DELETE /api/users/account` | `UserController.deleteAccount` | `UserControllerContractTest` |
-| 用户 | `users.py` `POST /api/users/ding` | `NotificationController.ding` | `NotificationControllerContractTest` |
-| 用户 | `users.py` `GET /api/users/notices` | `NotificationController.notices` | `NotificationControllerContractTest` |
+| 用户通知 | Bark 设置 `GET /api/users/notifications/bark` | `NotificationController.getBarkSetting` | `NotificationControllerContractTest` |
+| 用户通知 | Bark 设置 `PUT /api/users/notifications/bark` | `NotificationController.updateBarkSetting` | `NotificationControllerContractTest` |
+| 用户通知 | Bark 设置 `DELETE /api/users/notifications/bark` | `NotificationController.deleteBarkSetting` | `NotificationControllerContractTest` |
+| 用户通知 | Bark 测试 `POST /api/users/notifications/bark/test` | `NotificationController.testBark` | `NotificationControllerContractTest` |
 | 交易所 | `exchanges.py` `GET /api/exchanges/list` | `ExchangeController.list` | `ExchangeControllerContractTest` |
 | 交易所 | `exchanges.py` `GET /api/exchanges/{exchange_id}` | `ExchangeController.detail` | `ExchangeControllerContractTest` |
 | 交易所 | `exchanges.py` `POST /api/exchanges/create` | `ExchangeController.create` | `ExchangeControllerContractTest` |
