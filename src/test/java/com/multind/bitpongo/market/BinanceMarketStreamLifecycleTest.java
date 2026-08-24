@@ -66,6 +66,18 @@ class BinanceMarketStreamLifecycleTest {
     }
 
     @Test
+    void failureFollowedByClosedCallbackKeepsTheFirstReconnectDelay() {
+        Fixture f = new Fixture();
+        f.lifecycle.start();
+        f.client.failThenClose(new IllegalStateException("reader failed"));
+        assertThat(f.scheduler.activeDelays())
+                .containsExactlyInAnyOrder(
+                        ROTATION, Duration.ofSeconds(1), MAX_SILENCE);
+        f.scheduler.advance(Duration.ofSeconds(1));
+        assertThat(f.client.connectCount).isEqualTo(2);
+    }
+
+    @Test
     void transientFailureReconnectsAndValidTickerBeforeThresholdCancelsOutageSilently() {
         Fixture f = new Fixture();
         f.lifecycle.start();
@@ -183,6 +195,10 @@ class BinanceMarketStreamLifecycleTest {
         void emit(TickerEvent ticker) { latest.onTicker.accept(ticker); }
         void fail(Throwable failure) { latest.onFailure.accept(failure); }
         void close() { latest.onClosed.run(); }
+        void failThenClose(Throwable failure) {
+            latest.onFailure.accept(failure);
+            latest.onClosed.run();
+        }
         private record Connection(Consumer<TickerEvent> onTicker,
                 Consumer<Throwable> onFailure, Runnable onClosed) {}
     }
