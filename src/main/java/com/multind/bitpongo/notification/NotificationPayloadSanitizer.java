@@ -18,6 +18,8 @@ final class NotificationPayloadSanitizer {
             "symbol", "status", "resultStatus");
     private static final Set<String> RECOVERY_FIELDS = Set.of(
             "status", "resultStatus");
+    private static final Set<NotificationEventType> RECOVERABLE_FAULT_TYPES = Set.of(
+            NotificationEventType.SCHEDULER_FATAL, NotificationEventType.MARKET_OUTAGE);
 
     Map<String, Object> sanitize(NotificationEvent event) {
         Objects.requireNonNull(event, "event");
@@ -43,7 +45,30 @@ final class NotificationPayloadSanitizer {
                         String.valueOf(value)));
             }
         }
+        if (event.type() == NotificationEventType.SYSTEM_RECOVERED) {
+            NotificationEventType originalType = recoverableFaultType(
+                    source.get("originalEventType"));
+            if (originalType != null) {
+                sanitized.put("originalEventType", originalType.name());
+            }
+        }
         return Collections.unmodifiableMap(sanitized);
+    }
+
+    private static NotificationEventType recoverableFaultType(Object value) {
+        NotificationEventType type;
+        if (value instanceof NotificationEventType eventType) {
+            type = eventType;
+        } else if (value instanceof String name) {
+            try {
+                type = NotificationEventType.valueOf(name);
+            } catch (IllegalArgumentException ignored) {
+                return null;
+            }
+        } else {
+            return null;
+        }
+        return RECOVERABLE_FAULT_TYPES.contains(type) ? type : null;
     }
 
     private static Set<String> allowedFields(NotificationEventType type) {

@@ -13,8 +13,8 @@
 ### Task 1: Lock audience and payload behavior with failing integration tests
 
 **Files:**
-- Modify: `src/test/java/com/zhitoubao/notifications/bark/outbox/OutboxNotificationPublisherTest.java`
-- Create: `src/test/java/com/zhitoubao/notifications/bark/outbox/OutboxNotificationAudienceNoAdminTest.java`
+- Modify: `src/test/java/com/multind/bitpongo/notification/OutboxNotificationPublisherTest.java`
+- Create: `src/test/java/com/multind/bitpongo/notification/NotificationAudienceNoAdminIntegrationTest.java`
 
 1. Add real-row assertions for every audience-matrix positive and negative case.
 2. Add typed-context validation and `SYSTEM_RECOVERED` audience-reuse assertions.
@@ -24,23 +24,26 @@
 ### Task 2: Implement typed audience and payload sanitizer
 
 **Files:**
-- Modify: `src/main/java/com/zhitoubao/notifications/bark/NotificationEvent.java`
-- Create: `src/main/java/com/zhitoubao/notifications/bark/NotificationAudienceContext.java`
-- Modify: `src/main/java/com/zhitoubao/notifications/bark/outbox/NotificationAudienceResolver.java`
-- Create: `src/main/java/com/zhitoubao/notifications/bark/outbox/NotificationPayloadSanitizer.java`
-- Modify: `src/main/java/com/zhitoubao/notifications/bark/outbox/NotificationOutboxEnqueuer.java`
-- Modify: relevant policy tests if arbitrary recovered-event attribute behavior is removed.
+- Modify: `src/main/java/com/multind/bitpongo/notification/NotificationEvent.java`
+- Create: `src/main/java/com/multind/bitpongo/notification/NotificationAudienceContext.java`
+- Modify: `src/main/java/com/multind/bitpongo/notification/NotificationAudienceResolver.java`
+- Create: `src/main/java/com/multind/bitpongo/notification/NotificationPayloadSanitizer.java`
+- Modify: `src/main/java/com/multind/bitpongo/notification/NotificationOutboxEnqueuer.java`
+- Modify: `src/test/java/com/multind/bitpongo/notification/NotificationOutboxDispatcherTest.java`
 
 1. Add defensive-copy validation and source-compatible event construction.
 2. Encode the exact audience switch and current-eligibility checks.
 3. Whitelist renderer fields per event and redact/truncate before persistence.
-4. Re-run both publisher classes until GREEN.
+4. For `SYSTEM_RECOVERED`, persist `originalEventType` only when it parses exactly as
+   `SCHEDULER_FATAL` or `MARKET_OUTAGE`; discard unknown and other known event types,
+   and never persist the typed audience context.
+5. Re-run publisher, payload, recovered-audience, and outbox round-trip tests until GREEN.
 
 ### Task 3: Lock lease ownership and timing with failing MySQL tests
 
 **Files:**
-- Modify: `src/test/java/com/zhitoubao/notifications/bark/outbox/NotificationOutboxLeaseIntegrationTest.java`
-- Modify: `src/test/java/com/zhitoubao/notifications/bark/outbox/NotificationOutboxDispatcherTest.java`
+- Modify: `src/test/java/com/multind/bitpongo/notification/NotificationOutboxLeaseIntegrationTest.java`
+- Modify: `src/test/java/com/multind/bitpongo/notification/NotificationOutboxDispatcherTest.java`
 
 1. Add mixed-priority claim-order assertions.
 2. Add old-token renewal/load/terminal-update rejection after expiry and re-claim.
@@ -52,19 +55,27 @@
 
 **Files:**
 - Create: `src/main/resources/db/migration/V8__add_notification_outbox_lease_token.sql`
-- Modify: `src/main/java/com/zhitoubao/notifications/bark/outbox/NotificationOutboxLeaseService.java`
-- Modify: `src/main/java/com/zhitoubao/notifications/bark/outbox/NotificationOutboxDeliveryStore.java`
-- Modify: `src/main/java/com/zhitoubao/notifications/bark/outbox/NotificationOutboxDispatcher.java`
-- Create: `src/main/java/com/zhitoubao/notifications/bark/outbox/NotificationOutboxDispatchScheduler.java`
-- Modify: `src/main/java/com/zhitoubao/notifications/bark/BarkProperties.java`
+- Create: `src/main/resources/db/migration/V9__reorder_notification_outbox_lease_index.sql`
+- Modify: `src/main/java/com/multind/bitpongo/notification/NotificationOutboxEntity.java`
+- Modify: `src/main/java/com/multind/bitpongo/notification/NotificationOutboxRepository.java`
+- Modify: `src/main/java/com/multind/bitpongo/notification/NotificationOutboxLeaseService.java`
+- Modify: `src/main/java/com/multind/bitpongo/notification/NotificationOutboxDeliveryStore.java`
+- Modify: `src/main/java/com/multind/bitpongo/notification/NotificationOutboxDispatcher.java`
+- Create: `src/main/java/com/multind/bitpongo/notification/NotificationOutboxDispatchScheduler.java`
+- Modify: `src/main/java/com/multind/bitpongo/notification/BarkProperties.java`
 - Modify: `src/main/resources/application.yml`
 
-1. Add lease token schema and token-aware claim/renew/load/update queries.
-2. Renew each item from a fresh clock value before loading/sending.
-3. Read completion time after HTTP for sent/retry/skipped state changes.
-4. Move `@Scheduled` to a property-conditional wrapper; keep core beans available when disabled.
-5. Parameterize the single batch-size constant and inject the configured scheduling zone.
-6. Re-run lease and dispatcher tests until GREEN.
+1. Add the V8 lease-token schema, map `lease_token`, and require the token in
+   claim/renew/load/update ownership checks. Bark disable and account deletion also
+   clear `lease_token` when unfinished rows become skipped.
+2. Add V9 to replace the lease-order index with
+   `(priority, created_at, id, status, next_attempt_at, lease_until)`, preserving
+   deterministic `ORDER BY priority, created_at, id` while avoiding a MySQL Sort.
+3. Renew each item from a fresh clock value before loading/sending.
+4. Read completion time after HTTP for sent/retry/skipped state changes.
+5. Move `@Scheduled` to a property-conditional wrapper; keep core beans available when disabled.
+6. Parameterize the single batch-size constant and inject the configured scheduling zone.
+7. Re-run lease, dispatcher, persistence, and scheduler tests until GREEN.
 
 ### Task 5: Isolate contexts and verify the complete repository
 

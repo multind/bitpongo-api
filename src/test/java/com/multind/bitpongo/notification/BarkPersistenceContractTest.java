@@ -212,6 +212,14 @@ class BarkPersistenceContractTest {
         jdbc.update("update user_bark_setting set updated_at = ? where user_id = ?",
                 oldUpdatedAt, userId);
         entityManager.clear();
+        NotificationOutboxEntity pending = message(userId, "disable-pending", oldUpdatedAt);
+        NotificationOutboxEntity sending = message(userId, "disable-sending", oldUpdatedAt);
+        sending.setStatus(NotificationOutboxStatus.SENDING);
+        sending.setLeaseUntil(oldUpdatedAt.plusMinutes(1));
+        pending.setLeaseToken("00000000-0000-0000-0000-000000000003");
+        sending.setLeaseToken("00000000-0000-0000-0000-000000000004");
+        outbox.saveAllAndFlush(java.util.List.of(pending, sending));
+        entityManager.clear();
 
         MvcResult updatedResult = mvc.perform(put("/api/users/notifications/bark")
                         .header("Authorization", bearer(userId))
@@ -229,6 +237,22 @@ class BarkPersistenceContractTest {
                 "select updated_at from user_bark_setting where user_id = ?",
                 LocalDateTime.class,
                 userId));
+        NotificationOutboxEntity skippedPending = outbox.findById(pending.getId()).orElseThrow();
+        NotificationOutboxEntity skippedSending = outbox.findById(sending.getId()).orElseThrow();
+        assertThat(skippedPending.getStatus())
+                .isEqualTo(NotificationOutboxStatus.SKIPPED);
+        assertThat(skippedPending.getLeaseToken()).isNull();
+        assertThat(skippedSending.getStatus())
+                .isEqualTo(NotificationOutboxStatus.SKIPPED);
+        assertThat(skippedSending.getLeaseToken()).isNull();
+        assertThat(jdbc.queryForObject(
+                "select lease_token from notification_outbox where id = ?",
+                String.class,
+                pending.getId())).isNull();
+        assertThat(jdbc.queryForObject(
+                "select lease_token from notification_outbox where id = ?",
+                String.class,
+                sending.getId())).isNull();
     }
 
     @Test
@@ -246,6 +270,8 @@ class BarkPersistenceContractTest {
         NotificationOutboxEntity sending = message(userId, "delete-sending", now);
         sending.setStatus(NotificationOutboxStatus.SENDING);
         sending.setLeaseUntil(now.plusMinutes(1));
+        pending.setLeaseToken("00000000-0000-0000-0000-000000000001");
+        sending.setLeaseToken("00000000-0000-0000-0000-000000000002");
         NotificationOutboxEntity sent = message(userId, "delete-sent", now);
         sent.setStatus(NotificationOutboxStatus.SENT);
         outbox.saveAllAndFlush(java.util.List.of(pending, sending, sent));
@@ -263,10 +289,20 @@ class BarkPersistenceContractTest {
         assertThat(barkSettings.findByUserId(userId)).isEmpty();
         NotificationOutboxEntity skippedPending = outbox.findById(pending.getId()).orElseThrow();
         assertThat(skippedPending.getStatus()).isEqualTo(NotificationOutboxStatus.SKIPPED);
+        assertThat(skippedPending.getLeaseToken()).isNull();
+        assertThat(jdbc.queryForObject(
+                "select lease_token from notification_outbox where id = ?",
+                String.class,
+                pending.getId())).isNull();
         assertThat(skippedPending.getUpdatedAt()).isAfter(now);
         NotificationOutboxEntity skippedSending = outbox.findById(sending.getId()).orElseThrow();
         assertThat(skippedSending.getStatus()).isEqualTo(NotificationOutboxStatus.SKIPPED);
         assertThat(skippedSending.getLeaseUntil()).isNull();
+        assertThat(skippedSending.getLeaseToken()).isNull();
+        assertThat(jdbc.queryForObject(
+                "select lease_token from notification_outbox where id = ?",
+                String.class,
+                sending.getId())).isNull();
         assertThat(skippedSending.getUpdatedAt()).isAfter(now);
         assertThat(outbox.findById(sent.getId()).orElseThrow().getStatus())
                 .isEqualTo(NotificationOutboxStatus.SENT);

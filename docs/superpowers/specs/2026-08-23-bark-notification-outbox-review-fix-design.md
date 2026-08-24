@@ -25,9 +25,18 @@ User targets still require global user notifications to be enabled. Administrato
 
 A centralized sanitizer copies only renderer-consumed fields for each event type. Unknown attributes and credential/transport-shaped data (`url`, `device`, `access`, `secret`, `token`, `key`, raw response content) are discarded. Persisted values pass through the existing error redaction and Unicode-safe truncation. The typed audience context never enters JSON.
 
+`SYSTEM_RECOVERED` is the sole exception that may also persist `originalEventType`.
+The value is parsed case-sensitively as `NotificationEventType` and is retained only for
+the recoverable fault types `SCHEDULER_FATAL` and `MARKET_OUTAGE`. Unknown strings,
+other known event types, non-string/non-enum values, and all other recovery attributes
+are discarded. This preserves the original Bark group after an outbox round-trip without
+turning recovery attributes into an arbitrary payload channel.
+
 ## Lease ownership and timing
 
 Flyway V8 adds nullable `lease_token VARCHAR(36)` to the existing outbox table. Claiming a due row assigns a UUID token and returns `(id, token)`. Loading, renewing, and terminal/retry updates require `id + token + SENDING`; renewal additionally requires a live lease. Each item renews atomically from a fresh clock reading before HTTP. A failed renewal skips delivery. Terminal timestamps and retry deadlines use a new clock reading after HTTP returns.
+
+Flyway V9 replaces the earlier lease-order index with `(priority, created_at, id, status, next_attempt_at, lease_until)`. This keeps deterministic `ORDER BY priority, created_at, id` semantics while allowing MySQL to avoid a Sort. The JPA entity maps `lease_token`, and the PENDING/SENDING-to-SKIPPED update used by Bark disable and account deletion clears both lease deadline and token.
 
 The existing 30-second lease remains safe because Bark HTTP is bounded to 10 seconds. Fresh per-item renewal prevents the tail of a 50-row batch from inheriting its initial claim deadline. An expired former owner cannot send or mutate a row after a new owner claims it.
 

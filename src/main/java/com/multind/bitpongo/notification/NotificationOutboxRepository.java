@@ -15,6 +15,7 @@ public interface NotificationOutboxRepository extends JpaRepository<Notification
             update NotificationOutboxEntity message
                set message.status = com.multind.bitpongo.notification.NotificationOutboxStatus.SKIPPED,
                    message.leaseUntil = null,
+                   message.leaseToken = null,
                    message.updatedAt = current_timestamp
              where message.userId = :userId
                and message.status in (

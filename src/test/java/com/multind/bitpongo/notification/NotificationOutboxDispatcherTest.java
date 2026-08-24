@@ -10,6 +10,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
@@ -72,6 +73,9 @@ class NotificationOutboxDispatcherTest {
     private NotificationOutboxDispatcher dispatcher;
 
     @Autowired
+    private NotificationPublisher publisher;
+
+    @Autowired
     private JdbcTemplate jdbc;
 
     @Autowired
@@ -127,6 +131,68 @@ class NotificationOutboxDispatcherTest {
                 .message()
                 .body())
                 .contains("时间：2026-08-23 23:59:00 Pacific/Auckland");
+    }
+
+    @Test
+    void recoveredEventsKeepOriginalFaultGroupThroughOutboxRoundTrip() {
+        publishRecovered("recovered-market", NotificationEventType.MARKET_OUTAGE);
+        publishRecovered("recovered-scheduler", NotificationEventType.SCHEDULER_FATAL);
+
+        assertThat(jdbc.queryForList("""
+                select json_unquote(json_extract(
+                           body_payload, '$.attributes.originalEventType'))
+                  from notification_outbox
+                """, String.class))
+                .containsExactlyInAnyOrder("MARKET_OUTAGE", "SCHEDULER_FATAL");
+        assertThat(jdbc.queryForList(
+                "select cast(body_payload as char) from notification_outbox",
+                String.class))
+                .allSatisfy(payload -> assertThat(payload)
+                        .doesNotContain("audienceContext", "recipientUserIds"));
+
+        jdbc.update("update notification_outbox set next_attempt_at = ?",
+                NOW.minusSeconds(1));
+        dispatcher.dispatchDue();
+
+        assertThat(bark.deliveries())
+                .extracting(delivery -> delivery.message().group())
+                .containsExactlyInAnyOrder("Bitpongo·行情", "Bitpongo·紧急");
+        assertThat(jdbc.queryForObject(
+                "select count(*) from notification_outbox where status = 'SENT'",
+                Integer.class)).isEqualTo(2);
+    }
+
+    @Test
+    void recoveredPayloadDropsNonRecoverableAndUnknownOriginalEventTypes() {
+        publishRecovered("recovered-service", NotificationEventType.SERVICE_STARTED);
+        publishRecovered("recovered-wrong-case", "market_outage");
+        publishRecovered("recovered-unknown", "NOT_A_REAL_EVENT");
+
+        assertThat(jdbc.queryForList("""
+                select json_unquote(json_extract(
+                           body_payload, '$.attributes.originalEventType'))
+                  from notification_outbox
+                """, String.class))
+                .allSatisfy(originalEventType -> assertThat(originalEventType).isNull());
+        assertThat(jdbc.queryForList(
+                "select cast(body_payload as char) from notification_outbox",
+                String.class))
+                .allSatisfy(payload -> assertThat(payload).doesNotContain("must-not-persist"));
+    }
+
+    private void publishRecovered(String dedupeKey, Object originalType) {
+        publisher.publish(new NotificationEvent(
+                NotificationEventType.SYSTEM_RECOVERED,
+                null,
+                null,
+                null,
+                NOW_INSTANT.minusSeconds(60),
+                dedupeKey,
+                Map.of(
+                        "status", "RECOVERED",
+                        "originalEventType", originalType,
+                        "secret", "must-not-persist"),
+                new NotificationAudienceContext(Set.of(), true)));
     }
 
     @Test
