@@ -120,6 +120,7 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
             rotationScheduled = scheduler.schedule(this::rotate, rotationInterval);
         } catch (RuntimeException failure) {
             connected = false;
+            revokePendingRecovery();
             beginOutageCycle();
             log.warn("Binance 行情连接失败，将自动重试: {}", failure.getMessage());
             scheduleReconnect();
@@ -138,17 +139,17 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
         } catch (IllegalArgumentException ignored) {
             return;
         }
-        NotificationEvent recovery;
+        RecoveryAttempt recovery;
         synchronized (this) {
-            if (!running || connectionGeneration != generation) return;
+            if (!running || !connected || connectionGeneration != generation) return;
             prices.put("binance", internal, event.price(), event.eventTime());
             lastMessageAt = event.eventTime();
-            recovery = recoverFromOutageLocked();
+            recovery = recoverFromOutageLocked(connectionGeneration);
         }
-        if (recovery != null) safePublish(recovery);
+        publishRecoveryIfCurrent(recovery);
     }
 
-    private NotificationEvent recoverFromOutageLocked() {
+    private RecoveryAttempt recoverFromOutageLocked(long connectionGeneration) {
         OutageCycle cycle = outageCycle;
         if (cycle == null) return null;
         if (!cycle.announcementStarted) {
@@ -157,11 +158,19 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
             return null;
         }
         if (!cycle.publishComplete) {
-            cycle.recoveryPending = true;
+            cycle.recoveryPendingGeneration = connectionGeneration;
             return null;
         }
         outageCycle = null;
-        return recoveryEvent(cycle);
+        return new RecoveryAttempt(recoveryEvent(cycle), connectionGeneration);
+    }
+
+    private void publishRecoveryIfCurrent(RecoveryAttempt attempt) {
+        if (attempt == null) return;
+        synchronized (this) {
+            if (!running || !connected || attempt.connectionGeneration != generation) return;
+        }
+        safePublish(attempt.event);
     }
 
     private NotificationEvent recoveryEvent(OutageCycle cycle) {
@@ -179,6 +188,7 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
     private synchronized void onFailure(long connectionGeneration, Throwable failure) {
         if (!running || connectionGeneration != generation) return;
         log.warn("Binance 行情流异常，将自动重连: {}", failure.getMessage());
+        revokePendingRecovery();
         beginOutageCycle();
         invalidateAndClose();
         scheduleReconnect();
@@ -186,9 +196,16 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
 
     private synchronized void onClosed(long connectionGeneration) {
         if (!running || connectionGeneration != generation) return;
+        generation++;
         connected = false;
+        current = null;
+        revokePendingRecovery();
         beginOutageCycle();
         scheduleReconnect();
+    }
+
+    private void revokePendingRecovery() {
+        if (outageCycle != null) outageCycle.recoveryPendingGeneration = null;
     }
 
     private synchronized void beginOutageCycle() {
@@ -238,17 +255,19 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
         }
         safePublish(outage);
 
-        NotificationEvent recovery = null;
+        RecoveryAttempt recovery = null;
         synchronized (this) {
             if (!running || outageCycle != cycle) return;
             cycle.outagePublishing = false;
             cycle.publishComplete = true;
-            if (cycle.recoveryPending) {
+            Long pendingGeneration = cycle.recoveryPendingGeneration;
+            if (connected && pendingGeneration != null && pendingGeneration == generation) {
                 outageCycle = null;
-                recovery = recoveryEvent(cycle);
+                recovery = new RecoveryAttempt(
+                        recoveryEvent(cycle), pendingGeneration);
             }
         }
-        if (recovery != null) safePublish(recovery);
+        publishRecoveryIfCurrent(recovery);
     }
 
     private void safePublish(NotificationEvent event) {
@@ -328,12 +347,15 @@ public class BinanceMarketStreamLifecycle implements SmartLifecycle {
         private boolean announcementStarted;
         private boolean outagePublishing;
         private boolean publishComplete;
-        private boolean recoveryPending;
+        private Long recoveryPendingGeneration;
         private NotificationAudienceContext audience;
 
         private OutageCycle(String id, Instant startedAt) {
             this.id = id;
             this.startedAt = startedAt;
         }
+    }
+
+    private record RecoveryAttempt(NotificationEvent event, long connectionGeneration) {
     }
 }

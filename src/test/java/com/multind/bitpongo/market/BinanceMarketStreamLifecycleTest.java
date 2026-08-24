@@ -241,6 +241,86 @@ class BinanceMarketStreamLifecycleTest {
         }
     }
 
+    @Test
+    void failureAfterPendingRecoveryDuringSnapshotWaitsForLaterCurrentTicker()
+            throws Exception {
+        BlockingAudienceSupplier audiences = new BlockingAudienceSupplier();
+        RecordingPublisher publisher = new RecordingPublisher();
+        Fixture f = new Fixture(audiences, publisher);
+        ExecutorService executor = Executors.newCachedThreadPool();
+        f.lifecycle.start();
+        f.client.fail(new IllegalStateException("initial failure"));
+        Future<?> threshold = executor.submit(() -> f.scheduler.advance(MAX_SILENCE));
+        try {
+            audiences.awaitEntered();
+            f.client.emit(ticker("BTCUSDT", "62000"));
+            f.client.fail(new IllegalStateException("failed after healthy ticker"));
+            audiences.release();
+            threshold.get(1, TimeUnit.SECONDS);
+            assertThat(publisher.events).extracting(NotificationEvent::type)
+                    .containsExactly(NotificationEventType.MARKET_OUTAGE);
+
+            f.scheduler.advance(Duration.ofSeconds(1));
+            f.client.emit(ticker("BTCUSDT", "63000"));
+            assertThat(publisher.events).extracting(NotificationEvent::type)
+                    .containsExactly(NotificationEventType.MARKET_OUTAGE,
+                            NotificationEventType.SYSTEM_RECOVERED);
+        } finally {
+            audiences.release();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void closeAfterPendingRecoveryDuringOutagePublishWaitsForLaterCurrentTicker()
+            throws Exception {
+        BlockingOutagePublisher publisher = new BlockingOutagePublisher();
+        Fixture f = new Fixture(() -> AUDIENCE, publisher);
+        ExecutorService executor = Executors.newCachedThreadPool();
+        f.lifecycle.start();
+        f.client.fail(new IllegalStateException("initial failure"));
+        Future<?> threshold = executor.submit(() -> f.scheduler.advance(MAX_SILENCE));
+        try {
+            publisher.awaitOutageEntered();
+            f.client.emit(ticker("BTCUSDT", "62000"));
+            f.client.close();
+            publisher.releaseOutage();
+            threshold.get(1, TimeUnit.SECONDS);
+            assertThat(publisher.events).extracting(NotificationEvent::type)
+                    .containsExactly(NotificationEventType.MARKET_OUTAGE);
+
+            f.scheduler.advance(Duration.ofSeconds(1));
+            f.client.emit(ticker("BTCUSDT", "63000"));
+            assertThat(publisher.events).extracting(NotificationEvent::type)
+                    .containsExactly(NotificationEventType.MARKET_OUTAGE,
+                            NotificationEventType.SYSTEM_RECOVERED);
+        } finally {
+            publisher.releaseOutage();
+            executor.shutdownNow();
+        }
+    }
+
+    @Test
+    void closedConnectionTickerBeforeReconnectIsIgnored() {
+        Fixture f = new Fixture();
+        f.lifecycle.start();
+        f.client.fail(new IllegalStateException("initial failure"));
+        f.scheduler.advance(MAX_SILENCE);
+        f.client.close();
+        f.client.emit(ticker("BTCUSDT", "62000"));
+
+        assertThat(f.cache.get("binance", "BTC/USDT")).isEmpty();
+        assertThat(f.notifications.events).extracting(NotificationEvent::type)
+                .containsExactly(NotificationEventType.MARKET_OUTAGE);
+
+        f.scheduler.advance(Duration.ofSeconds(1));
+        f.client.emit(ticker("BTCUSDT", "63000"));
+        assertThat(f.cache.get("binance", "BTC/USDT")).isPresent();
+        assertThat(f.notifications.events).extracting(NotificationEvent::type)
+                .containsExactly(NotificationEventType.MARKET_OUTAGE,
+                        NotificationEventType.SYSTEM_RECOVERED);
+    }
+
     private static TickerEvent ticker(String symbol, String price) {
         return new TickerEvent(symbol, new BigDecimal(price), START.plusSeconds(10));
     }
