@@ -46,18 +46,32 @@ public final class NotificationAudienceResolver {
             }
             case TRADE_FAILED -> resolveTradeFailure(event.userId(), audiences);
             case MARKET_OUTAGE -> {
-                activePlanUserIds().forEach(userId -> addUser(audiences, userId));
-                addAdmin(audiences);
+                if (event.audienceContext() == null) {
+                    activePlanUserIds().forEach(userId -> addUser(audiences, userId));
+                    addAdmin(audiences);
+                } else {
+                    resolveContext(event.audienceContext(), audiences);
+                }
             }
             case PLAN_EXECUTION_SKIPPED, TRADE_SUCCEEDED, ASSET_SNAPSHOT_FAILED ->
                     addUser(audiences, event.userId());
-            case SYSTEM_RECOVERED -> resolveRecovery(event.audienceContext(), audiences);
+            case SYSTEM_RECOVERED -> resolveContext(event.audienceContext(), audiences);
             case SERVICE_STARTED -> addAdmin(audiences);
             case BARK_TEST -> {
                 // Direct Bark tests are sent by UserBarkSettingService, never via outbox.
             }
         }
         return List.copyOf(audiences);
+    }
+
+    public NotificationAudienceContext snapshotMarketOutageAudience() {
+        LinkedHashSet<Long> userIds = new LinkedHashSet<>();
+        if (properties.userNotificationsEnabled()) {
+            userIds.addAll(activePlanUserIds());
+        }
+        boolean admin = properties.adminPushUrl() != null
+                && !properties.adminPushUrl().isBlank();
+        return new NotificationAudienceContext(userIds, admin);
     }
 
     private void resolveTradeFailure(Long userId, List<Audience> audiences) {
@@ -74,16 +88,12 @@ public final class NotificationAudienceResolver {
         }
     }
 
-    private void resolveRecovery(
+    private void resolveContext(
             NotificationAudienceContext context,
             List<Audience> audiences) {
-        if (context == null) {
-            return;
-        }
+        if (context == null) return;
         context.recipientUserIds().forEach(userId -> addUser(audiences, userId));
-        if (context.admin()) {
-            addAdmin(audiences);
-        }
+        if (context.admin()) addAdmin(audiences);
     }
 
     private LinkedHashSet<Long> activePlanUserIds() {
@@ -110,7 +120,6 @@ public final class NotificationAudienceResolver {
     }
 
     public record Audience(NotificationRecipientType recipientType, Long userId) {
-
         public Audience {
             Objects.requireNonNull(recipientType, "recipientType");
             if (recipientType == NotificationRecipientType.USER) {

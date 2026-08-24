@@ -23,9 +23,11 @@ public record NotificationEvent(
         attributes = attributes == null
                 ? Map.of()
                 : Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
-        if (audienceContext != null && type != NotificationEventType.SYSTEM_RECOVERED) {
+        if (audienceContext != null
+                && type != NotificationEventType.MARKET_OUTAGE
+                && type != NotificationEventType.SYSTEM_RECOVERED) {
             throw new IllegalArgumentException(
-                    "audience context is only valid for SYSTEM_RECOVERED");
+                    "audience context is only valid for MARKET_OUTAGE or SYSTEM_RECOVERED");
         }
         if (dedupeWindow != null) {
             String requiredScopePrefix;
