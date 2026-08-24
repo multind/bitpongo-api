@@ -1,10 +1,12 @@
 package com.multind.bitpongo.scheduler;
 
+import com.multind.bitpongo.notification.NotificationDedupeWindow;
 import com.multind.bitpongo.notification.NotificationEvent;
 import com.multind.bitpongo.notification.NotificationEventType;
 import com.multind.bitpongo.notification.NotificationPublisher;
 import java.lang.reflect.Field;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -59,6 +61,9 @@ class PlanPurchaseJobTest {
             assertThat(event.intentId()).isNull();
             assertThat(event.occurredAt()).isEqualTo(scheduled.plusSeconds(91));
             assertThat(event.dedupeKey()).isEqualTo("scheduler-fatal:plan-purchase:42:2977056");
+            assertThat(event.dedupeWindow()).isEqualTo(new NotificationDedupeWindow(
+                    "scheduler-fatal:plan-purchase:42",
+                    Duration.ofMinutes(10)));
             assertThat(event.attributes()).containsEntry("status", "PLAN_PURCHASE_FAILED");
             assertThat(event.attributes().get("errorSummary").toString())
                     .contains("<redacted-uri>", "accessKey=<redacted>")

@@ -1,5 +1,6 @@
 package com.multind.bitpongo.scheduler;
 
+import com.multind.bitpongo.notification.NotificationDedupeWindow;
 import com.multind.bitpongo.notification.NotificationEvent;
 import com.multind.bitpongo.notification.NotificationEventType;
 import com.multind.bitpongo.notification.NotificationMessageRenderer;
@@ -8,6 +9,7 @@ import com.multind.bitpongo.plan.PlanRepository;
 import com.multind.bitpongo.strategy.StrategyApplicationService;
 import com.multind.bitpongo.strategy.StrategyRepository;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -24,17 +26,29 @@ public class ScheduleReconciler {
     private final ObjectProvider<PlanRepository> plans;
     private final ObjectProvider<StrategyRepository> strategies;
     private final ObjectProvider<PlanScheduleService> schedules;
-    @Autowired
-    private NotificationPublisher notifications;
-    private Clock clock = Clock.systemUTC();
+    private final NotificationPublisher notifications;
+    private final Clock clock;
 
+    @Autowired
     public ScheduleReconciler(
             ObjectProvider<PlanRepository> plans,
             ObjectProvider<StrategyRepository> strategies,
-            ObjectProvider<PlanScheduleService> schedules) {
+            ObjectProvider<PlanScheduleService> schedules,
+            NotificationPublisher notifications) {
+        this(plans, strategies, schedules, notifications, Clock.systemUTC());
+    }
+
+    ScheduleReconciler(
+            ObjectProvider<PlanRepository> plans,
+            ObjectProvider<StrategyRepository> strategies,
+            ObjectProvider<PlanScheduleService> schedules,
+            NotificationPublisher notifications,
+            Clock clock) {
         this.plans = plans;
         this.strategies = strategies;
         this.schedules = schedules;
+        this.notifications = notifications;
+        this.clock = clock;
     }
 
     @EventListener(ApplicationReadyEvent.class)
@@ -95,7 +109,10 @@ public class ScheduleReconciler {
                         "errorSummary", NotificationMessageRenderer.sanitizeError(
                                 failure.getMessage() == null
                                         ? failure.getClass().getSimpleName()
-                                        : failure.getMessage())));
+                                        : failure.getMessage())),
+                null,
+                new NotificationDedupeWindow(
+                        "scheduler-fatal:" + taskKey, Duration.ofMinutes(10)));
         try {
             notifications.publish(event);
         } catch (RuntimeException notificationFailure) {

@@ -37,26 +37,29 @@ public class OrderReconciliationService {
     private final Clock clock;
     private final Duration staleAge;
     private final int maxAttempts;
-    @Autowired
-    private NotificationPublisher notifications;
+    private final NotificationPublisher notifications;
 
     @Autowired
     public OrderReconciliationService(
             OrderIntentRepository intents, PlanRepository plans,
             ExchangeRepository exchanges, ExchangeGatewayRegistry gateways,
             OrderPersistenceService persistence,
+            NotificationPublisher notifications,
             @Value("${zhitoubao.orders.reconciliation-stale-age:PT30S}") Duration staleAge,
             @Value("${zhitoubao.orders.reconciliation-max-attempts:20}") int maxAttempts) {
-        this(intents, plans, exchanges, gateways, persistence, Clock.systemUTC(), staleAge, maxAttempts);
+        this(intents, plans, exchanges, gateways, persistence, notifications,
+                Clock.systemUTC(), staleAge, maxAttempts);
     }
 
     OrderReconciliationService(
             OrderIntentRepository intents, PlanRepository plans,
             ExchangeRepository exchanges, ExchangeGatewayRegistry gateways,
             OrderPersistenceService persistence,
+            NotificationPublisher notifications,
             Clock clock, Duration staleAge, int maxAttempts) {
         this.intents = intents; this.plans = plans; this.exchanges = exchanges;
         this.gateways = gateways; this.persistence = persistence;
+        this.notifications = notifications;
         this.clock = clock; this.staleAge = staleAge; this.maxAttempts = maxAttempts;
     }
 

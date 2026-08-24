@@ -1,10 +1,12 @@
 package com.multind.bitpongo.scheduler;
 
+import com.multind.bitpongo.notification.NotificationDedupeWindow;
 import com.multind.bitpongo.notification.NotificationEvent;
 import com.multind.bitpongo.notification.NotificationEventType;
 import com.multind.bitpongo.notification.NotificationMessageRenderer;
 import com.multind.bitpongo.notification.NotificationPublisher;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Map;
 import org.slf4j.Logger;
@@ -61,7 +63,10 @@ public class PlanPurchaseJob implements Job {
                         "errorSummary", NotificationMessageRenderer.sanitizeError(
                                 failure.getMessage() == null
                                         ? failure.getClass().getSimpleName()
-                                        : failure.getMessage())));
+                                        : failure.getMessage())),
+                null,
+                new NotificationDedupeWindow(
+                        "scheduler-fatal:plan-purchase:" + planId, Duration.ofMinutes(10)));
         try {
             notifications.publish(event);
         } catch (RuntimeException notificationFailure) {

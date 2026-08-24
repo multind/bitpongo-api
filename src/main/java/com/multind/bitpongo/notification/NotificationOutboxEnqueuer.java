@@ -4,12 +4,14 @@ import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
@@ -25,6 +27,7 @@ class NotificationOutboxEnqueuer {
     private final NotificationAudienceResolver audiences;
     private final BarkEventPolicy policies;
     private final NotificationPayloadSanitizer payloads;
+    private final NotificationDedupeWindowStore windows;
     private final Clock clock;
 
     @Autowired
@@ -32,8 +35,11 @@ class NotificationOutboxEnqueuer {
             NotificationOutboxRepository outbox,
             NotificationAudienceResolver audiences,
             BarkEventPolicy policies,
-            NotificationPayloadSanitizer payloads) {
-        this(outbox, audiences, policies, payloads, Clock.systemUTC());
+            NotificationPayloadSanitizer payloads,
+            NotificationDedupeWindowStore windows,
+            ObjectProvider<Clock> clocks) {
+        this(outbox, audiences, policies, payloads, windows,
+                clocks.getIfAvailable(Clock::systemUTC));
     }
 
     NotificationOutboxEnqueuer(
@@ -41,11 +47,13 @@ class NotificationOutboxEnqueuer {
             NotificationAudienceResolver audiences,
             BarkEventPolicy policies,
             NotificationPayloadSanitizer payloads,
+            NotificationDedupeWindowStore windows,
             Clock clock) {
         this.outbox = Objects.requireNonNull(outbox, "outbox");
         this.audiences = Objects.requireNonNull(audiences, "audiences");
         this.policies = Objects.requireNonNull(policies, "policies");
         this.payloads = Objects.requireNonNull(payloads, "payloads");
+        this.windows = Objects.requireNonNull(windows, "windows");
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
@@ -53,9 +61,21 @@ class NotificationOutboxEnqueuer {
     public void enqueue(NotificationEvent event) {
         Objects.requireNonNull(event, "event");
         String baseDedupeKey = Objects.requireNonNull(event.dedupeKey(), "dedupeKey");
-        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+        Instant instant = clock.instant();
+        LocalDateTime now = LocalDateTime.ofInstant(instant, ZoneOffset.UTC);
         for (NotificationAudienceResolver.Audience audience : audiences.resolve(event)) {
-            String dedupeKey = recipientDedupeKey(baseDedupeKey, audience);
+            String dedupeKey;
+            if (event.dedupeWindow() == null) {
+                dedupeKey = recipientDedupeKey(baseDedupeKey, audience);
+            } else {
+                NotificationDedupeWindow window = event.dedupeWindow();
+                String recipientScope = recipientDedupeKey(window.scopeKey(), audience);
+                LocalDateTime expiresAt = LocalDateTime.ofInstant(
+                        instant.plus(window.duration()), ZoneOffset.UTC);
+                if (!windows.tryAcquire(recipientScope, now, expiresAt)) continue;
+                dedupeKey = recipientDedupeKey(
+                        baseDedupeKey + ":WINDOW:" + instant + ":" + expiresAt, audience);
+            }
             if (outbox.existsByDedupeKey(dedupeKey)) {
                 continue;
             }

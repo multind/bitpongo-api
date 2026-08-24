@@ -1,9 +1,14 @@
 package com.multind.bitpongo.notification;
 
+import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
+import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
@@ -12,7 +17,10 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Import;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -27,7 +35,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
 @Testcontainers
 @SpringBootTest(properties = {
         "zhitoubao.jwt.secret-key=outbox-publisher-test-secret",
-        "zhitoubao.notifications.bark.admin-push-url=",
+        "zhitoubao.notifications.bark.admin-push-url=https://localhost/admin-secret-key",
         "zhitoubao.notifications.bark.allowed-hosts=localhost",
         "zhitoubao.notifications.bark.allow-private-hosts=true",
         "zhitoubao.notifications.bark.credential-encryption-key="
@@ -39,6 +47,7 @@ import static org.assertj.core.api.Assertions.assertThatCode;
         "spring.quartz.auto-startup=false"
 })
 @DirtiesContext(classMode = DirtiesContext.ClassMode.AFTER_CLASS)
+@Import(OutboxNotificationPublisherTest.AdjustableClockConfiguration.class)
 class OutboxNotificationPublisherTest {
 
     @Container
@@ -62,9 +71,14 @@ class OutboxNotificationPublisherTest {
     @Autowired
     private PlatformTransactionManager transactionManager;
 
+    @Autowired
+    private AdjustableClock clock;
+
     @BeforeEach
     void clearOutbox() {
         outbox.deleteAll();
+        jdbc.update("delete from notification_dedupe_window");
+        clock.set(Instant.parse("2026-08-23T04:09:59Z"));
     }
 
     @Test
@@ -107,6 +121,120 @@ class OutboxNotificationPublisherTest {
     }
 
     @Test
+    void windowedEventsTwoSecondsAcrossFixedBucketBoundaryPersistOnePerAudience() {
+        long userId = createUser("window-boundary@example.com");
+        enableBarkFor(userId);
+        NotificationDedupeWindow window = new NotificationDedupeWindow(
+                "scheduler-fatal:plan-purchase:42", Duration.ofMinutes(10));
+
+        publisher.publish(windowedSchedulerEvent(
+                userId, "scheduler-fatal:plan-purchase:42:old-bucket", window));
+        clock.advance(Duration.ofSeconds(2));
+        publisher.publish(windowedSchedulerEvent(
+                userId, "scheduler-fatal:plan-purchase:42:new-bucket", window));
+
+        assertThat(outbox.findAll())
+                .hasSize(2)
+                .extracting(NotificationOutboxEntity::getRecipientType)
+                .containsExactlyInAnyOrder(
+                        NotificationRecipientType.USER, NotificationRecipientType.ADMIN);
+    }
+
+    @Test
+    void windowAllowsAnotherOutboxRecordExactlyAtExpiry() {
+        long userId = createUser("window-expiry@example.com");
+        enableBarkFor(userId);
+        NotificationDedupeWindow window = new NotificationDedupeWindow(
+                "scheduler-fatal:plan-purchase:43", Duration.ofMinutes(10));
+
+        publisher.publish(windowedSchedulerEvent(
+                userId, "scheduler-fatal:plan-purchase:43:first", window));
+        clock.advance(Duration.ofMinutes(10));
+        publisher.publish(windowedSchedulerEvent(
+                userId, "scheduler-fatal:plan-purchase:43:second", window));
+
+        assertThat(outbox.findAll())
+                .hasSize(4)
+                .extracting(NotificationOutboxEntity::getRecipientType)
+                .containsExactlyInAnyOrder(
+                        NotificationRecipientType.USER, NotificationRecipientType.ADMIN,
+                        NotificationRecipientType.USER, NotificationRecipientType.ADMIN);
+    }
+
+    @Test
+    void concurrentWindowAcquisitionPersistsOneRecordPerAudience() throws Exception {
+        long userId = createUser("window-concurrent@example.com");
+        enableBarkFor(userId);
+        NotificationDedupeWindow window = new NotificationDedupeWindow(
+                "scheduler-fatal:plan-purchase:44", Duration.ofMinutes(10));
+        NotificationEvent firstEvent = windowedSchedulerEvent(
+                userId, "scheduler-fatal:plan-purchase:44:first", window);
+        NotificationEvent secondEvent = windowedSchedulerEvent(
+                userId, "scheduler-fatal:plan-purchase:44:second", window);
+        CountDownLatch ready = new CountDownLatch(2);
+        CountDownLatch start = new CountDownLatch(1);
+
+        try (ExecutorService workers = Executors.newFixedThreadPool(2)) {
+            Future<?> first = workers.submit(() -> publishAfterBarrier(firstEvent, ready, start));
+            Future<?> second = workers.submit(() -> publishAfterBarrier(secondEvent, ready, start));
+            ready.await();
+            start.countDown();
+            first.get();
+            second.get();
+        }
+
+        assertThat(outbox.findAll())
+                .hasSize(2)
+                .extracting(NotificationOutboxEntity::getRecipientType)
+                .containsExactlyInAnyOrder(
+                        NotificationRecipientType.USER, NotificationRecipientType.ADMIN);
+    }
+
+    @Test
+    void occupiedUserWindowDoesNotSuppressAdminAudience() {
+        long userId = createUser("window-audience@example.com");
+        enableBarkFor(userId);
+        String scope = "scheduler-fatal:plan-purchase:45";
+        jdbc.update("""
+                insert into notification_dedupe_window (scope_key, expires_at, updated_at)
+                values (?, ?, ?)
+                """, scope + ":USER:" + userId,
+                java.time.LocalDateTime.ofInstant(clock.instant().plusSeconds(600), ZoneOffset.UTC),
+                java.time.LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC));
+
+        publisher.publish(windowedSchedulerEvent(
+                userId, "scheduler-fatal:plan-purchase:45:attempt",
+                new NotificationDedupeWindow(scope, Duration.ofMinutes(10))));
+
+        assertThat(outbox.findAll()).singleElement()
+                .extracting(NotificationOutboxEntity::getRecipientType)
+                .isEqualTo(NotificationRecipientType.ADMIN);
+    }
+
+    @Test
+    void failedOutboxTransactionDoesNotBurnTheWindow() {
+        long userId = 900_007L;
+        String scope = "scheduler-fatal:plan-purchase:46";
+        NotificationEvent event = windowedSchedulerEvent(
+                userId, "scheduler-fatal:plan-purchase:46:attempt",
+                new NotificationDedupeWindow(scope, Duration.ofMinutes(10)));
+
+        publisher.publish(event);
+
+        assertThat(outbox.count()).isZero();
+        assertThat(jdbc.queryForObject(
+                "select count(*) from notification_dedupe_window where scope_key like ?",
+                Integer.class, scope + "%")).isZero();
+
+        jdbc.update("insert into user (id, name, email, password) values (?, ?, ?, ?)",
+                userId, "Outbox Test", "window-rollback@example.com", "unused");
+        enableBarkFor(userId);
+        publisher.publish(event);
+
+        assertThat(outbox.findAll()).hasSize(2);
+    }
+
+    @Test
     void enqueueCommitsIndependentlyWhenOuterBusinessTransactionRollsBack() {
         long userId = createUser("publisher-requires-new@example.com");
         enableBarkFor(userId);
@@ -124,7 +252,7 @@ class OutboxNotificationPublisherTest {
     @Test
     void enqueueFailureNeverEscapesToTheBusinessCaller() {
         NotificationEvent invalid = new NotificationEvent(
-                NotificationEventType.TRADE_FAILED,
+                NotificationEventType.SCHEDULER_FATAL,
                 999_999L,
                 7L,
                 null,
@@ -137,7 +265,7 @@ class OutboxNotificationPublisherTest {
     }
 
     @Test
-    void marketOutageTargetsDistinctUsersWithActivePlansAndNoAdminWhenUnconfigured() {
+    void marketOutageTargetsDistinctUsersAndConfiguredAdmin() {
         long firstUser = createUser("audience-first@example.com");
         long secondUser = createUser("audience-second@example.com");
         long closedUser = createUser("audience-closed@example.com");
@@ -158,10 +286,13 @@ class OutboxNotificationPublisherTest {
 
         assertThat(resolved)
                 .extracting(NotificationAudienceResolver.Audience::userId)
-                .containsExactlyInAnyOrder(firstUser, secondUser);
+                .containsExactlyInAnyOrder(firstUser, secondUser, null);
         assertThat(resolved)
                 .extracting(NotificationAudienceResolver.Audience::recipientType)
-                .containsOnly(NotificationRecipientType.USER);
+                .containsExactlyInAnyOrder(
+                        NotificationRecipientType.USER,
+                        NotificationRecipientType.USER,
+                        NotificationRecipientType.ADMIN);
     }
 
     @Test
@@ -229,5 +360,60 @@ class OutboxNotificationPublisherTest {
                 Instant.parse("2026-08-23T04:00:00Z"),
                 dedupeKey,
                 Map.of("symbol", "BTCUSDT", "error", "insufficient balance"));
+    }
+
+    private static NotificationEvent windowedSchedulerEvent(
+            long userId,
+            String dedupeKey,
+            NotificationDedupeWindow window) {
+        return new NotificationEvent(
+                NotificationEventType.SCHEDULER_FATAL,
+                userId,
+                42L,
+                null,
+                Instant.parse("2026-08-23T04:00:00Z"),
+                dedupeKey,
+                Map.of("status", "PLAN_PURCHASE_FAILED"),
+                null,
+                window);
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    static class AdjustableClockConfiguration {
+        @Bean
+        AdjustableClock notificationClock() {
+            return new AdjustableClock(Instant.parse("2026-08-23T04:09:59Z"));
+        }
+    }
+
+    static final class AdjustableClock extends Clock {
+        private final AtomicReference<Instant> current;
+
+        AdjustableClock(Instant initial) {
+            current = new AtomicReference<>(initial);
+        }
+
+        void set(Instant instant) {
+            current.set(instant);
+        }
+
+        void advance(Duration duration) {
+            current.updateAndGet(instant -> instant.plus(duration));
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return zone.equals(ZoneOffset.UTC) ? this : Clock.fixed(instant(), zone);
+        }
+
+        @Override
+        public Instant instant() {
+            return current.get();
+        }
     }
 }

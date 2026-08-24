@@ -1,12 +1,14 @@
 package com.multind.bitpongo.plan;
 
 import com.multind.bitpongo.exchange.*;
+import com.multind.bitpongo.notification.NotificationDedupeWindow;
 import com.multind.bitpongo.notification.NotificationEvent;
 import com.multind.bitpongo.notification.NotificationEventType;
 import com.multind.bitpongo.notification.NotificationMessageRenderer;
 import com.multind.bitpongo.notification.NotificationPublisher;
 import com.multind.bitpongo.scheduler.AssetSnapshotUseCase;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.Map;
@@ -28,23 +30,26 @@ public class AssetSnapshotService implements AssetSnapshotUseCase {
     private final ExchangeGatewayRegistry gateways;
     private final TransactionTemplate transactions;
     private final Clock clock;
-    @Autowired
-    private NotificationPublisher notifications;
+    private final NotificationPublisher notifications;
 
     @Autowired
     public AssetSnapshotService(
             PlanRepository plans, SnapshotRepository snapshots,
             ExchangeRepository exchanges, ExchangeGatewayRegistry gateways,
-            ObjectProvider<PlatformTransactionManager> transactionManager) {
-        this(plans, snapshots, exchanges, gateways, transactionManager.getIfAvailable(), Clock.systemUTC());
+            ObjectProvider<PlatformTransactionManager> transactionManager,
+            NotificationPublisher notifications) {
+        this(plans, snapshots, exchanges, gateways, transactionManager.getIfAvailable(),
+                notifications, Clock.systemUTC());
     }
 
     AssetSnapshotService(
             PlanRepository plans, SnapshotRepository snapshots,
             ExchangeRepository exchanges, ExchangeGatewayRegistry gateways,
-            PlatformTransactionManager transactionManager, Clock clock) {
+            PlatformTransactionManager transactionManager,
+            NotificationPublisher notifications, Clock clock) {
         this.plans = plans; this.snapshots = snapshots; this.exchanges = exchanges;
         this.gateways = gateways; this.clock = clock;
+        this.notifications = notifications;
         this.transactions = transactionManager == null ? null : new TransactionTemplate(transactionManager);
         if (this.transactions != null) this.transactions.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -86,7 +91,10 @@ public class AssetSnapshotService implements AssetSnapshotUseCase {
                         "errorSummary", NotificationMessageRenderer.sanitizeError(
                                 failure.getMessage() == null
                                         ? failure.getClass().getSimpleName()
-                                        : failure.getMessage())));
+                                        : failure.getMessage())),
+                null,
+                new NotificationDedupeWindow(
+                        "asset-snapshot-failed:" + plan.getId(), Duration.ofMinutes(30)));
         try {
             notifications.publish(event);
         } catch (RuntimeException notificationFailure) {

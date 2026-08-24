@@ -1,12 +1,13 @@
 package com.multind.bitpongo.plan;
 
 import com.multind.bitpongo.exchange.*;
+import com.multind.bitpongo.notification.NotificationDedupeWindow;
 import com.multind.bitpongo.notification.NotificationEvent;
 import com.multind.bitpongo.notification.NotificationEventType;
 import com.multind.bitpongo.notification.NotificationPublisher;
-import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -40,7 +41,8 @@ class AssetSnapshotServiceTest {
                 new AccountBalance("USDT", new BigDecimal("12.30"), BigDecimal.ZERO),
                 new AccountBalance("USDT", new BigDecimal("5"), BigDecimal.ZERO));
 
-        new AssetSnapshotService(plans, snapshots, exchanges, gateways, null,
+        new AssetSnapshotService(
+                plans, snapshots, exchanges, gateways, null, event -> {},
                 Clock.fixed(Instant.parse("2026-08-09T00:00:00Z"), ZoneOffset.UTC)).captureAll();
 
         verify(snapshots).save(argThat(value -> value.getPlanId() == 1L && value.getUserId() == 7L
@@ -73,8 +75,7 @@ class AssetSnapshotServiceTest {
                 .thenReturn(new AccountBalance("USDT", new BigDecimal("5"), BigDecimal.ZERO));
         CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
         AssetSnapshotService service = new AssetSnapshotService(
-                plans, snapshots, exchanges, gateways, null, Clock.fixed(NOW, ZoneOffset.UTC));
-        injectIfPresent(service, notifications);
+                plans, snapshots, exchanges, gateways, null, notifications, Clock.fixed(NOW, ZoneOffset.UTC));
 
         service.captureAll();
         service.captureAll();
@@ -87,6 +88,8 @@ class AssetSnapshotServiceTest {
             assertThat(event.intentId()).isNull();
             assertThat(event.occurredAt()).isEqualTo(NOW);
             assertThat(event.dedupeKey()).isEqualTo("asset-snapshot-failed:1:992352");
+            assertThat(event.dedupeWindow()).isEqualTo(new NotificationDedupeWindow(
+                    "asset-snapshot-failed:1", Duration.ofMinutes(30)));
             assertThat(event.attributes()).containsEntry("status", "ASSET_SNAPSHOT_FAILED");
             assertThat(event.attributes().get("errorSummary").toString())
                     .contains("<redacted-uri>", "token=<redacted>")
@@ -114,8 +117,7 @@ class AssetSnapshotServiceTest {
         CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
         notifications.failPublishing = true;
         AssetSnapshotService service = new AssetSnapshotService(
-                plans, snapshots, exchanges, gateways, null, Clock.fixed(NOW, ZoneOffset.UTC));
-        injectIfPresent(service, notifications);
+                plans, snapshots, exchanges, gateways, null, notifications, Clock.fixed(NOW, ZoneOffset.UTC));
 
         assertDoesNotThrow(service::captureAll);
 
@@ -123,16 +125,6 @@ class AssetSnapshotServiceTest {
         verify(snapshots).save(argThat(value -> value.getPlanId() == 2L));
     }
 
-    private static void injectIfPresent(
-            AssetSnapshotService service,
-            NotificationPublisher notifications) throws Exception {
-        try {
-            Field field = AssetSnapshotService.class.getDeclaredField("notifications");
-            field.setAccessible(true);
-            field.set(service, notifications);
-        } catch (NoSuchFieldException ignored) {
-        }
-    }
 
     private static final class CollectingNotificationPublisher implements NotificationPublisher {
         private final List<NotificationEvent> events = new ArrayList<>();

@@ -14,7 +14,8 @@ public record NotificationEvent(
         Instant occurredAt,
         String dedupeKey,
         Map<String, Object> attributes,
-        NotificationAudienceContext audienceContext) {
+        NotificationAudienceContext audienceContext,
+        NotificationDedupeWindow dedupeWindow) {
 
     public NotificationEvent {
         Objects.requireNonNull(type, "type");
@@ -34,7 +35,21 @@ public record NotificationEvent(
             Long intentId,
             Instant occurredAt,
             String dedupeKey,
+            Map<String, Object> attributes,
+            NotificationAudienceContext audienceContext) {
+        this(type, userId, planId, intentId, occurredAt, dedupeKey, attributes,
+                audienceContext, null);
+    }
+
+    public NotificationEvent(
+            NotificationEventType type,
+            Long userId,
+            Long planId,
+            Long intentId,
+            Instant occurredAt,
+            String dedupeKey,
             Map<String, Object> attributes) {
-        this(type, userId, planId, intentId, occurredAt, dedupeKey, attributes, null);
+        this(type, userId, planId, intentId, occurredAt, dedupeKey, attributes,
+                null, null);
     }
 }

@@ -6,7 +6,6 @@ import com.multind.bitpongo.notification.NotificationEventType;
 import com.multind.bitpongo.notification.NotificationPublisher;
 import com.multind.bitpongo.plan.PlanEntity;
 import com.multind.bitpongo.plan.PlanRepository;
-import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
@@ -178,8 +177,7 @@ class OrderReconciliationServiceTest {
                 eq(intent), eq("MANUAL_REVIEW"), eq(LocalDateTime.ofInstant(NOW, ZoneOffset.UTC))))
                 .thenReturn(true, false);
         CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
-        OrderReconciliationService service = service(intents, plans, exchanges, gateways, persistence);
-        injectIfPresent(service, notifications);
+        OrderReconciliationService service = service(intents, plans, exchanges, gateways, persistence, notifications);
 
         service.reconcilePending();
         service.reconcilePending();
@@ -191,6 +189,7 @@ class OrderReconciliationServiceTest {
             assertThat(event.intentId()).isEqualTo(1L);
             assertThat(event.occurredAt()).isEqualTo(NOW);
             assertThat(event.dedupeKey()).isEqualTo("order-manual-review:1");
+            assertThat(event.dedupeWindow()).isNull();
             assertThat(event.attributes())
                     .containsEntry("symbol", "BTCUSDT")
                     .containsEntry("status", "MANUAL_REVIEW");
@@ -222,8 +221,7 @@ class OrderReconciliationServiceTest {
         when(persistence.markAfterReconciliation(
                 eq(ready), eq("MANUAL_REVIEW"), any())).thenReturn(false);
         CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
-        OrderReconciliationService service = service(intents, plans, exchanges, gateways, persistence);
-        injectIfPresent(service, notifications);
+        OrderReconciliationService service = service(intents, plans, exchanges, gateways, persistence, notifications);
 
         service.reconcilePending();
 
@@ -251,8 +249,7 @@ class OrderReconciliationServiceTest {
                 .thenReturn(true);
         CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
         notifications.failPublishing = true;
-        OrderReconciliationService service = service(intents, plans, exchanges, gateways, persistence);
-        injectIfPresent(service, notifications);
+        OrderReconciliationService service = service(intents, plans, exchanges, gateways, persistence, notifications);
 
         assertDoesNotThrow(service::reconcilePending);
 
@@ -263,16 +260,6 @@ class OrderReconciliationServiceTest {
                 second, "MANUAL_REVIEW", LocalDateTime.ofInstant(NOW, ZoneOffset.UTC));
     }
 
-    private static void injectIfPresent(
-            OrderReconciliationService service,
-            NotificationPublisher notifications) throws Exception {
-        try {
-            Field field = OrderReconciliationService.class.getDeclaredField("notifications");
-            field.setAccessible(true);
-            field.set(service, notifications);
-        } catch (NoSuchFieldException ignored) {
-        }
-    }
 
     private static final class CollectingNotificationPublisher implements NotificationPublisher {
         private final List<NotificationEvent> events = new ArrayList<>();
@@ -306,8 +293,15 @@ class OrderReconciliationServiceTest {
     private static OrderReconciliationService service(
             OrderIntentRepository intents, PlanRepository plans, ExchangeRepository exchanges,
             ExchangeGatewayRegistry gateways, OrderPersistenceService persistence) {
+        return service(intents, plans, exchanges, gateways, persistence, event -> {});
+    }
+
+    private static OrderReconciliationService service(
+            OrderIntentRepository intents, PlanRepository plans, ExchangeRepository exchanges,
+            ExchangeGatewayRegistry gateways, OrderPersistenceService persistence,
+            NotificationPublisher notifications) {
         return new OrderReconciliationService(
                 intents, plans, exchanges, gateways,
-                persistence, Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofSeconds(30), 20);
+                persistence, notifications, Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofSeconds(30), 20);
     }
 }

@@ -1,5 +1,6 @@
 package com.multind.bitpongo.scheduler;
 
+import com.multind.bitpongo.notification.NotificationDedupeWindow;
 import com.multind.bitpongo.notification.NotificationEvent;
 import com.multind.bitpongo.notification.NotificationEventType;
 import com.multind.bitpongo.notification.NotificationPublisher;
@@ -7,8 +8,8 @@ import com.multind.bitpongo.plan.PlanEntity;
 import com.multind.bitpongo.plan.PlanRepository;
 import com.multind.bitpongo.strategy.StrategyEntity;
 import com.multind.bitpongo.strategy.StrategyRepository;
-import java.lang.reflect.Field;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
@@ -46,7 +47,8 @@ class ScheduleReconcilerIntegrationTest {
         when(plans.findAll()).thenReturn(List.of(active, stopped));
         when(strategies.findById(11L)).thenReturn(Optional.of(strategy));
 
-        new ScheduleReconciler(plansProvider, strategiesProvider, schedulesProvider).reconcile();
+        new ScheduleReconciler(
+                plansProvider, strategiesProvider, schedulesProvider, event -> {}).reconcile();
 
         verify(schedules).schedule(1L, "0 0 8 * * ?");
         verify(schedules).remove(2L);
@@ -74,10 +76,8 @@ class ScheduleReconcilerIntegrationTest {
                 .when(schedules).schedule(eq(1L), eq("0 0 8 * * ?"));
         CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
         ScheduleReconciler reconciler = new ScheduleReconciler(
-                plansProvider, strategiesProvider, schedulesProvider);
-        injectIfPresent(reconciler, "notifications", notifications);
-        injectIfPresent(reconciler, "clock", Clock.fixed(
-                Instant.parse("2026-08-09T00:01:31Z"), ZoneOffset.UTC));
+                plansProvider, strategiesProvider, schedulesProvider, notifications,
+                Clock.fixed(Instant.parse("2026-08-09T00:01:31Z"), ZoneOffset.UTC));
 
         reconciler.reconcile();
         reconciler.reconcile();
@@ -91,6 +91,8 @@ class ScheduleReconcilerIntegrationTest {
             assertThat(event.occurredAt()).isEqualTo(Instant.parse("2026-08-09T00:01:31Z"));
             assertThat(event.dedupeKey())
                     .isEqualTo("scheduler-fatal:plan-reconcile:1:2977056");
+            assertThat(event.dedupeWindow()).isEqualTo(new NotificationDedupeWindow(
+                    "scheduler-fatal:plan-reconcile:1", Duration.ofMinutes(10)));
             assertThat(event.attributes()).containsEntry("status", "PLAN_REGISTRATION_FAILED");
             assertThat(event.attributes().get("errorSummary").toString())
                     .contains("<redacted-uri>", "secret_key=<redacted>")
@@ -115,8 +117,7 @@ class ScheduleReconcilerIntegrationTest {
         CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
         notifications.failPublishing = true;
         ScheduleReconciler reconciler = new ScheduleReconciler(
-                provider(plans), provider(strategies), provider(schedules));
-        injectIfPresent(reconciler, "notifications", notifications);
+                provider(plans), provider(strategies), provider(schedules), notifications);
 
         assertDoesNotThrow(reconciler::reconcile);
 
@@ -134,10 +135,8 @@ class ScheduleReconcilerIntegrationTest {
                 .when(schedules).scheduleAssetSnapshot();
         CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
         ScheduleReconciler reconciler = new ScheduleReconciler(
-                provider(plans), provider(strategies), provider(schedules));
-        injectIfPresent(reconciler, "notifications", notifications);
-        injectIfPresent(reconciler, "clock", Clock.fixed(
-                Instant.parse("2026-08-09T00:01:31Z"), ZoneOffset.UTC));
+                provider(plans), provider(strategies), provider(schedules), notifications,
+                Clock.fixed(Instant.parse("2026-08-09T00:01:31Z"), ZoneOffset.UTC));
 
         reconciler.reconcile();
 
@@ -147,6 +146,8 @@ class ScheduleReconcilerIntegrationTest {
             assertThat(event.planId()).isNull();
             assertThat(event.dedupeKey())
                     .isEqualTo("scheduler-fatal:asset-snapshot-registration:2977056");
+            assertThat(event.dedupeWindow()).isEqualTo(new NotificationDedupeWindow(
+                    "scheduler-fatal:asset-snapshot-registration", Duration.ofMinutes(10)));
             assertThat(event.attributes())
                     .containsEntry("status", "ASSET_SNAPSHOT_REGISTRATION_FAILED");
         });
@@ -159,14 +160,6 @@ class ScheduleReconcilerIntegrationTest {
         return provider;
     }
 
-    private static void injectIfPresent(Object target, String name, Object value) throws Exception {
-        try {
-            Field field = target.getClass().getDeclaredField(name);
-            field.setAccessible(true);
-            field.set(target, value);
-        } catch (NoSuchFieldException ignored) {
-        }
-    }
 
     private static final class CollectingNotificationPublisher implements NotificationPublisher {
         private final List<NotificationEvent> events = new ArrayList<>();
