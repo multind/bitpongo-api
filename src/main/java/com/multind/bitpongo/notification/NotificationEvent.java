@@ -1,5 +1,6 @@
 package com.multind.bitpongo.notification;
 
+import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -25,6 +26,25 @@ public record NotificationEvent(
         if (audienceContext != null && type != NotificationEventType.SYSTEM_RECOVERED) {
             throw new IllegalArgumentException(
                     "audience context is only valid for SYSTEM_RECOVERED");
+        }
+        if (dedupeWindow != null) {
+            String requiredScopePrefix;
+            Duration requiredDuration;
+            if (type == NotificationEventType.SCHEDULER_FATAL) {
+                requiredScopePrefix = "scheduler-fatal:";
+                requiredDuration = Duration.ofMinutes(10);
+            } else if (type == NotificationEventType.ASSET_SNAPSHOT_FAILED) {
+                requiredScopePrefix = "asset-snapshot-failed:";
+                requiredDuration = Duration.ofMinutes(30);
+            } else {
+                throw new IllegalArgumentException(
+                        "dedupe window is not valid for event type " + type);
+            }
+            if (!dedupeWindow.scopeKey().startsWith(requiredScopePrefix)
+                    || !dedupeWindow.duration().equals(requiredDuration)) {
+                throw new IllegalArgumentException(
+                        "dedupe window does not match event type " + type);
+            }
         }
     }
 

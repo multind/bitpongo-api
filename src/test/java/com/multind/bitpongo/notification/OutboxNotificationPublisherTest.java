@@ -3,6 +3,7 @@ package com.multind.bitpongo.notification;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
+import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
@@ -21,6 +22,7 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
 import org.springframework.transaction.PlatformTransactionManager;
@@ -31,6 +33,7 @@ import org.testcontainers.mysql.MySQLContainer;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers
 @SpringBootTest(properties = {
@@ -70,6 +73,9 @@ class OutboxNotificationPublisherTest {
 
     @Autowired
     private PlatformTransactionManager transactionManager;
+
+    @Autowired
+    private NotificationDedupeWindowStore windows;
 
     @Autowired
     private AdjustableClock clock;
@@ -191,7 +197,7 @@ class OutboxNotificationPublisherTest {
     }
 
     @Test
-    void occupiedUserWindowDoesNotSuppressAdminAudience() {
+    void duplicateUserScopeLeavesTransactionUsableAndEnqueuesAdminAudience() {
         long userId = createUser("window-audience@example.com");
         enableBarkFor(userId);
         String scope = "scheduler-fatal:plan-purchase:45";
@@ -209,6 +215,25 @@ class OutboxNotificationPublisherTest {
         assertThat(outbox.findAll()).singleElement()
                 .extracting(NotificationOutboxEntity::getRecipientType)
                 .isEqualTo(NotificationRecipientType.ADMIN);
+        assertThat(jdbc.queryForObject(
+                "select count(*) from notification_dedupe_window where scope_key = ?",
+                Integer.class, scope + ":ADMIN")).isOne();
+    }
+
+    @Test
+    void nonDuplicateDatabaseErrorsPropagateFromWindowAcquisition() {
+        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+        String valueTooLongForDatabaseColumn = "x".repeat(192);
+
+        assertThatThrownBy(() -> windows.tryAcquire(
+                valueTooLongForDatabaseColumn,
+                now,
+                now.plusMinutes(10)))
+                .isInstanceOf(DataIntegrityViolationException.class);
+
+        assertThat(jdbc.queryForObject(
+                "select count(*) from notification_dedupe_window",
+                Integer.class)).isZero();
     }
 
     @Test

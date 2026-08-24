@@ -3,6 +3,7 @@ package com.multind.bitpongo.notification;
 import java.time.LocalDateTime;
 import java.util.Objects;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DuplicateKeyException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Component;
 
@@ -24,10 +25,14 @@ final class NotificationDedupeWindowStore {
         if (renewed == 1) {
             return true;
         }
-        return jdbc.update("""
-                insert ignore into notification_dedupe_window (
-                    scope_key, expires_at, updated_at
-                ) values (?, ?, ?)
-                """, recipientScope, expiresAt, now) == 1;
+        try {
+            return jdbc.update("""
+                    insert into notification_dedupe_window (
+                        scope_key, expires_at, updated_at
+                    ) values (?, ?, ?)
+                    """, recipientScope, expiresAt, now) == 1;
+        } catch (DuplicateKeyException duplicate) {
+            return false;
+        }
     }
 }

@@ -103,7 +103,7 @@ public class ScheduleReconciler {
                 planId,
                 null,
                 occurredAt,
-                "scheduler-fatal:" + taskKey + ":" + occurredAt.getEpochSecond() / 600,
+                "scheduler-fatal:" + taskKey,
                 Map.of(
                         "status", status,
                         "errorSummary", NotificationMessageRenderer.sanitizeError(

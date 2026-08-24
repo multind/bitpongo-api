@@ -60,7 +60,7 @@ class PlanPurchaseJobTest {
             assertThat(event.planId()).isEqualTo(42L);
             assertThat(event.intentId()).isNull();
             assertThat(event.occurredAt()).isEqualTo(scheduled.plusSeconds(91));
-            assertThat(event.dedupeKey()).isEqualTo("scheduler-fatal:plan-purchase:42:2977056");
+            assertThat(event.dedupeKey()).isEqualTo("scheduler-fatal:plan-purchase:42");
             assertThat(event.dedupeWindow()).isEqualTo(new NotificationDedupeWindow(
                     "scheduler-fatal:plan-purchase:42",
                     Duration.ofMinutes(10)));

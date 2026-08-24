@@ -87,7 +87,7 @@ class AssetSnapshotServiceTest {
             assertThat(event.planId()).isEqualTo(1L);
             assertThat(event.intentId()).isNull();
             assertThat(event.occurredAt()).isEqualTo(NOW);
-            assertThat(event.dedupeKey()).isEqualTo("asset-snapshot-failed:1:992352");
+            assertThat(event.dedupeKey()).isEqualTo("asset-snapshot-failed:1");
             assertThat(event.dedupeWindow()).isEqualTo(new NotificationDedupeWindow(
                     "asset-snapshot-failed:1", Duration.ofMinutes(30)));
             assertThat(event.attributes()).containsEntry("status", "ASSET_SNAPSHOT_FAILED");

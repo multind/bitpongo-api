@@ -90,7 +90,7 @@ class ScheduleReconcilerIntegrationTest {
             assertThat(event.intentId()).isNull();
             assertThat(event.occurredAt()).isEqualTo(Instant.parse("2026-08-09T00:01:31Z"));
             assertThat(event.dedupeKey())
-                    .isEqualTo("scheduler-fatal:plan-reconcile:1:2977056");
+                    .isEqualTo("scheduler-fatal:plan-reconcile:1");
             assertThat(event.dedupeWindow()).isEqualTo(new NotificationDedupeWindow(
                     "scheduler-fatal:plan-reconcile:1", Duration.ofMinutes(10)));
             assertThat(event.attributes()).containsEntry("status", "PLAN_REGISTRATION_FAILED");
@@ -145,7 +145,7 @@ class ScheduleReconcilerIntegrationTest {
             assertThat(event.userId()).isNull();
             assertThat(event.planId()).isNull();
             assertThat(event.dedupeKey())
-                    .isEqualTo("scheduler-fatal:asset-snapshot-registration:2977056");
+                    .isEqualTo("scheduler-fatal:asset-snapshot-registration");
             assertThat(event.dedupeWindow()).isEqualTo(new NotificationDedupeWindow(
                     "scheduler-fatal:asset-snapshot-registration", Duration.ofMinutes(10)));
             assertThat(event.attributes())

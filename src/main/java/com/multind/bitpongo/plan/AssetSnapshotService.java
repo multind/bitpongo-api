@@ -84,8 +84,7 @@ public class AssetSnapshotService implements AssetSnapshotUseCase {
                 plan.getId(),
                 null,
                 occurredAt,
-                "asset-snapshot-failed:" + plan.getId() + ":"
-                        + occurredAt.getEpochSecond() / 1800,
+                "asset-snapshot-failed:" + plan.getId(),
                 Map.of(
                         "status", "ASSET_SNAPSHOT_FAILED",
                         "errorSummary", NotificationMessageRenderer.sanitizeError(

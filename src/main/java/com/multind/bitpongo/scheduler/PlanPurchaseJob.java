@@ -56,8 +56,7 @@ public class PlanPurchaseJob implements Job {
                 planId,
                 null,
                 occurredAt,
-                "scheduler-fatal:plan-purchase:" + planId + ":"
-                        + occurredAt.getEpochSecond() / 600,
+                "scheduler-fatal:plan-purchase:" + planId,
                 Map.of(
                         "status", "PLAN_PURCHASE_FAILED",
                         "errorSummary", NotificationMessageRenderer.sanitizeError(
