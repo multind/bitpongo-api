@@ -1,9 +1,15 @@
 package com.multind.bitpongo.plan;
 
 import com.multind.bitpongo.exchange.*;
+import com.multind.bitpongo.notification.NotificationEvent;
+import com.multind.bitpongo.notification.NotificationEventType;
+import com.multind.bitpongo.notification.NotificationMessageRenderer;
+import com.multind.bitpongo.notification.NotificationPublisher;
 import com.multind.bitpongo.scheduler.AssetSnapshotUseCase;
 import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -22,6 +28,8 @@ public class AssetSnapshotService implements AssetSnapshotUseCase {
     private final ExchangeGatewayRegistry gateways;
     private final TransactionTemplate transactions;
     private final Clock clock;
+    @Autowired
+    private NotificationPublisher notifications;
 
     @Autowired
     public AssetSnapshotService(
@@ -58,7 +66,32 @@ public class AssetSnapshotService implements AssetSnapshotUseCase {
                 else transactions.executeWithoutResult(status -> snapshots.save(snapshot));
             } catch (RuntimeException exception) {
                 log.error("资产快照失败，planId={}", plan.getId(), exception);
+                publishFailure(plan, exception);
             }
         });
+    }
+
+    private void publishFailure(PlanEntity plan, RuntimeException failure) {
+        Instant occurredAt = clock.instant();
+        NotificationEvent event = new NotificationEvent(
+                NotificationEventType.ASSET_SNAPSHOT_FAILED,
+                plan.getUserId(),
+                plan.getId(),
+                null,
+                occurredAt,
+                "asset-snapshot-failed:" + plan.getId() + ":"
+                        + occurredAt.getEpochSecond() / 1800,
+                Map.of(
+                        "status", "ASSET_SNAPSHOT_FAILED",
+                        "errorSummary", NotificationMessageRenderer.sanitizeError(
+                                failure.getMessage() == null
+                                        ? failure.getClass().getSimpleName()
+                                        : failure.getMessage())));
+        try {
+            notifications.publish(event);
+        } catch (RuntimeException notificationFailure) {
+            log.warn("资产快照失败通知发布失败 planId={} errorType={}",
+                    plan.getId(), notificationFailure.getClass().getSimpleName());
+        }
     }
 }

@@ -35,6 +35,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         com.multind.bitpongo.scheduler.OrderReconciliationService.class,
         com.multind.bitpongo.scheduler.ScheduledPurchaseService.class
 })
+@org.springframework.context.annotation.Import(com.multind.bitpongo.TestNotificationPublisherConfiguration.class)
 class ExchangeControllerContractTest {
     @Autowired private MockMvc mvc;
     @Autowired private com.multind.bitpongo.auth.JwtTokenService tokens;

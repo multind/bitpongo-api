@@ -30,7 +30,10 @@ import static org.mockito.Mockito.when;
 })
 @ActiveProfiles("test")
 @AutoConfigureMockMvc
-@Import(SecurityConfigurationTest.TestEndpoints.class)
+@Import({
+        SecurityConfigurationTest.TestEndpoints.class,
+        com.multind.bitpongo.TestNotificationPublisherConfiguration.class
+})
 @MockitoBean(types = {
         com.multind.bitpongo.plan.AssetSnapshotService.class,
         com.multind.bitpongo.scheduler.OrderPersistenceService.class,

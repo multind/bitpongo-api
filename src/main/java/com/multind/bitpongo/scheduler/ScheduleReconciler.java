@@ -1,11 +1,19 @@
 package com.multind.bitpongo.scheduler;
 
+import com.multind.bitpongo.notification.NotificationEvent;
+import com.multind.bitpongo.notification.NotificationEventType;
+import com.multind.bitpongo.notification.NotificationMessageRenderer;
+import com.multind.bitpongo.notification.NotificationPublisher;
 import com.multind.bitpongo.plan.PlanRepository;
 import com.multind.bitpongo.strategy.StrategyApplicationService;
 import com.multind.bitpongo.strategy.StrategyRepository;
+import java.time.Clock;
+import java.time.Instant;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
@@ -16,6 +24,9 @@ public class ScheduleReconciler {
     private final ObjectProvider<PlanRepository> plans;
     private final ObjectProvider<StrategyRepository> strategies;
     private final ObjectProvider<PlanScheduleService> schedules;
+    @Autowired
+    private NotificationPublisher notifications;
+    private Clock clock = Clock.systemUTC();
 
     public ScheduleReconciler(
             ObjectProvider<PlanRepository> plans,
@@ -48,6 +59,9 @@ public class ScheduleReconciler {
                         () -> log.warn("计划 {} 缺少策略，跳过任务恢复", plan.getId()));
             } catch (RuntimeException exception) {
                 log.error("核对计划任务失败，planId={}", plan.getId(), exception);
+                publishFailure(
+                        plan.getUserId(), plan.getId(), "plan-reconcile:" + plan.getId(),
+                        "PLAN_REGISTRATION_FAILED", exception);
             }
         });
         if (scheduleService instanceof QuartzPlanScheduleService quartz) {
@@ -55,7 +69,38 @@ public class ScheduleReconciler {
                 quartz.scheduleAssetSnapshot();
             } catch (RuntimeException exception) {
                 log.warn("资产快照任务注册失败，将在下次启动时重试: {}", exception.getMessage());
+                publishFailure(
+                        null, null, "asset-snapshot-registration",
+                        "ASSET_SNAPSHOT_REGISTRATION_FAILED", exception);
             }
+        }
+    }
+
+    private void publishFailure(
+            Long userId,
+            Long planId,
+            String taskKey,
+            String status,
+            RuntimeException failure) {
+        Instant occurredAt = clock.instant();
+        NotificationEvent event = new NotificationEvent(
+                NotificationEventType.SCHEDULER_FATAL,
+                userId,
+                planId,
+                null,
+                occurredAt,
+                "scheduler-fatal:" + taskKey + ":" + occurredAt.getEpochSecond() / 600,
+                Map.of(
+                        "status", status,
+                        "errorSummary", NotificationMessageRenderer.sanitizeError(
+                                failure.getMessage() == null
+                                        ? failure.getClass().getSimpleName()
+                                        : failure.getMessage())));
+        try {
+            notifications.publish(event);
+        } catch (RuntimeException notificationFailure) {
+            log.warn("调度失败通知发布失败 task={} errorType={}",
+                    taskKey, notificationFailure.getClass().getSimpleName());
         }
     }
 }

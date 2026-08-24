@@ -110,7 +110,7 @@ public final class NotificationMessageRenderer {
         }
     }
 
-    static String sanitizeError(String error) {
+    public static String sanitizeError(String error) {
         String redacted = redact(error);
         int[] codePoints = redacted.codePoints().limit(MAX_ERROR_CODE_POINTS).toArray();
         return new String(codePoints, 0, codePoints.length);

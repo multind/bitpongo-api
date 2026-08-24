@@ -1,6 +1,9 @@
 package com.multind.bitpongo.scheduler;
 
 import com.multind.bitpongo.exchange.*;
+import com.multind.bitpongo.notification.NotificationEvent;
+import com.multind.bitpongo.notification.NotificationEventType;
+import com.multind.bitpongo.notification.NotificationPublisher;
 import com.multind.bitpongo.common.api.BusinessException;
 import com.multind.bitpongo.plan.PlanRepository;
 import java.time.Clock;
@@ -9,6 +12,7 @@ import java.time.LocalDateTime;
 import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -33,6 +37,8 @@ public class OrderReconciliationService {
     private final Clock clock;
     private final Duration staleAge;
     private final int maxAttempts;
+    @Autowired
+    private NotificationPublisher notifications;
 
     @Autowired
     public OrderReconciliationService(
@@ -66,11 +72,11 @@ public class OrderReconciliationService {
                 plans.findById(intent.getPlanId()).flatMap(plan ->
                         exchanges.findByIdAndUserId(plan.getExchangeId(), intent.getUserId()))
                         .ifPresentOrElse(exchange -> reconcile(intent, exchange, now, neverSubmitted),
-                                () -> persistence.markAfterReconciliation(intent, "MANUAL_REVIEW", now));
+                                () -> mark(intent, "MANUAL_REVIEW", now));
             } catch (RuntimeException exception) {
                 String status = exception instanceof BusinessException business && business.getCode() == 401
                         ? "MANUAL_REVIEW" : nextRetryStatus(intent);
-                persistence.markAfterReconciliation(intent, status, now);
+                mark(intent, status, now);
                 log.error("订单对账失败，intentId={}", intent.getId(), exception);
             }
         });
@@ -85,7 +91,7 @@ public class OrderReconciliationService {
         Optional<OrderResult> result = gateway.findOrder(credentials, intent.getSymbol(), intent.getClientOrderId());
         result.ifPresentOrElse(value -> applyResult(intent, value, leaseAcquiredAt), () -> {
             if (neverSubmitted) {
-                persistence.markAfterReconciliation(intent, "MANUAL_REVIEW", leaseAcquiredAt);
+                mark(intent, "MANUAL_REVIEW", leaseAcquiredAt);
             } else {
                 requeueOrEscalate(intent, leaseAcquiredAt);
             }
@@ -97,7 +103,7 @@ public class OrderReconciliationService {
         String status = result.status() == null ? "" : result.status().toUpperCase(Locale.ROOT);
         if ("FILLED".equals(status)) {
             if (result.quantity().signum() <= 0) {
-                persistence.markAfterReconciliation(intent, "MANUAL_REVIEW", leaseAcquiredAt);
+                mark(intent, "MANUAL_REVIEW", leaseAcquiredAt);
             } else {
                 persistence.confirmAfterReconciliation(intent, result, leaseAcquiredAt);
             }
@@ -111,7 +117,7 @@ public class OrderReconciliationService {
             if (result.quantity().signum() > 0) {
                 persistence.confirmAfterReconciliation(intent, result, leaseAcquiredAt);
             } else {
-                persistence.markAfterReconciliation(intent, status, leaseAcquiredAt);
+                mark(intent, status, leaseAcquiredAt);
             }
             return;
         }
@@ -119,7 +125,35 @@ public class OrderReconciliationService {
     }
 
     private void requeueOrEscalate(OrderIntentEntity intent, LocalDateTime leaseAcquiredAt) {
-        persistence.markAfterReconciliation(intent, nextRetryStatus(intent), leaseAcquiredAt);
+        mark(intent, nextRetryStatus(intent), leaseAcquiredAt);
+    }
+
+    private boolean mark(
+            OrderIntentEntity intent,
+            String status,
+            LocalDateTime leaseAcquiredAt) {
+        boolean changed = persistence.markAfterReconciliation(intent, status, leaseAcquiredAt);
+        if (changed && "MANUAL_REVIEW".equals(status)) {
+            publishManualReview(intent);
+        }
+        return changed;
+    }
+
+    private void publishManualReview(OrderIntentEntity intent) {
+        NotificationEvent event = new NotificationEvent(
+                NotificationEventType.ORDER_MANUAL_REVIEW,
+                intent.getUserId(),
+                intent.getPlanId(),
+                intent.getId(),
+                clock.instant(),
+                "order-manual-review:" + intent.getId(),
+                Map.of("symbol", intent.getSymbol(), "status", "MANUAL_REVIEW"));
+        try {
+            notifications.publish(event);
+        } catch (RuntimeException notificationFailure) {
+            log.warn("人工对账通知发布失败 intentId={} errorType={}",
+                    intent.getId(), notificationFailure.getClass().getSimpleName());
+        }
     }
 
     private String nextRetryStatus(OrderIntentEntity intent) {

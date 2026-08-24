@@ -1,14 +1,19 @@
 package com.multind.bitpongo.scheduler;
 
 import com.multind.bitpongo.exchange.*;
+import com.multind.bitpongo.notification.NotificationEvent;
+import com.multind.bitpongo.notification.NotificationEventType;
+import com.multind.bitpongo.notification.NotificationPublisher;
 import com.multind.bitpongo.plan.PlanEntity;
 import com.multind.bitpongo.plan.PlanRepository;
+import java.lang.reflect.Field;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -16,6 +21,8 @@ import org.junit.jupiter.api.Test;
 
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 
 class OrderReconciliationServiceTest {
     private static final Instant NOW = Instant.parse("2026-08-09T00:01:00Z");
@@ -148,6 +155,138 @@ class OrderReconciliationServiceTest {
 
         verify(persistence).markAfterReconciliation(intent, "MANUAL_REVIEW",
                 LocalDateTime.ofInstant(NOW, ZoneOffset.UTC));
+    }
+
+    @Test
+    void manualReviewEventIsPublishedOnlyForFirstSuccessfulStateTransition() throws Exception {
+        OrderIntentRepository intents = mock(OrderIntentRepository.class);
+        PlanRepository plans = mock(PlanRepository.class);
+        ExchangeRepository exchanges = mock(ExchangeRepository.class);
+        ExchangeGatewayRegistry gateways = mock(ExchangeGatewayRegistry.class);
+        ExchangeGateway gateway = mock(ExchangeGateway.class);
+        OrderPersistenceService persistence = mock(OrderPersistenceService.class);
+        OrderIntentEntity intent = intent("READY", 0);
+        PlanEntity plan = new PlanEntity(); plan.setExchangeId(3L);
+        when(intents.findByStatusInAndUpdatedAtBeforeOrderByCreatedAtAsc(any(), any()))
+                .thenReturn(List.of(intent));
+        when(intents.acquireForReconciliation(eq(1L), any(), any(), any())).thenReturn(1);
+        when(plans.findById(42L)).thenReturn(Optional.of(plan));
+        when(exchanges.findByIdAndUserId(3L, 7L)).thenReturn(Optional.of(exchange()));
+        when(gateways.require("binance")).thenReturn(gateway);
+        when(gateway.findOrder(any(), any(), any())).thenReturn(Optional.empty());
+        when(persistence.markAfterReconciliation(
+                eq(intent), eq("MANUAL_REVIEW"), eq(LocalDateTime.ofInstant(NOW, ZoneOffset.UTC))))
+                .thenReturn(true, false);
+        CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
+        OrderReconciliationService service = service(intents, plans, exchanges, gateways, persistence);
+        injectIfPresent(service, notifications);
+
+        service.reconcilePending();
+        service.reconcilePending();
+
+        assertThat(notifications.events()).singleElement().satisfies(event -> {
+            assertThat(event.type()).isEqualTo(NotificationEventType.ORDER_MANUAL_REVIEW);
+            assertThat(event.userId()).isEqualTo(7L);
+            assertThat(event.planId()).isEqualTo(42L);
+            assertThat(event.intentId()).isEqualTo(1L);
+            assertThat(event.occurredAt()).isEqualTo(NOW);
+            assertThat(event.dedupeKey()).isEqualTo("order-manual-review:1");
+            assertThat(event.attributes())
+                    .containsEntry("symbol", "BTCUSDT")
+                    .containsEntry("status", "MANUAL_REVIEW");
+        });
+        verify(persistence, times(2)).markAfterReconciliation(
+                intent, "MANUAL_REVIEW", LocalDateTime.ofInstant(NOW, ZoneOffset.UTC));
+    }
+
+    @Test
+    void pendingRetryAndFailedManualReviewCasDoNotPublish() throws Exception {
+        OrderIntentRepository intents = mock(OrderIntentRepository.class);
+        PlanRepository plans = mock(PlanRepository.class);
+        ExchangeRepository exchanges = mock(ExchangeRepository.class);
+        ExchangeGatewayRegistry gateways = mock(ExchangeGatewayRegistry.class);
+        ExchangeGateway gateway = mock(ExchangeGateway.class);
+        OrderPersistenceService persistence = mock(OrderPersistenceService.class);
+        OrderIntentEntity pending = intent("PENDING_RECONCILIATION", 1);
+        OrderIntentEntity ready = intent("READY", 0); ready.setId(2L);
+        PlanEntity plan = new PlanEntity(); plan.setExchangeId(3L);
+        when(intents.findByStatusInAndUpdatedAtBeforeOrderByCreatedAtAsc(any(), any()))
+                .thenReturn(List.of(pending, ready));
+        when(intents.acquireForReconciliation(anyLong(), any(), any(), any())).thenReturn(1);
+        when(plans.findById(42L)).thenReturn(Optional.of(plan));
+        when(exchanges.findByIdAndUserId(3L, 7L)).thenReturn(Optional.of(exchange()));
+        when(gateways.require("binance")).thenReturn(gateway);
+        when(gateway.findOrder(any(), any(), any())).thenReturn(Optional.empty());
+        when(persistence.markAfterReconciliation(
+                eq(pending), eq("PENDING_RECONCILIATION"), any())).thenReturn(true);
+        when(persistence.markAfterReconciliation(
+                eq(ready), eq("MANUAL_REVIEW"), any())).thenReturn(false);
+        CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
+        OrderReconciliationService service = service(intents, plans, exchanges, gateways, persistence);
+        injectIfPresent(service, notifications);
+
+        service.reconcilePending();
+
+        assertThat(notifications.events()).isEmpty();
+        verify(persistence).markAfterReconciliation(
+                pending, "PENDING_RECONCILIATION", LocalDateTime.ofInstant(NOW, ZoneOffset.UTC));
+        verify(persistence).markAfterReconciliation(
+                ready, "MANUAL_REVIEW", LocalDateTime.ofInstant(NOW, ZoneOffset.UTC));
+    }
+
+    @Test
+    void notificationFailureDoesNotStopRemainingReconciliation() throws Exception {
+        OrderIntentRepository intents = mock(OrderIntentRepository.class);
+        PlanRepository plans = mock(PlanRepository.class);
+        ExchangeRepository exchanges = mock(ExchangeRepository.class);
+        ExchangeGatewayRegistry gateways = mock(ExchangeGatewayRegistry.class);
+        OrderPersistenceService persistence = mock(OrderPersistenceService.class);
+        OrderIntentEntity first = intent("READY", 0);
+        OrderIntentEntity second = intent("READY", 0); second.setId(2L);
+        when(intents.findByStatusInAndUpdatedAtBeforeOrderByCreatedAtAsc(any(), any()))
+                .thenReturn(List.of(first, second));
+        when(intents.acquireForReconciliation(anyLong(), any(), any(), any())).thenReturn(1);
+        when(plans.findById(42L)).thenReturn(Optional.empty());
+        when(persistence.markAfterReconciliation(any(), eq("MANUAL_REVIEW"), any()))
+                .thenReturn(true);
+        CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
+        notifications.failPublishing = true;
+        OrderReconciliationService service = service(intents, plans, exchanges, gateways, persistence);
+        injectIfPresent(service, notifications);
+
+        assertDoesNotThrow(service::reconcilePending);
+
+        assertThat(notifications.attempted).isEqualTo(2);
+        verify(persistence).markAfterReconciliation(
+                first, "MANUAL_REVIEW", LocalDateTime.ofInstant(NOW, ZoneOffset.UTC));
+        verify(persistence).markAfterReconciliation(
+                second, "MANUAL_REVIEW", LocalDateTime.ofInstant(NOW, ZoneOffset.UTC));
+    }
+
+    private static void injectIfPresent(
+            OrderReconciliationService service,
+            NotificationPublisher notifications) throws Exception {
+        try {
+            Field field = OrderReconciliationService.class.getDeclaredField("notifications");
+            field.setAccessible(true);
+            field.set(service, notifications);
+        } catch (NoSuchFieldException ignored) {
+        }
+    }
+
+    private static final class CollectingNotificationPublisher implements NotificationPublisher {
+        private final List<NotificationEvent> events = new ArrayList<>();
+        private int attempted;
+        private boolean failPublishing;
+
+        @Override
+        public void publish(NotificationEvent event) {
+            attempted++;
+            if (failPublishing) throw new RuntimeException("notification unavailable");
+            events.add(event);
+        }
+
+        List<NotificationEvent> events() { return List.copyOf(events); }
     }
 
     private static OrderIntentEntity intent(String status, int attempts) {

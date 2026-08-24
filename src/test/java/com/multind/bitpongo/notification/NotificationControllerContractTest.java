@@ -40,6 +40,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
         com.multind.bitpongo.scheduler.OrderReconciliationService.class,
         com.multind.bitpongo.scheduler.ScheduledPurchaseService.class
 })
+@org.springframework.context.annotation.Import(com.multind.bitpongo.TestNotificationPublisherConfiguration.class)
 class NotificationControllerContractTest {
 
     private static final LocalDateTime UPDATED_AT = LocalDateTime.of(2026, 8, 23, 12, 0);

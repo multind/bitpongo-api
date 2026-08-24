@@ -21,6 +21,7 @@ import static org.mockito.Mockito.when;
         com.multind.bitpongo.scheduler.OrderReconciliationService.class,
         com.multind.bitpongo.scheduler.ScheduledPurchaseService.class
 })
+@org.springframework.context.annotation.Import(com.multind.bitpongo.TestNotificationPublisherConfiguration.class)
 class AuthenticatedUserResolverTest {
 
     @Autowired private AuthenticatedUserResolver resolver;
