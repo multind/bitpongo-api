@@ -174,6 +174,8 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
             return orders.findFirstByPlanIdAndSymbolOrderByCreatedAtDesc(planId, symbol)
                     .map(order -> price.compareTo(order.getAveragePrice()) >= 0).orElse(false);
         }
+        log.warn("逢低买入条件无效，跳过买入 planId={} coin={} condition={}",
+                planId, coin.getSymbol(), strategy.getCondition());
         return true;
     }
 

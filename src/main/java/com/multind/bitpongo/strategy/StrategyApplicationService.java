@@ -12,6 +12,7 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.Date;
 import java.util.List;
+import java.util.Set;
 import org.quartz.CronExpression;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
@@ -26,6 +27,8 @@ import static com.multind.bitpongo.strategy.StrategyDtos.StrategyCreatedData;
 
 @Service
 public class StrategyApplicationService {
+    private static final Set<String> AVERAGE_DOWN_CONDITIONS = Set.of("total_average", "last_average");
+
     private static final PlanScheduleService DEFERRED_SCHEDULER = new PlanScheduleService() {
         public void schedule(long planId, String cron) {}
         public void pause(long planId) {}
@@ -88,6 +91,12 @@ public class StrategyApplicationService {
         if (total.compareTo(new BigDecimal("100")) != 0) {
             throw new BusinessException(400, "币种比例合计必须为100");
         }
+        String condition = request.condition() == null ? "" : request.condition().trim();
+        boolean averageDownEnabled = request.coins().stream()
+                .anyMatch(StrategyDtos.CoinRequest::averageDown);
+        if (averageDownEnabled && !AVERAGE_DOWN_CONDITIONS.contains(condition)) {
+            throw new BusinessException(400, "请选择有效的逢低买入条件");
+        }
         String quartzCron = normalizeCron(request.cron());
         CronExpression expression;
         try {
@@ -108,7 +117,6 @@ public class StrategyApplicationService {
         strategy.setExchangeId(request.exchangeId());
         strategy.setFrequency(request.frequency());
         strategy.setCron(request.cron());
-        String condition = request.condition() == null ? "" : request.condition().trim();
         strategy.setCondition(condition.substring(0, Math.min(condition.length(), 32)));
         strategy.setUserId(userId);
         strategy.setCreatedAt(now);

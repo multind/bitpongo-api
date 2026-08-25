@@ -95,6 +95,18 @@ class StrategyApplicationServiceTest {
                 .hasMessageContaining("交易所不存在");
     }
 
+    @Test
+    void rejectsMissingConditionWhenAverageDownIsEnabled() {
+        StrategyCreateRequest request = new StrategyCreateRequest(
+                "每日定投", new BigDecimal("100"), 3L, "daily", "0 8 * * *", "",
+                List.of(new CoinRequest(new BigDecimal("100"), "btc", BigDecimal.ZERO,
+                        BigDecimal.ZERO, true, "BTC", true)));
+
+        assertThatThrownBy(() -> service.create(7L, request))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("逢低买入条件");
+    }
+
     private StrategyCreateRequest request(String cron, BigDecimal first, BigDecimal second) {
         return new StrategyCreateRequest("每日定投", new BigDecimal("100"), 3L, "daily", cron,
                 "last_average", List.of(

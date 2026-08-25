@@ -12,12 +12,16 @@ import java.time.*;
 import java.util.*;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertDoesNotThrow;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.*;
 
+@ExtendWith(OutputCaptureExtension.class)
 class ScheduledPurchaseServiceTest {
     private final PlanRepository plans = mock(PlanRepository.class);
     private final StrategyRepository strategies = mock(StrategyRepository.class);
@@ -269,6 +273,24 @@ class ScheduledPurchaseServiceTest {
 
         verify(persistence).confirm(any(OrderIntentEntity.class), any(OrderResult.class));
         verify(persistence, never()).mark(any(OrderIntentEntity.class), eq("FAILED"));
+    }
+
+    @Test
+    void logsInvalidAverageDownConditionBeforeSkipping(CapturedOutput output) {
+        StrategyEntity invalid = new StrategyEntity();
+        invalid.setId(11L);
+        invalid.setUserId(7L);
+        invalid.setInstalment(100);
+        invalid.setCondition("");
+        when(strategies.findById(11L)).thenReturn(Optional.of(invalid));
+        CoinEntity coin = coin(5L, "BTC", "100");
+        coin.setAverageDown(true);
+        when(coins.findByPlanIdAndUserId(42L, 7L)).thenReturn(List.of(coin));
+
+        service.execute(42L, fire);
+
+        verify(gateway, never()).marketBuy(any(), anyString(), any(), any());
+        assertThat(output).contains("逢低买入条件无效").contains("planId=42").contains("coin=BTC");
     }
 
     private static CoinEntity coin(long id, String symbol, String proportion) {
