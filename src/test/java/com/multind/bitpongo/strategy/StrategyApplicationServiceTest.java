@@ -84,7 +84,7 @@ class StrategyApplicationServiceTest {
         assertThat(result.strategy().getScheduleTimezone()).isEqualTo("Asia/Shanghai");
         assertThat(result.plan().getStatus()).isEqualTo("active");
         assertThat(result.coins()).hasSize(2).allMatch(c -> c.getPlanId().equals(12L));
-        verify(schedules).schedule(12L, "0 0 8 * * ?");
+        verify(schedules).schedule(12L, "0 0 8 * * ?", ZoneId.of("Asia/Shanghai"));
     }
 
     @Test

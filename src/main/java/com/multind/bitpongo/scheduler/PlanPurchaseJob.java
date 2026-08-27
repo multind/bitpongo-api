@@ -22,6 +22,7 @@ public class PlanPurchaseJob implements Job {
     private static final Logger log = LoggerFactory.getLogger(PlanPurchaseJob.class);
     @Autowired private ScheduledPurchaseUseCase purchases;
     @Autowired private NotificationPublisher notifications;
+    @Autowired private PlanExecutionMetrics metrics;
     private Clock clock = Clock.systemUTC();
 
     public PlanPurchaseJob() {}
@@ -33,18 +34,55 @@ public class PlanPurchaseJob implements Job {
     @Override
     public void execute(JobExecutionContext context) throws JobExecutionException {
         long planId = context.getMergedJobDataMap().getLong("planId");
-        log.info("计划任务触发 planId={} scheduledFireTime={} nextFireTime={}",
-                planId, context.getScheduledFireTime(), context.getNextFireTime());
+        Instant actualStartedAt = clock.instant();
         Instant scheduled = context.getScheduledFireTime() == null
-                ? Instant.now() : context.getScheduledFireTime().toInstant();
+                ? actualStartedAt : context.getScheduledFireTime().toInstant();
+        long delayMs = Math.max(0L, Duration.between(scheduled, actualStartedAt).toMillis());
+        Instant nextFireAt = context.getNextFireTime() == null
+                ? null : context.getNextFireTime().toInstant();
+        boolean recovering = context.isRecovering();
+        log.info("计划任务触发 planId={} scheduledAt={} actualStartedAt={} delayMs={} "
+                        + "recovering={} nextFireAt={}",
+                planId, scheduled, actualStartedAt, delayMs, recovering, nextFireAt);
+        if (recovering) {
+            recordMetric("recovery_skipped");
+            publishRecoverySkipped(planId, scheduled, actualStartedAt);
+            return;
+        }
+        recordMetric(delayMs > 1000 ? "delayed" : "on_time");
         try {
-            if (context.getNextFireTime() != null) {
-                purchases.updateNextFireTime(planId, context.getNextFireTime().toInstant());
+            if (nextFireAt != null) {
+                purchases.updateNextFireTime(planId, nextFireAt);
             }
             purchases.execute(planId, scheduled);
         } catch (RuntimeException failure) {
             publishFailure(planId, failure);
             throw new JobExecutionException(failure, false);
+        }
+    }
+
+    private void recordMetric(String result) {
+        if (metrics != null) {
+            metrics.record(result);
+        }
+    }
+
+    private void publishRecoverySkipped(long planId, Instant scheduledAt, Instant occurredAt) {
+        NotificationEvent event = new NotificationEvent(
+                NotificationEventType.PLAN_EXECUTION_SKIPPED,
+                null,
+                planId,
+                null,
+                occurredAt,
+                "plan-execution-skipped:recovery:" + planId + ":" + scheduledAt,
+                Map.of(
+                        "status", "RECOVERY_SKIPPED",
+                        "scheduledAt", scheduledAt.toString()));
+        try {
+            notifications.publish(event);
+        } catch (RuntimeException notificationFailure) {
+            log.warn("恢复补单跳过通知发布失败 planId={} errorType={}",
+                    planId, notificationFailure.getClass().getSimpleName());
         }
     }
 

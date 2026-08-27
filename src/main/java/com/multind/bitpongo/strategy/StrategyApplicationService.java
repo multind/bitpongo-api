@@ -33,9 +33,9 @@ public class StrategyApplicationService {
     private static final Set<String> AVERAGE_DOWN_CONDITIONS = Set.of("total_average", "last_average");
 
     private static final PlanScheduleService DEFERRED_SCHEDULER = new PlanScheduleService() {
-        public void schedule(long planId, String cron) {}
+        public void schedule(long planId, String cron, ZoneId zone) {}
         public void pause(long planId) {}
-        public void resume(long planId, String cron) {}
+        public void resume(long planId, String cron, ZoneId zone) {}
         public void remove(long planId) {}
     };
 
@@ -160,7 +160,7 @@ public class StrategyApplicationService {
             return coin;
         }).toList();
         savedCoins = coins.saveAll(savedCoins);
-        scheduleAfterCommit(planId, quartzCron);
+        scheduleAfterCommit(planId, quartzCron, scheduleZone);
         return new StrategyCreatedData(strategy, plan, savedCoins);
     }
 
@@ -169,8 +169,8 @@ public class StrategyApplicationService {
         return strategies.findByUserId(userId);
     }
 
-    private void scheduleAfterCommit(long planId, String cron) {
-        Runnable action = () -> schedules.schedule(planId, cron);
+    private void scheduleAfterCommit(long planId, String cron, ZoneId zone) {
+        Runnable action = () -> schedules.schedule(planId, cron, zone);
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
                 @Override public void afterCommit() { action.run(); }

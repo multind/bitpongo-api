@@ -84,7 +84,9 @@ public class PlanApplicationService {
             StrategyEntity strategy = strategies.findByIdAndUserId(plan.getStrategyId(), userId)
                     .orElseThrow(() -> new BusinessException(404, "定投策略不存在"));
             String cron = com.multind.bitpongo.strategy.StrategyApplicationService.normalizeCron(strategy.getCron());
-            scheduleMutation = () -> schedules.resume(planId, cron);
+            java.time.ZoneId zone = com.multind.bitpongo.strategy.StrategyApplicationService
+                    .scheduleZone(strategy.getScheduleTimezone());
+            scheduleMutation = () -> schedules.resume(planId, cron, zone);
         } else if ("close".equals(status)) {
             scheduleMutation = () -> schedules.remove(planId);
         } else {

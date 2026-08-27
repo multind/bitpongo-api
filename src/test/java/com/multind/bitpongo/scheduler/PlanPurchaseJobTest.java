@@ -4,6 +4,7 @@ import com.multind.bitpongo.notification.NotificationDedupeWindow;
 import com.multind.bitpongo.notification.NotificationEvent;
 import com.multind.bitpongo.notification.NotificationEventType;
 import com.multind.bitpongo.notification.NotificationPublisher;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.lang.reflect.Field;
 import java.time.Clock;
 import java.time.Duration;
@@ -22,9 +23,44 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class PlanPurchaseJobTest {
+    @Test
+    void skipsPersistedRecoveryJobsWithoutCreatingACatchUpOrder() throws Exception {
+        ScheduledPurchaseUseCase purchases = mock(ScheduledPurchaseUseCase.class);
+        CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
+        JobExecutionContext context = mock(JobExecutionContext.class);
+        JobDataMap data = new JobDataMap();
+        data.put("planId", 42L);
+        Instant scheduled = Instant.parse("2026-11-01T06:30:00Z");
+        when(context.getMergedJobDataMap()).thenReturn(data);
+        when(context.getScheduledFireTime()).thenReturn(Date.from(scheduled));
+        when(context.isRecovering()).thenReturn(true);
+        PlanPurchaseJob job = new PlanPurchaseJob(purchases);
+        SimpleMeterRegistry registry = new SimpleMeterRegistry();
+        injectIfPresent(job, "notifications", notifications);
+        injectIfPresent(job, "clock", Clock.fixed(scheduled.plusSeconds(90), ZoneOffset.UTC));
+        injectIfPresent(job, "metrics", new PlanExecutionMetrics(registry));
+
+        job.execute(context);
+
+        verify(purchases, never()).execute(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any());
+        verify(purchases, never()).updateNextFireTime(org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any());
+        assertThat(notifications.events()).singleElement().satisfies(event -> {
+            assertThat(event.type()).isEqualTo(NotificationEventType.PLAN_EXECUTION_SKIPPED);
+            assertThat(event.planId()).isEqualTo(42L);
+            assertThat(event.occurredAt()).isEqualTo(scheduled.plusSeconds(90));
+            assertThat(event.attributes()).containsEntry("status", "RECOVERY_SKIPPED");
+        });
+        assertThat(registry.get("bitpongo.plan.execution")
+                .tag("result", "recovery_skipped").counter().count()).isEqualTo(1);
+    }
+
     @Test
     void publishesSanitizedFatalEventAndPreservesQuartzFailureSemantics() throws Exception {
         ScheduledPurchaseUseCase purchases = mock(ScheduledPurchaseUseCase.class);

@@ -69,7 +69,9 @@ public class ScheduleReconciler {
                 }
                 strategyRepository.findById(plan.getStrategyId()).ifPresentOrElse(
                         strategy -> scheduleService.schedule(plan.getId(),
-                                StrategyApplicationService.normalizeCron(strategy.getCron())),
+                                StrategyApplicationService.normalizeCron(strategy.getCron()),
+                                StrategyApplicationService.scheduleZone(
+                                        strategy.getScheduleTimezone())),
                         () -> log.warn("计划 {} 缺少策略，跳过任务恢复", plan.getId()));
             } catch (RuntimeException exception) {
                 log.error("核对计划任务失败，planId={}", plan.getId(), exception);

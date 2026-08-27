@@ -12,6 +12,7 @@ import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -44,15 +45,19 @@ class ScheduleReconcilerIntegrationTest {
         PlanEntity active = plan(1L, "active", 11L);
         PlanEntity stopped = plan(2L, "stop", 12L);
         StrategyEntity strategy = new StrategyEntity(); strategy.setId(11L); strategy.setCron("0 8 * * *");
+        strategy.setScheduleTimezone("America/New_York");
         when(plans.findAll()).thenReturn(List.of(active, stopped));
         when(strategies.findById(11L)).thenReturn(Optional.of(strategy));
 
         new ScheduleReconciler(
                 plansProvider, strategiesProvider, schedulesProvider, event -> {}).reconcile();
 
-        verify(schedules).schedule(1L, "0 0 8 * * ?");
+        verify(schedules).schedule(1L, "0 0 8 * * ?", ZoneId.of("America/New_York"));
         verify(schedules).remove(2L);
-        verify(schedules, never()).resume(org.mockito.ArgumentMatchers.anyLong(), org.mockito.ArgumentMatchers.any());
+        verify(schedules, never()).resume(
+                org.mockito.ArgumentMatchers.anyLong(),
+                org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -67,13 +72,15 @@ class ScheduleReconcilerIntegrationTest {
         PlanEntity first = plan(1L, "active", 11L); first.setUserId(7L);
         PlanEntity second = plan(2L, "active", 12L); second.setUserId(8L);
         StrategyEntity one = new StrategyEntity(); one.setId(11L); one.setCron("0 8 * * *");
+        one.setScheduleTimezone("Asia/Shanghai");
         StrategyEntity two = new StrategyEntity(); two.setId(12L); two.setCron("0 9 * * *");
+        two.setScheduleTimezone("America/New_York");
         when(plans.findAll()).thenReturn(List.of(first, second));
         when(strategies.findById(11L)).thenReturn(Optional.of(one));
         when(strategies.findById(12L)).thenReturn(Optional.of(two));
         doThrow(new IllegalStateException(
                 "POST https://private.example/key secret_key=fake-secret"))
-                .when(schedules).schedule(eq(1L), eq("0 0 8 * * ?"));
+                .when(schedules).schedule(eq(1L), eq("0 0 8 * * ?"), eq(ZoneId.of("Asia/Shanghai")));
         CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
         ScheduleReconciler reconciler = new ScheduleReconciler(
                 plansProvider, strategiesProvider, schedulesProvider, notifications,
@@ -82,7 +89,8 @@ class ScheduleReconcilerIntegrationTest {
         reconciler.reconcile();
         reconciler.reconcile();
 
-        verify(schedules, times(2)).schedule(2L, "0 0 9 * * ?");
+        verify(schedules, times(2)).schedule(
+                2L, "0 0 9 * * ?", ZoneId.of("America/New_York"));
         assertThat(notifications.events()).hasSize(2).allSatisfy(event -> {
             assertThat(event.type()).isEqualTo(NotificationEventType.SCHEDULER_FATAL);
             assertThat(event.userId()).isEqualTo(7L);
@@ -108,12 +116,14 @@ class ScheduleReconcilerIntegrationTest {
         PlanEntity first = plan(1L, "active", 11L);
         PlanEntity second = plan(2L, "active", 12L);
         StrategyEntity one = new StrategyEntity(); one.setCron("0 8 * * *");
+        one.setScheduleTimezone("Asia/Shanghai");
         StrategyEntity two = new StrategyEntity(); two.setCron("0 9 * * *");
+        two.setScheduleTimezone("Asia/Tokyo");
         when(plans.findAll()).thenReturn(List.of(first, second));
         when(strategies.findById(11L)).thenReturn(Optional.of(one));
         when(strategies.findById(12L)).thenReturn(Optional.of(two));
         doThrow(new IllegalStateException("schedule failed"))
-                .when(schedules).schedule(eq(1L), eq("0 0 8 * * ?"));
+                .when(schedules).schedule(eq(1L), eq("0 0 8 * * ?"), eq(ZoneId.of("Asia/Shanghai")));
         CollectingNotificationPublisher notifications = new CollectingNotificationPublisher();
         notifications.failPublishing = true;
         ScheduleReconciler reconciler = new ScheduleReconciler(
@@ -122,7 +132,7 @@ class ScheduleReconcilerIntegrationTest {
         assertDoesNotThrow(reconciler::reconcile);
 
         assertThat(notifications.attempted).isEqualTo(1);
-        verify(schedules).schedule(2L, "0 0 9 * * ?");
+        verify(schedules).schedule(2L, "0 0 9 * * ?", ZoneId.of("Asia/Tokyo"));
     }
 
     @Test

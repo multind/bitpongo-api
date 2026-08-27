@@ -9,7 +9,9 @@ import org.quartz.TriggerKey;
 import org.quartz.Trigger;
 import org.quartz.impl.StdSchedulerFactory;
 import org.quartz.CronTrigger;
+import java.time.Instant;
 import java.time.ZoneId;
+import java.util.Date;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
@@ -37,20 +39,52 @@ class QuartzPlanScheduleServiceTest {
 
     @Test
     void usesStablePlanJobIdentityAndOperationsAreIdempotent() throws Exception {
-        service.schedule(42L, "0 0 8 * * ?");
-        service.schedule(42L, "0 30 8 * * ?");
+        ZoneId planZone = ZoneId.of("America/New_York");
+        service.schedule(42L, "0 0 8 * * ?", planZone);
+        service.schedule(42L, "0 30 8 * * ?", planZone);
         assertThat(scheduler.checkExists(JobKey.jobKey("job_plan_42", "plans"))).isTrue();
+        assertThat(scheduler.getJobDetail(JobKey.jobKey("job_plan_42", "plans"))
+                .requestsRecovery()).isFalse();
         assertThat(scheduler.getTrigger(TriggerKey.triggerKey("trigger_plan_42", "plans"))
                 .getJobKey()).isEqualTo(JobKey.jobKey("job_plan_42", "plans"));
         assertThat(((CronTrigger) scheduler.getTrigger(
                 TriggerKey.triggerKey("trigger_plan_42", "plans"))).getTimeZone().getID())
-                .isEqualTo("Asia/Shanghai");
+                .isEqualTo("America/New_York");
+        assertThat(((CronTrigger) scheduler.getTrigger(
+                TriggerKey.triggerKey("trigger_plan_42", "plans"))).getMisfireInstruction())
+                .isEqualTo(CronTrigger.MISFIRE_INSTRUCTION_DO_NOTHING);
 
         service.pause(42L);
         assertThat(scheduler.getTriggerState(TriggerKey.triggerKey("trigger_plan_42", "plans")))
                 .isEqualTo(Trigger.TriggerState.PAUSED);
-        service.resume(42L, "0 0 9 * * ?");
+        service.resume(42L, "0 0 9 * * ?", planZone);
         service.remove(42L);
         assertThat(scheduler.checkExists(JobKey.jobKey("job_plan_42", "plans"))).isFalse();
+    }
+
+    @Test
+    void skipsTheNewYorkSpringGapInsteadOfCreatingACatchUpFire() throws Exception {
+        service.schedule(43L, "0 30 2 * * ?", ZoneId.of("America/New_York"));
+        CronTrigger trigger = (CronTrigger) scheduler.getTrigger(
+                TriggerKey.triggerKey("trigger_plan_43", "plans"));
+
+        Date next = trigger.getFireTimeAfter(Date.from(Instant.parse("2027-03-14T06:00:00Z")));
+
+        assertThat(next.toInstant()).isEqualTo(Instant.parse("2027-03-15T06:30:00Z"));
+    }
+
+    @Test
+    void schedulesAtMostOneFireForTheNewYorkFallOverlap() throws Exception {
+        service.schedule(44L, "0 30 1 * * ?", ZoneId.of("America/New_York"));
+        CronTrigger trigger = (CronTrigger) scheduler.getTrigger(
+                TriggerKey.triggerKey("trigger_plan_44", "plans"));
+
+        Date first = trigger.getFireTimeAfter(Date.from(Instant.parse("2026-11-01T04:00:00Z")));
+        Date second = trigger.getFireTimeAfter(first);
+
+        assertThat(first.toInstant()).isIn(
+                Instant.parse("2026-11-01T05:30:00Z"),
+                Instant.parse("2026-11-01T06:30:00Z"));
+        assertThat(second.toInstant()).isEqualTo(Instant.parse("2026-11-02T06:30:00Z"));
     }
 }

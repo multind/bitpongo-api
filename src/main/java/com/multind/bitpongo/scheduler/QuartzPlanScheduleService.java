@@ -46,17 +46,17 @@ public class QuartzPlanScheduleService implements PlanScheduleService {
     }
 
     @Override
-    public void schedule(long planId, String cron) {
+    public void schedule(long planId, String cron, ZoneId zone) {
         Scheduler scheduler = requireScheduler(planId);
         try {
-            log.info("注册计划触发器 planId={} cron={}", planId, cron);
+            log.info("注册计划触发器 planId={} cron={} scheduleZone={}", planId, cron, zone);
             JobKey jobKey = jobKey(planId);
             TriggerKey triggerKey = triggerKey(planId);
             CronTrigger trigger = TriggerBuilder.newTrigger()
                     .withIdentity(triggerKey)
                     .forJob(jobKey)
                     .withSchedule(CronScheduleBuilder.cronSchedule(cron)
-                            .inTimeZone(timeZone)
+                            .inTimeZone(TimeZone.getTimeZone(zone))
                             .withMisfireHandlingInstructionDoNothing())
                     .build();
             if (scheduler.checkExists(jobKey)) {
@@ -67,7 +67,6 @@ public class QuartzPlanScheduleService implements PlanScheduleService {
             JobDetail job = JobBuilder.newJob(PlanPurchaseJob.class)
                     .withIdentity(jobKey)
                     .usingJobData("planId", planId)
-                    .requestRecovery(true)
                     .build();
             scheduler.scheduleJob(job, trigger);
         } catch (SchedulerException | RuntimeException exception) {
@@ -82,8 +81,8 @@ public class QuartzPlanScheduleService implements PlanScheduleService {
     }
 
     @Override
-    public void resume(long planId, String cron) {
-        schedule(planId, cron);
+    public void resume(long planId, String cron, ZoneId zone) {
+        schedule(planId, cron, zone);
         Scheduler scheduler = requireScheduler(planId);
         run(() -> scheduler.resumeJob(jobKey(planId)), planId);
     }
