@@ -18,6 +18,8 @@ public class StrategyEntity {
     @Column(name = "exchange_id", columnDefinition = "INT") private Long exchangeId;
     @Column(length = 100) private String frequency;
     @Column(length = 100) private String cron;
+    @Column(name = "schedule_timezone", length = 64, nullable = false)
+    private String scheduleTimezone;
     @Column(name = "`condition`", length = 32, nullable = false) private String condition;
     @Column(name = "user_id", columnDefinition = "INT") private Long userId;
     @Column(name = "created_at") private LocalDateTime createdAt;
@@ -34,6 +36,8 @@ public class StrategyEntity {
     public void setFrequency(String frequency) { this.frequency = frequency; }
     public String getCron() { return cron; }
     public void setCron(String cron) { this.cron = cron; }
+    public String getScheduleTimezone() { return scheduleTimezone; }
+    public void setScheduleTimezone(String scheduleTimezone) { this.scheduleTimezone = scheduleTimezone; }
     public String getCondition() { return condition; }
     public void setCondition(String condition) { this.condition = condition; }
     public Long getUserId() { return userId; }

@@ -1,6 +1,7 @@
 package com.multind.bitpongo.strategy;
 
 import com.multind.bitpongo.common.api.BusinessException;
+import com.multind.bitpongo.common.time.UtcDateTimes;
 import com.multind.bitpongo.exchange.ExchangeRepository;
 import com.multind.bitpongo.exchange.ExchangeGatewayRegistry;
 import com.multind.bitpongo.plan.PlanEntity;
@@ -8,8 +9,10 @@ import com.multind.bitpongo.plan.PlanRepository;
 import com.multind.bitpongo.scheduler.PlanScheduleService;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.DateTimeException;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.time.ZoneOffset;
 import java.util.Date;
 import java.util.List;
 import java.util.Set;
@@ -98,15 +101,16 @@ public class StrategyApplicationService {
             throw new BusinessException(400, "请选择有效的逢低买入条件");
         }
         String quartzCron = normalizeCron(request.cron());
+        ZoneId scheduleZone = scheduleZone(request.scheduleTimezone());
         CronExpression expression;
         try {
             expression = new CronExpression(quartzCron);
-            expression.setTimeZone(java.util.TimeZone.getTimeZone(clock.getZone()));
+            expression.setTimeZone(java.util.TimeZone.getTimeZone(scheduleZone));
         } catch (java.text.ParseException exception) {
             throw new BusinessException(400, "Cron表达式无效");
         }
 
-        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), clock.getZone());
+        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
         StrategyEntity strategy = new StrategyEntity();
         strategy.setName(request.name());
         try {
@@ -117,6 +121,7 @@ public class StrategyApplicationService {
         strategy.setExchangeId(request.exchangeId());
         strategy.setFrequency(request.frequency());
         strategy.setCron(request.cron());
+        strategy.setScheduleTimezone(scheduleZone.getId());
         strategy.setCondition(condition.substring(0, Math.min(condition.length(), 32)));
         strategy.setUserId(userId);
         strategy.setCreatedAt(now);
@@ -127,7 +132,7 @@ public class StrategyApplicationService {
         plan.setTotalRevenue(BigDecimal.ZERO);
         plan.setTotalRatio(BigDecimal.ZERO);
         Date next = expression.getNextValidTimeAfter(Date.from(clock.instant()));
-        plan.setNextTime(LocalDateTime.ofInstant(next.toInstant(), clock.getZone()));
+        plan.setNextTime(UtcDateTimes.toDatabase(next.toInstant()));
         plan.setStatus("active");
         plan.setUserId(userId);
         plan.setTriggeredCount(0);
@@ -192,6 +197,20 @@ public class StrategyApplicationService {
         }
         if (fields.length == 6 || fields.length == 7) return normalized;
         throw new BusinessException(400, "Cron表达式无效");
+    }
+
+    public static ZoneId scheduleZone(String value) {
+        String effective = value == null || value.isBlank() ? "Asia/Shanghai" : value.trim();
+        ZoneId zone;
+        try {
+            zone = ZoneId.of(effective);
+        } catch (DateTimeException invalid) {
+            throw new BusinessException(400, "策略时区无效");
+        }
+        if (zone instanceof ZoneOffset || (!("UTC".equals(effective) || effective.contains("/")))) {
+            throw new BusinessException(400, "策略时区必须使用地区名称");
+        }
+        return zone;
     }
 
     private static String convertUnixDayOfWeek(String value) {

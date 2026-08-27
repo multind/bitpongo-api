@@ -28,6 +28,7 @@ public final class StrategyDtos {
             @JsonProperty("exchange_id") long exchangeId,
             String frequency,
             @NotBlank String cron,
+            @JsonProperty("schedule_timezone") String scheduleTimezone,
             String condition,
             @NotEmpty List<@Valid CoinRequest> coins) {}
 

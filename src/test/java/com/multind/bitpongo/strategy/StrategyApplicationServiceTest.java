@@ -10,6 +10,8 @@ import com.multind.bitpongo.scheduler.PlanScheduleService;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
@@ -79,9 +81,42 @@ class StrategyApplicationServiceTest {
         var result = service.create(7L, request("0 8 * * *", new BigDecimal("60"), new BigDecimal("40")));
 
         assertThat(result.strategy().getUserId()).isEqualTo(7L);
+        assertThat(result.strategy().getScheduleTimezone()).isEqualTo("Asia/Shanghai");
         assertThat(result.plan().getStatus()).isEqualTo("active");
         assertThat(result.coins()).hasSize(2).allMatch(c -> c.getPlanId().equals(12L));
         verify(schedules).schedule(12L, "0 0 8 * * ?");
+    }
+
+    @Test
+    void acceptsOnlyRegionBasedScheduleZones() {
+        assertThat(StrategyApplicationService.scheduleZone(null))
+                .isEqualTo(ZoneId.of("Asia/Shanghai"));
+        assertThat(StrategyApplicationService.scheduleZone("America/New_York"))
+                .isEqualTo(ZoneId.of("America/New_York"));
+
+        assertThatThrownBy(() -> StrategyApplicationService.scheduleZone("CST"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("策略时区");
+        assertThatThrownBy(() -> StrategyApplicationService.scheduleZone("+08:00"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("地区名称");
+        assertThatThrownBy(() -> StrategyApplicationService.scheduleZone("Not/AZone"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("无效");
+    }
+
+    @Test
+    void resolvesTheInitialExecutionInTheStrategyZoneAndStoresUtc() {
+        StrategyCreateRequest request = new StrategyCreateRequest(
+                "New York DCA", new BigDecimal("100"), 3L, "daily", "0 8 * * *",
+                "America/New_York", "", List.of(
+                new CoinRequest(new BigDecimal("100"), "btc", BigDecimal.ZERO,
+                        BigDecimal.ZERO, false, "BTC", true)));
+
+        var result = service.create(7L, request);
+
+        assertThat(result.strategy().getScheduleTimezone()).isEqualTo("America/New_York");
+        assertThat(result.plan().getNextTime()).isEqualTo(LocalDateTime.parse("2026-08-09T12:00:00"));
     }
 
     @Test
@@ -98,7 +133,7 @@ class StrategyApplicationServiceTest {
     @Test
     void rejectsMissingConditionWhenAverageDownIsEnabled() {
         StrategyCreateRequest request = new StrategyCreateRequest(
-                "每日定投", new BigDecimal("100"), 3L, "daily", "0 8 * * *", "",
+                "每日定投", new BigDecimal("100"), 3L, "daily", "0 8 * * *", null, "",
                 List.of(new CoinRequest(new BigDecimal("100"), "btc", BigDecimal.ZERO,
                         BigDecimal.ZERO, true, "BTC", true)));
 
@@ -109,7 +144,7 @@ class StrategyApplicationServiceTest {
 
     private StrategyCreateRequest request(String cron, BigDecimal first, BigDecimal second) {
         return new StrategyCreateRequest("每日定投", new BigDecimal("100"), 3L, "daily", cron,
-                "last_average", List.of(
+                null, "last_average", List.of(
                 new CoinRequest(first, "btc", BigDecimal.ZERO, BigDecimal.ZERO, true, "BTC", true),
                 new CoinRequest(second, "eth", BigDecimal.ZERO, BigDecimal.ZERO, false, "ETH", true)));
     }

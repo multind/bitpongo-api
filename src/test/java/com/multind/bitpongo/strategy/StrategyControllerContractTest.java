@@ -68,11 +68,13 @@ class StrategyControllerContractTest {
                 .content("""
                     {"name":"每日定投","instalment":100,"exchange_id":3,"frequency":"daily",
                      "cron":"0 8 * * *","condition":"last_average","user_id":999,
+                     "schedule_timezone":"America/New_York",
                      "coins":[{"proportion":100,"icon":"btc","min":0,"max":0,
                      "average_down":true,"symbol":"BTC","checked":true}]}
                     """))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.strategy.user_id").value(7))
+                .andExpect(jsonPath("$.data.strategy.schedule_timezone").value("America/New_York"))
                 .andExpect(jsonPath("$.data.plan.id").value(12))
                 .andExpect(jsonPath("$.data.coins[0].plan_id").value(12));
 
@@ -83,6 +85,30 @@ class StrategyControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.length()").value(1))
                 .andExpect(jsonPath("$.data[0].name").value("自己的"));
+    }
+
+    @Test
+    void rejectsInvalidScheduleZones() throws Exception {
+        var user = new com.multind.bitpongo.auth.UserEntity();
+        user.setId(7L);
+        user.setStatus("active");
+        when(users.findById(7L)).thenReturn(java.util.Optional.of(user));
+        var exchange = new com.multind.bitpongo.exchange.ExchangeEntity();
+        exchange.setId(3L);
+        exchange.setExchange("binance");
+        when(exchanges.findByIdAndUserId(3L, 7L)).thenReturn(java.util.Optional.of(exchange));
+
+        for (String timezone : List.of("CST", "+08:00", "Not/AZone")) {
+            mvc.perform(post("/api/strategies/create").header("Authorization", bearer())
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("""
+                                {"name":"每日定投","instalment":100,"exchange_id":3,"frequency":"daily",
+                                 "cron":"0 8 * * *","condition":"last_average","schedule_timezone":"%s",
+                                 "coins":[{"proportion":100,"icon":"btc","min":0,"max":0,
+                                 "average_down":true,"symbol":"BTC","checked":true}]}
+                                """.formatted(timezone)))
+                    .andExpect(status().isBadRequest());
+        }
     }
 
     private String bearer() { return "Bearer " + tokens.issue(7L); }
