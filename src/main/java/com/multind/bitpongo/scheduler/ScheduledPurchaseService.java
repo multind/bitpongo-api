@@ -1,6 +1,7 @@
 package com.multind.bitpongo.scheduler;
 
 import com.multind.bitpongo.exchange.*;
+import com.multind.bitpongo.common.time.UtcDateTimes;
 import com.multind.bitpongo.market.PriceCache;
 import com.multind.bitpongo.notification.NotificationEvent;
 import com.multind.bitpongo.notification.NotificationEventType;
@@ -182,11 +183,11 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
     private OrderIntentEntity claim(
             PlanEntity plan, CoinEntity coin, String symbol,
             BigDecimal quantity, String clientOrderId, Instant fireTime) {
-        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), clock.getZone());
+        LocalDateTime now = UtcDateTimes.toDatabase(clock.instant());
         OrderIntentEntity intent = new OrderIntentEntity();
         intent.setClientOrderId(clientOrderId); intent.setPlanId(plan.getId()); intent.setCoinId(coin.getId());
         intent.setUserId(plan.getUserId()); intent.setSymbol(symbol); intent.setQuantity(quantity);
-        intent.setScheduledFireTime(LocalDateTime.ofInstant(fireTime, clock.getZone()));
+        intent.setScheduledFireTime(UtcDateTimes.toDatabase(fireTime));
         intent.setStatus("READY"); intent.setAttempts(0); intent.setCreatedAt(now); intent.setUpdatedAt(now);
         try { return intents.saveAndFlush(intent); }
         catch (DataIntegrityViolationException claimedElsewhere) { return null; }

@@ -1,6 +1,7 @@
 package com.multind.bitpongo.auth;
 
 import com.multind.bitpongo.common.api.BusinessException;
+import com.multind.bitpongo.common.time.UtcDateTimes;
 import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.Locale;
@@ -81,7 +82,7 @@ public class UserApplicationService {
     }
 
     private LocalDateTime now() {
-        return LocalDateTime.ofInstant(clock.instant(), clock.getZone());
+        return UtcDateTimes.toDatabase(clock.instant());
     }
 
     private static String normalizeEmail(String email) {
@@ -93,6 +94,7 @@ public class UserApplicationService {
     }
 
     private static UserResponse response(UserEntity user) {
-        return new UserResponse(user.getId(), user.getName(), user.getEmail(), user.getCreatedAt());
+        return new UserResponse(user.getId(), user.getName(), user.getEmail(),
+                UtcDateTimes.toInstant(user.getCreatedAt()));
     }
 }

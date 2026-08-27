@@ -89,7 +89,7 @@ class UserControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.id").value(7))
                 .andExpect(jsonPath("$.name").value("测试用户"))
-                .andExpect(jsonPath("$.created_at").value("2025-01-02T03:04:00"));
+                .andExpect(jsonPath("$.created_at").value("2025-01-02T03:04:00Z"));
     }
 
     @Test

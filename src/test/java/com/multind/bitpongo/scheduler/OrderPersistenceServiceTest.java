@@ -46,7 +46,7 @@ class OrderPersistenceServiceTest {
     }
 
     @Test
-    void auditTimeStaysUtcWhileNextFireUsesConfiguredSchedulingZone() {
+    void auditAndResolvedExecutionTimesStayUtc() {
         PlanRepository plans = mock(PlanRepository.class);
         OrderIntentRepository intents = mock(OrderIntentRepository.class);
         PlanEntity plan = new PlanEntity();
@@ -55,8 +55,7 @@ class OrderPersistenceServiceTest {
         OrderPersistenceService service = new OrderPersistenceService(
                 intents, mock(OrderRepository.class),
                 mock(CoinRepository.class), plans, mock(JdbcTemplate.class),
-                Clock.fixed(Instant.parse("2026-08-09T00:00:00Z"), ZoneId.of("UTC")),
-                ZoneId.of("Asia/Shanghai"));
+                Clock.fixed(Instant.parse("2026-08-09T00:00:00Z"), ZoneId.of("Asia/Shanghai")));
         OrderIntentEntity intent = new OrderIntentEntity();
         intent.setAttempts(0);
 
@@ -64,7 +63,7 @@ class OrderPersistenceServiceTest {
         service.updateNextFireTime(42L, Instant.parse("2026-08-09T00:00:00Z"));
 
         assertThat(intent.getUpdatedAt()).isEqualTo(LocalDateTime.parse("2026-08-09T00:00:00"));
-        assertThat(plan.getNextTime()).isEqualTo(LocalDateTime.parse("2026-08-09T08:00:00"));
+        assertThat(plan.getNextTime()).isEqualTo(LocalDateTime.parse("2026-08-09T00:00:00"));
     }
 
     @Test

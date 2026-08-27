@@ -10,7 +10,6 @@ import com.multind.bitpongo.scheduler.PlanScheduleService;
 import java.math.BigDecimal;
 import java.time.Clock;
 import java.time.DateTimeException;
-import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Date;
@@ -110,7 +109,7 @@ public class StrategyApplicationService {
             throw new BusinessException(400, "Cron表达式无效");
         }
 
-        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), ZoneOffset.UTC);
+        var now = UtcDateTimes.toDatabase(clock.instant());
         StrategyEntity strategy = new StrategyEntity();
         strategy.setName(request.name());
         try {

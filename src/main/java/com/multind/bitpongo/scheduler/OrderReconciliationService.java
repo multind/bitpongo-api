@@ -5,6 +5,7 @@ import com.multind.bitpongo.notification.NotificationEvent;
 import com.multind.bitpongo.notification.NotificationEventType;
 import com.multind.bitpongo.notification.NotificationPublisher;
 import com.multind.bitpongo.common.api.BusinessException;
+import com.multind.bitpongo.common.time.UtcDateTimes;
 import com.multind.bitpongo.plan.PlanRepository;
 import java.time.Clock;
 import java.time.Duration;
@@ -65,7 +66,7 @@ public class OrderReconciliationService {
 
     @Scheduled(fixedDelayString = "${zhitoubao.orders.reconciliation-delay:60s}")
     public void reconcilePending() {
-        LocalDateTime now = LocalDateTime.ofInstant(clock.instant(), clock.getZone())
+        LocalDateTime now = UtcDateTimes.toDatabase(clock.instant())
                 .truncatedTo(ChronoUnit.SECONDS);
         LocalDateTime cutoff = now.minus(staleAge);
         intents.findByStatusInAndUpdatedAtBeforeOrderByCreatedAtAsc(RECOVERABLE, cutoff).forEach(intent -> {

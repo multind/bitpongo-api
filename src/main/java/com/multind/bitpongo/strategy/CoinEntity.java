@@ -2,6 +2,8 @@ package com.multind.bitpongo.strategy;
 
 import com.multind.bitpongo.plan.PlanEntity;
 import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.multind.bitpongo.common.time.UtcDateTimes;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.FetchType;
@@ -13,6 +15,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Table(name = "coin")
@@ -57,8 +60,11 @@ public class CoinEntity {
     public void setIncome(BigDecimal income) { this.income = income; }
     public Long getUserId() { return userId; }
     public void setUserId(Long userId) { this.userId = userId; }
+    @JsonIgnore
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    @JsonProperty("created_at")
+    public Instant getCreatedAtInstant() { return UtcDateTimes.toInstant(createdAt); }
     public Long getPlanId() { return planId; }
     public void setPlanId(Long planId) { this.planId = planId; }
     @JsonIgnore

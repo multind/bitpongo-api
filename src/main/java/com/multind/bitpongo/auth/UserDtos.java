@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Locale;
 
 public final class UserDtos {
@@ -40,5 +40,5 @@ public final class UserDtos {
             long id,
             String name,
             String email,
-            @JsonProperty("created_at") LocalDateTime createdAt) {}
+            @JsonProperty("created_at") Instant createdAt) {}
 }

@@ -1,6 +1,7 @@
 package com.multind.bitpongo.auth;
 
 import com.multind.bitpongo.common.api.BusinessException;
+import com.multind.bitpongo.common.time.UtcDateTimes;
 import com.multind.bitpongo.exchange.ExchangeEntity;
 import com.multind.bitpongo.exchange.ExchangeRepository;
 import com.multind.bitpongo.notification.UserBarkSettingService;
@@ -83,7 +84,7 @@ public class AccountDeletionService {
         userPlans.forEach(plan -> plan.setStatus("stop"));
         userExchanges.forEach(AccountDeletionService::clearCredentials);
 
-        LocalDateTime now = LocalDateTime.now(clock);
+        LocalDateTime now = UtcDateTimes.toDatabase(clock.instant());
         anonymize(user, userId, now);
         pausePlansAfterCommit(planIds);
     }

@@ -6,6 +6,7 @@ import com.multind.bitpongo.exchange.ExchangeApplicationService;
 import com.multind.bitpongo.strategy.StrategyApplicationService;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -46,20 +47,31 @@ class PlanControllerContractTest {
         user.setId(7L);
         user.setStatus("active");
         when(users.findById(7L)).thenReturn(java.util.Optional.of(user));
+        OrderEntity order = new OrderEntity();
+        order.setId(9L);
+        order.setCreatedAt(LocalDateTime.parse("2026-08-09T08:15:30"));
+        SnapshotEntity snapshot = new SnapshotEntity();
+        snapshot.setId(10L);
+        snapshot.setCreatedAt(LocalDateTime.parse("2026-08-09T09:16:31"));
         PlanDtos.PlanView view = new PlanDtos.PlanView(42L, new BigDecimal("100"), BigDecimal.ZERO,
-                BigDecimal.ZERO, new BigDecimal("120"), LocalDateTime.parse("2026-08-10T08:00:00"),
-                "active", 7L, 1, LocalDateTime.parse("2026-08-09T08:00:00"),
-                null, List.of(), List.of(), List.of());
+                BigDecimal.ZERO, new BigDecimal("120"), Instant.parse("2026-08-10T08:00:00Z"),
+                Instant.parse("2026-08-10T08:00:00Z"), "active", 7L, 1,
+                Instant.parse("2026-08-09T08:00:00Z"),
+                null, List.of(), List.of(order), List.of(snapshot));
         when(plans.active(7L)).thenReturn(List.of(view));
         when(plans.detail(7L, 42L)).thenReturn(view);
 
         mvc.perform(get("/api/plans/list/active").header("Authorization", bearer()))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data[0].total_value").value(120));
+                .andExpect(jsonPath("$.data[0].total_value").value(120))
+                .andExpect(jsonPath("$.data[0].next_execution_at").value("2026-08-10T08:00:00Z"))
+                .andExpect(jsonPath("$.data[0].next_time").value("2026-08-10T08:00:00Z"))
+                .andExpect(jsonPath("$.data[0].created_at").value("2026-08-09T08:00:00Z"));
         mvc.perform(get("/api/plans/42").header("Authorization", bearer()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.id").value(42))
-                .andExpect(jsonPath("$.data.coins.length()").value(0));
+                .andExpect(jsonPath("$.data.orders[0].created_at").value("2026-08-09T08:15:30Z"))
+                .andExpect(jsonPath("$.data.snapshots[0].created_at").value("2026-08-09T09:16:31Z"));
         mvc.perform(get("/api/plans/42/stop").header("Authorization", bearer()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").doesNotExist());

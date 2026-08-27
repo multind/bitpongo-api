@@ -81,12 +81,14 @@ class ExchangeControllerContractTest {
         mvc.perform(get("/api/exchanges/list").header("Authorization", bearer()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].access_key").value("abc*******"))
-                .andExpect(jsonPath("$.data[0].secret_key").doesNotExist());
+                .andExpect(jsonPath("$.data[0].secret_key").doesNotExist())
+                .andExpect(jsonPath("$.data[0].created_at").value("2025-01-02T03:04:00Z"));
 
         mvc.perform(get("/api/exchanges/3").header("Authorization", bearer()))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.access_key").value("abcd********ghij"))
-                .andExpect(jsonPath("$.data.secret_key").value("abcd********mnop"));
+                .andExpect(jsonPath("$.data.secret_key").value("abcd********mnop"))
+                .andExpect(jsonPath("$.data.created_at").value("2025-01-02T03:04:00Z"));
     }
 
     @Test

@@ -56,10 +56,17 @@ class StrategyControllerContractTest {
         exchange.setExchange("binance");
         when(exchanges.findByIdAndUserId(3L, 7L)).thenReturn(java.util.Optional.of(exchange));
         when(strategies.save(any())).thenAnswer(invocation -> {
-            StrategyEntity entity = invocation.getArgument(0); entity.setId(11L); return entity;
+            StrategyEntity entity = invocation.getArgument(0);
+            entity.setId(11L);
+            entity.setCreatedAt(LocalDateTime.parse("2026-08-24T08:15:30"));
+            return entity;
         });
         when(plans.save(any())).thenAnswer(invocation -> {
-            com.multind.bitpongo.plan.PlanEntity entity = invocation.getArgument(0); entity.setId(12L); return entity;
+            com.multind.bitpongo.plan.PlanEntity entity = invocation.getArgument(0);
+            entity.setId(12L);
+            entity.setCreatedAt(LocalDateTime.parse("2026-08-24T08:15:30"));
+            entity.setNextTime(LocalDateTime.parse("2026-08-25T13:00:00"));
+            return entity;
         });
         when(coins.saveAll(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
@@ -75,7 +82,10 @@ class StrategyControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.strategy.user_id").value(7))
                 .andExpect(jsonPath("$.data.strategy.schedule_timezone").value("America/New_York"))
+                .andExpect(jsonPath("$.data.strategy.created_at").value("2026-08-24T08:15:30Z"))
                 .andExpect(jsonPath("$.data.plan.id").value(12))
+                .andExpect(jsonPath("$.data.plan.next_execution_at").value("2026-08-25T13:00:00Z"))
+                .andExpect(jsonPath("$.data.plan.next_time").value("2026-08-25T13:00:00Z"))
                 .andExpect(jsonPath("$.data.coins[0].plan_id").value(12));
 
         var own = new StrategyEntity(); own.setId(1L); own.setUserId(7L); own.setName("自己的");

@@ -1,9 +1,9 @@
 package com.multind.bitpongo.exchange;
 
 import com.multind.bitpongo.common.api.BusinessException;
+import com.multind.bitpongo.common.time.UtcDateTimes;
 import java.math.BigDecimal;
 import java.time.Clock;
-import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -63,7 +63,7 @@ public class ExchangeApplicationService {
     public ExchangeView create(long userId, ExchangeUpsertRequest request) {
         ExchangeEntity entity = new ExchangeEntity();
         entity.setUserId(userId);
-        entity.setCreatedAt(LocalDateTime.ofInstant(clock.instant(), clock.getZone()));
+        entity.setCreatedAt(UtcDateTimes.toDatabase(clock.instant()));
         apply(entity, request, true);
         return detailView(exchanges.save(entity));
     }
@@ -143,7 +143,7 @@ public class ExchangeApplicationService {
         return new ExchangeView(
                 entity.getId(), entity.getName(), entity.getExchange(), accessKey, secretKey,
                 entity.getPassword() == null ? null : "*".repeat(entity.getPassword().length()),
-                entity.getStatus(), entity.getUserId(), entity.getCreatedAt());
+                entity.getStatus(), entity.getUserId(), UtcDateTimes.toInstant(entity.getCreatedAt()));
     }
 
     private static ExchangeCredentials credentials(String accessKey, String secretKey, String password) {

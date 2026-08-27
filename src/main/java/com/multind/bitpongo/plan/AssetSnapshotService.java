@@ -1,6 +1,7 @@
 package com.multind.bitpongo.plan;
 
 import com.multind.bitpongo.exchange.*;
+import com.multind.bitpongo.common.time.UtcDateTimes;
 import com.multind.bitpongo.notification.NotificationDedupeWindow;
 import com.multind.bitpongo.notification.NotificationEvent;
 import com.multind.bitpongo.notification.NotificationEventType;
@@ -66,7 +67,7 @@ public class AssetSnapshotService implements AssetSnapshotUseCase {
                 SnapshotEntity snapshot = new SnapshotEntity();
                 snapshot.setValue(usdt.free().toPlainString());
                 snapshot.setType("asset"); snapshot.setPlanId(plan.getId()); snapshot.setUserId(plan.getUserId());
-                snapshot.setCreatedAt(LocalDateTime.ofInstant(clock.instant(), clock.getZone()));
+                snapshot.setCreatedAt(UtcDateTimes.toDatabase(clock.instant()));
                 if (transactions == null) snapshots.save(snapshot);
                 else transactions.executeWithoutResult(status -> snapshots.save(snapshot));
             } catch (RuntimeException exception) {

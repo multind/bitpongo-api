@@ -1,6 +1,7 @@
 package com.multind.bitpongo.plan;
 
 import com.multind.bitpongo.common.api.BusinessException;
+import com.multind.bitpongo.common.time.UtcDateTimes;
 import com.multind.bitpongo.exchange.ExchangeRepository;
 import com.multind.bitpongo.market.PriceCache;
 import com.multind.bitpongo.scheduler.PlanScheduleService;
@@ -131,7 +132,9 @@ public class PlanApplicationService {
         List<SnapshotEntity> planSnapshots = snapshots
                 .findByPlanIdAndUserIdOrderByCreatedAtAsc(plan.getId(), userId);
         return new PlanView(plan.getId(), plan.getTotalFunds(), totalRevenue, totalRatio,
-                totalValue, plan.getNextTime(), plan.getStatus(), plan.getUserId(), plan.getTriggeredCount(),
-                plan.getCreatedAt(), strategy, planCoins, planOrders, planSnapshots);
+                totalValue, UtcDateTimes.toInstant(plan.getNextTime()),
+                UtcDateTimes.toInstant(plan.getNextTime()), plan.getStatus(), plan.getUserId(),
+                plan.getTriggeredCount(), UtcDateTimes.toInstant(plan.getCreatedAt()),
+                strategy, planCoins, planOrders, planSnapshots);
     }
 }

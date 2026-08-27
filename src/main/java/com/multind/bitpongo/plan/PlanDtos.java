@@ -1,9 +1,10 @@
 package com.multind.bitpongo.plan;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.multind.bitpongo.strategy.CoinEntity;
 import com.multind.bitpongo.strategy.StrategyEntity;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 public final class PlanDtos {
@@ -15,11 +16,12 @@ public final class PlanDtos {
             BigDecimal totalRevenue,
             BigDecimal totalRatio,
             BigDecimal totalValue,
-            LocalDateTime nextTime,
+            @JsonProperty("next_execution_at") Instant nextExecutionAt,
+            @JsonProperty("next_time") Instant nextTime,
             String status,
             Long userId,
             Integer triggeredCount,
-            LocalDateTime createdAt,
+            Instant createdAt,
             StrategyEntity strategy,
             List<CoinEntity> coins,
             List<OrderEntity> orders,

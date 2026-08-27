@@ -1,5 +1,8 @@
 package com.multind.bitpongo.plan;
 
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonProperty;
+import com.multind.bitpongo.common.time.UtcDateTimes;
 import com.multind.bitpongo.exchange.ExchangeEntity;
 import com.multind.bitpongo.strategy.StrategyEntity;
 import jakarta.persistence.Column;
@@ -13,6 +16,7 @@ import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.time.Instant;
 
 @Entity
 @Table(name = "plan")
@@ -46,16 +50,24 @@ public class PlanEntity {
     public void setTotalRevenue(BigDecimal totalRevenue) { this.totalRevenue = totalRevenue; }
     public BigDecimal getTotalRatio() { return totalRatio; }
     public void setTotalRatio(BigDecimal totalRatio) { this.totalRatio = totalRatio; }
+    @JsonIgnore
     public LocalDateTime getNextTime() { return nextTime; }
     public void setNextTime(LocalDateTime nextTime) { this.nextTime = nextTime; }
+    @JsonProperty("next_execution_at")
+    public Instant getNextExecutionAt() { return UtcDateTimes.toInstant(nextTime); }
+    @JsonProperty("next_time")
+    public Instant getNextTimeInstant() { return UtcDateTimes.toInstant(nextTime); }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public Long getUserId() { return userId; }
     public void setUserId(Long userId) { this.userId = userId; }
     public Integer getTriggeredCount() { return triggeredCount; }
     public void setTriggeredCount(Integer triggeredCount) { this.triggeredCount = triggeredCount; }
+    @JsonIgnore
     public LocalDateTime getCreatedAt() { return createdAt; }
     public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
+    @JsonProperty("created_at")
+    public Instant getCreatedAtInstant() { return UtcDateTimes.toInstant(createdAt); }
     public Long getStrategyId() { return strategyId; }
     public void setStrategyId(Long strategyId) { this.strategyId = strategyId; }
     public Long getExchangeId() { return exchangeId; }

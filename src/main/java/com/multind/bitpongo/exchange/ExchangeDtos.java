@@ -3,7 +3,7 @@ package com.multind.bitpongo.exchange;
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import java.math.BigDecimal;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.List;
 
 public final class ExchangeDtos {
@@ -39,7 +39,7 @@ public final class ExchangeDtos {
             String password,
             String status,
             @JsonProperty("user_id") long userId,
-            @JsonProperty("created_at") LocalDateTime createdAt) {}
+            @JsonProperty("created_at") Instant createdAt) {}
 
     public record BalanceView(String asset, BigDecimal free, BigDecimal locked) {}
 }

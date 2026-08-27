@@ -1,6 +1,7 @@
 package com.multind.bitpongo.scheduler;
 
 import com.multind.bitpongo.exchange.OrderResult;
+import com.multind.bitpongo.common.time.UtcDateTimes;
 import com.multind.bitpongo.plan.OrderEntity;
 import com.multind.bitpongo.plan.OrderRepository;
 import com.multind.bitpongo.plan.PlanEntity;
@@ -12,10 +13,8 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.stereotype.Service;
@@ -29,36 +28,25 @@ public class OrderPersistenceService {
     private final PlanRepository plans;
     private final JdbcTemplate jdbc;
     private final Clock clock;
-    private final ZoneId schedulingZone;
 
     @Autowired
     public OrderPersistenceService(
             OrderIntentRepository intents, OrderRepository orders,
             CoinRepository coins, PlanRepository plans,
-            JdbcTemplate jdbc,
-            @Value("${zhitoubao.scheduling-zone:Asia/Shanghai}") String schedulingZone) {
-        this(intents, orders, coins, plans, jdbc, Clock.systemUTC(), ZoneId.of(schedulingZone));
+            JdbcTemplate jdbc) {
+        this(intents, orders, coins, plans, jdbc, Clock.systemUTC());
     }
 
     OrderPersistenceService(
             OrderIntentRepository intents, OrderRepository orders,
             CoinRepository coins, PlanRepository plans,
             JdbcTemplate jdbc, Clock clock) {
-        this(intents, orders, coins, plans, jdbc, clock, clock.getZone());
-    }
-
-    OrderPersistenceService(
-            OrderIntentRepository intents, OrderRepository orders,
-            CoinRepository coins, PlanRepository plans,
-            JdbcTemplate jdbc,
-            Clock clock, ZoneId schedulingZone) {
         this.intents = intents;
         this.orders = orders;
         this.coins = coins;
         this.plans = plans;
         this.jdbc = jdbc;
         this.clock = clock;
-        this.schedulingZone = schedulingZone;
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
@@ -152,7 +140,7 @@ public class OrderPersistenceService {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public boolean beginTrigger(long planId, Instant scheduledFireTime) {
-        LocalDateTime fireTime = LocalDateTime.ofInstant(scheduledFireTime, clock.getZone());
+        LocalDateTime fireTime = UtcDateTimes.toDatabase(scheduledFireTime);
         int inserted = jdbc.update("""
                 INSERT IGNORE INTO plan_fire_execution(plan_id, scheduled_fire_time, created_at)
                 VALUES (?, ?, ?)
@@ -168,12 +156,12 @@ public class OrderPersistenceService {
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void updateNextFireTime(long planId, Instant nextFireTime) {
         plans.findById(planId).ifPresent(plan -> {
-            plan.setNextTime(LocalDateTime.ofInstant(nextFireTime, schedulingZone));
+            plan.setNextTime(UtcDateTimes.toDatabase(nextFireTime));
             plans.save(plan);
         });
     }
 
-    private LocalDateTime now() { return LocalDateTime.ofInstant(clock.instant(), clock.getZone()); }
+    private LocalDateTime now() { return UtcDateTimes.toDatabase(clock.instant()); }
     private static BigDecimal safe(BigDecimal value) { return value == null ? BigDecimal.ZERO : value; }
     private static BigDecimal holdingQuantity(OrderResult result) {
         String baseAsset = result.symbol() != null && result.symbol().endsWith("USDT")
