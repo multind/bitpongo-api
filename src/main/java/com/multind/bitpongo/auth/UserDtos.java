@@ -3,6 +3,7 @@ package com.multind.bitpongo.auth;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
 import java.time.Instant;
 import java.util.Locale;
@@ -41,4 +42,18 @@ public final class UserDtos {
             String name,
             String email,
             @JsonProperty("created_at") Instant createdAt) {}
+
+    public enum DisplayTimeZoneMode { FOLLOW_DEVICE, FIXED }
+
+    public record TimeZonePreference(
+            DisplayTimeZoneMode mode,
+            String timezone,
+            @JsonProperty("effective_timezone") String effectiveTimezone) {}
+
+    public record TimeZonePreferenceRequest(
+            @NotNull DisplayTimeZoneMode mode,
+            String timezone) {}
+
+    public record DeviceTimeZoneRequest(
+            @NotBlank String timezone) {}
 }

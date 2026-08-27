@@ -14,11 +14,13 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -199,5 +201,43 @@ class UserControllerContractTest {
                         .content("{\"password\":\" \"}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("密码不能为空"));
+    }
+
+    @Test
+    void authenticatedUserCanManageDisplayTimezoneWithoutMutatingAnotherUser() throws Exception {
+        String authorization = "Bearer " + tokens.issue(7L);
+
+        mvc.perform(get("/api/users/timezone").header("Authorization", authorization))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mode").value("FOLLOW_DEVICE"))
+                .andExpect(jsonPath("$.data.timezone").doesNotExist())
+                .andExpect(jsonPath("$.data.effective_timezone").value("UTC"));
+
+        mvc.perform(put("/api/users/timezone").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"mode\":\"FIXED\",\"timezone\":\"Asia/Tokyo\",\"user_id\":99}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.mode").value("FIXED"))
+                .andExpect(jsonPath("$.data.timezone").value("Asia/Tokyo"))
+                .andExpect(jsonPath("$.data.effective_timezone").value("Asia/Tokyo"));
+
+        mvc.perform(post("/api/users/timezone/device").header("Authorization", authorization)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"timezone\":\"America/New_York\",\"user_id\":99}"))
+                .andExpect(status().isOk());
+
+        assertThat(localUser.getId()).isEqualTo(7L);
+        assertThat(localUser.getLastDeviceTimezone()).isEqualTo("America/New_York");
+    }
+
+    @Test
+    void displayTimezoneRejectsOffsetsAndInvalidRegions() throws Exception {
+        String authorization = "Bearer " + tokens.issue(7L);
+        for (String timezone : new String[] {"+08:00", "Not/AZone"}) {
+            mvc.perform(put("/api/users/timezone").header("Authorization", authorization)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"mode\":\"FIXED\",\"timezone\":\"" + timezone + "\"}"))
+                    .andExpect(status().isBadRequest());
+        }
     }
 }

@@ -38,6 +38,15 @@ public class UserEntity {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    @Column(name = "display_timezone_mode", length = 16, nullable = false)
+    private String displayTimezoneMode = "FOLLOW_DEVICE";
+
+    @Column(name = "display_timezone", length = 64)
+    private String displayTimezone;
+
+    @Column(name = "last_device_timezone", length = 64)
+    private String lastDeviceTimezone;
+
     public Long getId() { return id; }
     public void setId(Long id) { this.id = id; }
     public String getName() { return name; }
@@ -55,4 +64,10 @@ public class UserEntity {
     public void setLastLogin(LocalDateTime lastLogin) { this.lastLogin = lastLogin; }
     public LocalDateTime getDeletedAt() { return deletedAt; }
     public void setDeletedAt(LocalDateTime deletedAt) { this.deletedAt = deletedAt; }
+    public String getDisplayTimezoneMode() { return displayTimezoneMode; }
+    public void setDisplayTimezoneMode(String displayTimezoneMode) { this.displayTimezoneMode = displayTimezoneMode; }
+    public String getDisplayTimezone() { return displayTimezone; }
+    public void setDisplayTimezone(String displayTimezone) { this.displayTimezone = displayTimezone; }
+    public String getLastDeviceTimezone() { return lastDeviceTimezone; }
+    public void setLastDeviceTimezone(String lastDeviceTimezone) { this.lastDeviceTimezone = lastDeviceTimezone; }
 }
