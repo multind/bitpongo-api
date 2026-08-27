@@ -31,7 +31,7 @@ public final class BarkEventPolicy {
                     new Policy("timeSensitive", null, false, "alarm", "Bitpongo·交易异常");
             case MARKET_OUTAGE ->
                     new Policy("timeSensitive", null, false, "alarm", "Bitpongo·行情");
-            case PLAN_EXECUTION_SKIPPED ->
+            case PLAN_EXECUTION_SKIPPED, PLAN_EXECUTION_DELAYED ->
                     new Policy("timeSensitive", null, false, null, "Bitpongo·计划");
             case TRADE_SUCCEEDED ->
                     new Policy("active", null, false, "minuet", "Bitpongo·交易");

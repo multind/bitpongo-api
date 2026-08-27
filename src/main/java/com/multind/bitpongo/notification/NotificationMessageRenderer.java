@@ -1,6 +1,7 @@
 package com.multind.bitpongo.notification;
 
 import java.time.ZoneId;
+import java.time.Duration;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
@@ -62,7 +63,17 @@ public final class NotificationMessageRenderer {
 
     private static String body(NotificationEvent event, Language language, ZoneId zone) {
         List<String> lines = new ArrayList<>();
-        if (event.occurredAt() != null) {
+        if (event.scheduledAt() != null) {
+            lines.add(language.scheduledTime
+                    + TIME.format(event.scheduledAt().atZone(zone)));
+            if (event.occurredAt() != null) {
+                lines.add(language.executedTime
+                        + TIME.format(event.occurredAt().atZone(zone)));
+                long delaySeconds = Math.max(0L,
+                        Duration.between(event.scheduledAt(), event.occurredAt()).getSeconds());
+                lines.add(language.delay + delaySeconds + language.seconds);
+            }
+        } else if (event.occurredAt() != null) {
             lines.add(language.time + TIME.format(event.occurredAt().atZone(zone)));
         }
         add(lines, language.userId, event.userId());
@@ -126,16 +137,23 @@ public final class NotificationMessageRenderer {
 
     private enum Language {
         ZH_CN(
-                "时间：", "用户 ID：", "计划 ID：", "订单 Intent ID：",
+                "时间：", "计划时间：", "成交时间：", "延迟：", "秒",
+                "用户 ID：", "计划 ID：", "订单 Intent ID：",
                 "币种：", "结果：", "错误："),
         ZH_TW(
-                "時間：", "使用者 ID：", "計畫 ID：", "訂單 Intent ID：",
+                "時間：", "計畫時間：", "成交時間：", "延遲：", "秒",
+                "使用者 ID：", "計畫 ID：", "訂單 Intent ID：",
                 "幣種：", "結果：", "錯誤："),
         EN_US(
-                "Time: ", "User ID: ", "Plan ID: ", "Order Intent ID: ",
+                "Time: ", "Scheduled time: ", "Execution time: ", "Delay: ", "s",
+                "User ID: ", "Plan ID: ", "Order Intent ID: ",
                 "Symbol: ", "Result: ", "Error: ");
 
         private final String time;
+        private final String scheduledTime;
+        private final String executedTime;
+        private final String delay;
+        private final String seconds;
         private final String userId;
         private final String planId;
         private final String intentId;
@@ -145,6 +163,10 @@ public final class NotificationMessageRenderer {
 
         Language(
                 String time,
+                String scheduledTime,
+                String executedTime,
+                String delay,
+                String seconds,
                 String userId,
                 String planId,
                 String intentId,
@@ -152,6 +174,10 @@ public final class NotificationMessageRenderer {
                 String result,
                 String error) {
             this.time = time;
+            this.scheduledTime = scheduledTime;
+            this.executedTime = executedTime;
+            this.delay = delay;
+            this.seconds = seconds;
             this.userId = userId;
             this.planId = planId;
             this.intentId = intentId;
@@ -176,6 +202,7 @@ public final class NotificationMessageRenderer {
                     case TRADE_FAILED -> "交易失败";
                     case MARKET_OUTAGE -> "行情服务不可用";
                     case PLAN_EXECUTION_SKIPPED -> "计划执行已跳过";
+                    case PLAN_EXECUTION_DELAYED -> "计划执行延迟";
                     case TRADE_SUCCEEDED -> "交易成功";
                     case ASSET_SNAPSHOT_FAILED -> "资产快照失败";
                     case SYSTEM_RECOVERED -> "系统已恢复";
@@ -188,6 +215,7 @@ public final class NotificationMessageRenderer {
                     case TRADE_FAILED -> "交易失敗";
                     case MARKET_OUTAGE -> "行情服務無法使用";
                     case PLAN_EXECUTION_SKIPPED -> "計畫執行已略過";
+                    case PLAN_EXECUTION_DELAYED -> "計畫執行延遲";
                     case TRADE_SUCCEEDED -> "交易成功";
                     case ASSET_SNAPSHOT_FAILED -> "資產快照失敗";
                     case SYSTEM_RECOVERED -> "系統已恢復";
@@ -200,6 +228,7 @@ public final class NotificationMessageRenderer {
                     case TRADE_FAILED -> "Trade failed";
                     case MARKET_OUTAGE -> "Market data unavailable";
                     case PLAN_EXECUTION_SKIPPED -> "Plan execution skipped";
+                    case PLAN_EXECUTION_DELAYED -> "Plan execution delayed";
                     case TRADE_SUCCEEDED -> "Trade succeeded";
                     case ASSET_SNAPSHOT_FAILED -> "Asset snapshot failed";
                     case SYSTEM_RECOVERED -> "System recovered";

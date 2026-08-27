@@ -1,10 +1,11 @@
 package com.multind.bitpongo.notification;
 
+import com.multind.bitpongo.auth.UserTimeZoneService;
 import com.multind.bitpongo.common.api.BusinessException;
 import java.net.URLEncoder;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.time.ZoneId;
 import java.util.Map;
 import java.util.Optional;
@@ -34,6 +35,7 @@ public class UserBarkSettingService {
     private final BarkProperties properties;
     private final TransactionOperations readTransactions;
     private final Clock clock;
+    private final UserTimeZoneService timeZones;
 
     @Autowired
     public UserBarkSettingService(
@@ -42,11 +44,12 @@ public class UserBarkSettingService {
             BarkTestSender testSender,
             NotificationMessageRenderer renderer,
             BarkProperties properties,
+            ObjectProvider<UserTimeZoneService> timeZones,
             ObjectProvider<PlatformTransactionManager> transactionManager) {
         this(settings.getIfAvailable(), outbox.getIfAvailable(),
                 new BarkPushUrlParser(properties), null,
                 testSender, renderer, properties, transactionManager.getIfAvailable(),
-                Clock.systemUTC());
+                Clock.systemUTC(), timeZones.getIfAvailable());
     }
 
     UserBarkSettingService(
@@ -59,7 +62,7 @@ public class UserBarkSettingService {
             BarkProperties properties,
             Clock clock) {
         this(settings, outbox, parser, cipher, new BarkTestSender(bark),
-                renderer, properties, null, clock);
+                renderer, properties, null, clock, null);
     }
 
     UserBarkSettingService(
@@ -72,6 +75,21 @@ public class UserBarkSettingService {
             BarkProperties properties,
             PlatformTransactionManager transactionManager,
             Clock clock) {
+        this(settings, outbox, parser, cipher, testSender, renderer, properties,
+                transactionManager, clock, null);
+    }
+
+    private UserBarkSettingService(
+            UserBarkSettingRepository settings,
+            NotificationOutboxRepository outbox,
+            BarkPushUrlParser parser,
+            BarkCredentialCipher cipher,
+            BarkTestSender testSender,
+            NotificationMessageRenderer renderer,
+            BarkProperties properties,
+            PlatformTransactionManager transactionManager,
+            Clock clock,
+            UserTimeZoneService timeZones) {
         this.settings = settings;
         this.outbox = outbox;
         this.parser = parser;
@@ -81,6 +99,7 @@ public class UserBarkSettingService {
         this.properties = properties;
         this.readTransactions = readTransactions(transactionManager);
         this.clock = clock;
+        this.timeZones = timeZones;
     }
 
     @Transactional(readOnly = true)
@@ -161,7 +180,9 @@ public class UserBarkSettingService {
     private TestDelivery prepareTestDelivery(
             long userId, BarkTarget target, UserBarkSettingEntity setting) {
         String locale = setting == null ? DEFAULT_LOCALE : setting.getLocale();
-        String timezone = setting == null ? DEFAULT_TIMEZONE : setting.getTimezone();
+        String timezone = timeZones == null
+                ? (setting == null ? DEFAULT_TIMEZONE : setting.getTimezone())
+                : timeZones.resolveDisplayZone(userId).getId();
         NotificationEvent event = new NotificationEvent(
                 NotificationEventType.BARK_TEST,
                 userId,
@@ -276,7 +297,7 @@ public class UserBarkSettingService {
             String maskedPushUrl,
             String locale,
             String timezone,
-            LocalDateTime updatedAt) {
+            Instant updatedAt) {
 
         static SettingView unconfigured() {
             return new SettingView(

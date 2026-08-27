@@ -1,5 +1,6 @@
 package com.multind.bitpongo.notification;
 
+import com.multind.bitpongo.auth.UserTimeZoneService;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.LinkedHashMap;
@@ -22,16 +23,19 @@ class NotificationOutboxDeliveryStore {
     private final NotificationOutboxRepository outbox;
     private final UserBarkSettingRepository settings;
     private final JdbcTemplate jdbc;
+    private final UserTimeZoneService timeZones;
     private final String adminTimezone;
 
     NotificationOutboxDeliveryStore(
             NotificationOutboxRepository outbox,
             UserBarkSettingRepository settings,
             JdbcTemplate jdbc,
+            UserTimeZoneService timeZones,
             @Value("${zhitoubao.scheduling-zone:Asia/Shanghai}") String adminTimezone) {
         this.outbox = outbox;
         this.settings = settings;
         this.jdbc = jdbc;
+        this.timeZones = timeZones;
         this.adminTimezone = adminTimezone;
     }
 
@@ -136,7 +140,7 @@ class NotificationOutboxDeliveryStore {
                 setting == null ? null : setting.getServerUrl(),
                 setting == null ? null : setting.getDeviceKeyCiphertext(),
                 setting == null ? DEFAULT_LOCALE : setting.getLocale(),
-                setting == null ? DEFAULT_TIMEZONE : setting.getTimezone());
+                timeZones.resolveDisplayZone(message.getUserId()).getId());
     }
 
     private static NotificationEvent event(NotificationOutboxEntity message) {
@@ -148,6 +152,7 @@ class NotificationOutboxDeliveryStore {
                 longValue(payload.get("userId"), message.getUserId()),
                 longValue(payload.get("planId"), null),
                 longValue(payload.get("intentId"), null),
+                instant(payload.get("scheduledAt")),
                 instant(payload.get("occurredAt")),
                 message.getDedupeKey(),
                 attributes(payload.get("attributes")));

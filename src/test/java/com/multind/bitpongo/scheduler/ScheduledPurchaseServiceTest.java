@@ -159,6 +159,7 @@ class ScheduledPurchaseServiceTest {
             assertThat(event.userId()).isEqualTo(7L);
             assertThat(event.planId()).isEqualTo(42L);
             assertThat(event.intentId()).isNull();
+            assertThat(event.scheduledAt()).isEqualTo(fire);
             assertThat(event.occurredAt()).isEqualTo(fire);
             assertThat(event.dedupeKey()).isEqualTo("trade-success:42:" + fire);
             assertThat(event.attributes()).containsEntry("status", "FILLED");
@@ -168,6 +169,30 @@ class ScheduledPurchaseServiceTest {
                     .containsExactlyInAnyOrder("symbols", "status");
         });
         verify(gateway, times(2)).marketBuy(any(), anyString(), any(), any());
+    }
+
+    @Test
+    void recordsActualCompletionAndPublishesOneDelayEventWithoutAnotherOrder() {
+        Instant completed = fire.plus(Duration.ofHours(8)).plusSeconds(1);
+        prices.put("binance", "BTC/USDT", new BigDecimal("62000"), completed);
+        service = new ScheduledPurchaseService(
+                plans, strategies, coins, orders,
+                exchanges, intents, gateways, new OrderSizingService(), prices,
+                new OrderIdFactory(), persistence, notifications,
+                Clock.fixed(completed, ZoneOffset.UTC));
+
+        service.execute(42L, fire);
+
+        assertThat(notifications.events()).extracting(NotificationEvent::type)
+                .containsExactly(
+                        NotificationEventType.TRADE_SUCCEEDED,
+                        NotificationEventType.PLAN_EXECUTION_DELAYED);
+        NotificationEvent trade = notifications.events().get(0);
+        assertThat(trade.scheduledAt()).isEqualTo(fire);
+        assertThat(trade.occurredAt()).isEqualTo(completed);
+        assertThat(notifications.events().get(1).attributes())
+                .containsEntry("delaySeconds", "28801");
+        verify(gateway, times(1)).marketBuy(any(), eq("BTCUSDT"), any(), any());
     }
 
     @Test
@@ -200,6 +225,7 @@ class ScheduledPurchaseServiceTest {
             assertThat(event.type()).isEqualTo(NotificationEventType.PLAN_EXECUTION_SKIPPED);
             assertThat(event.userId()).isEqualTo(7L);
             assertThat(event.planId()).isEqualTo(42L);
+            assertThat(event.scheduledAt()).isEqualTo(fire);
             assertThat(event.occurredAt()).isEqualTo(fire);
             assertThat(event.dedupeKey()).isEqualTo("plan-skipped:42:" + fire);
             assertThat(event.attributes()).containsEntry("status", "PRICE_UNAVAILABLE");

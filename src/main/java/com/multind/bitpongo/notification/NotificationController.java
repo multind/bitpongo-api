@@ -4,7 +4,7 @@ import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.multind.bitpongo.auth.AuthenticatedUser;
 import com.multind.bitpongo.common.api.ApiResponse;
 import com.multind.bitpongo.common.api.BusinessException;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -50,7 +50,7 @@ public class NotificationController {
             String maskedPushUrl,
             String locale,
             String timezone,
-            LocalDateTime updatedAt) {
+            Instant updatedAt) {
     }
 
     public record BarkTestResponse(boolean sent) {

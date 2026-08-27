@@ -6,7 +6,9 @@ import com.multind.bitpongo.auth.JwtTokenService;
 import com.multind.bitpongo.auth.PasswordCompatibilityService;
 import com.multind.bitpongo.auth.UserEntity;
 import com.multind.bitpongo.auth.UserRepository;
+import com.multind.bitpongo.common.time.UtcDateTimes;
 import jakarta.persistence.EntityManager;
+import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -175,7 +177,8 @@ class BarkPersistenceContractTest {
     void exposesStableNotificationEventTypesForStoredOutboxRows() {
         assertThat(NotificationEventType.values()).extracting(eventType -> eventType.name()).containsExactly(
                 "SCHEDULER_FATAL", "ORDER_MANUAL_REVIEW", "TRADE_FAILED", "MARKET_OUTAGE",
-                "PLAN_EXECUTION_SKIPPED", "TRADE_SUCCEEDED", "ASSET_SNAPSHOT_FAILED",
+                "PLAN_EXECUTION_SKIPPED", "PLAN_EXECUTION_DELAYED", "TRADE_SUCCEEDED",
+                "ASSET_SNAPSHOT_FAILED",
                 "SYSTEM_RECOVERED", "SERVICE_STARTED", "BARK_TEST");
     }
 
@@ -196,7 +199,7 @@ class BarkPersistenceContractTest {
                 .andExpect(jsonPath("$.data.updated_at").isNotEmpty())
                 .andExpect(jsonPath("$.data.masked_push_url").value("https://localhost/****-key"))
                 .andReturn();
-        LocalDateTime createdAt = responseUpdatedAt(createdResult);
+        Instant createdAt = responseUpdatedAt(createdResult);
 
         assertThat(createdAt).isNotNull();
         assertThat(createdResult.getResponse().getContentAsString())
@@ -230,12 +233,12 @@ class BarkPersistenceContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.updated_at").isNotEmpty())
                 .andReturn();
-        LocalDateTime updatedAt = responseUpdatedAt(updatedResult);
+        Instant updatedAt = responseUpdatedAt(updatedResult);
 
-        assertThat(updatedAt).isAfter(oldUpdatedAt);
-        assertThat(updatedAt).isEqualTo(jdbc.queryForObject(
-                "select updated_at from user_bark_setting where user_id = ?",
-                LocalDateTime.class,
+        assertThat(updatedAt).isAfter(UtcDateTimes.toInstant(oldUpdatedAt));
+        assertThat(updatedAt.getEpochSecond()).isEqualTo(jdbc.queryForObject(
+                "select unix_timestamp(updated_at) from user_bark_setting where user_id = ?",
+                Long.class,
                 userId));
         NotificationOutboxEntity skippedPending = outbox.findById(pending.getId()).orElseThrow();
         NotificationOutboxEntity skippedSending = outbox.findById(sending.getId()).orElseThrow();
@@ -373,11 +376,11 @@ class BarkPersistenceContractTest {
         return "Bearer " + tokens.issue(userId);
     }
 
-    private LocalDateTime responseUpdatedAt(MvcResult result) throws Exception {
+    private Instant responseUpdatedAt(MvcResult result) throws Exception {
         String value = json.readTree(result.getResponse().getContentAsByteArray())
                 .at("/data/updated_at")
                 .asText();
-        return LocalDateTime.parse(value);
+        return Instant.parse(value);
     }
 
     private static NotificationOutboxEntity message(

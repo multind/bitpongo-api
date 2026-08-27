@@ -4,7 +4,6 @@ import com.multind.bitpongo.common.api.BusinessException;
 import java.net.InetAddress;
 import java.time.Clock;
 import java.time.Instant;
-import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.Optional;
 import java.util.Set;
@@ -25,7 +24,7 @@ class UserBarkSettingServiceTest {
 
     private static final String TEST_ENCRYPTION_KEY =
             "AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=";
-    private static final LocalDateTime UPDATED_AT = LocalDateTime.of(2026, 8, 23, 12, 0);
+    private static final Instant UPDATED_AT = Instant.parse("2026-08-23T12:00:00Z");
 
     private final UserBarkSettingRepository settings = mock(UserBarkSettingRepository.class);
     private final NotificationOutboxRepository outbox = mock(NotificationOutboxRepository.class);

@@ -56,7 +56,7 @@ public class PlanPurchaseJob implements Job {
             }
             purchases.execute(planId, scheduled);
         } catch (RuntimeException failure) {
-            publishFailure(planId, failure);
+            publishFailure(planId, scheduled, failure);
             throw new JobExecutionException(failure, false);
         }
     }
@@ -73,11 +73,10 @@ public class PlanPurchaseJob implements Job {
                 null,
                 planId,
                 null,
+                scheduledAt,
                 occurredAt,
                 "plan-execution-skipped:recovery:" + planId + ":" + scheduledAt,
-                Map.of(
-                        "status", "RECOVERY_SKIPPED",
-                        "scheduledAt", scheduledAt.toString()));
+                Map.of("status", "RECOVERY_SKIPPED"));
         try {
             notifications.publish(event);
         } catch (RuntimeException notificationFailure) {
@@ -86,13 +85,14 @@ public class PlanPurchaseJob implements Job {
         }
     }
 
-    private void publishFailure(long planId, RuntimeException failure) {
+    private void publishFailure(long planId, Instant scheduledAt, RuntimeException failure) {
         Instant occurredAt = clock.instant();
         NotificationEvent event = new NotificationEvent(
                 NotificationEventType.SCHEDULER_FATAL,
                 null,
                 planId,
                 null,
+                scheduledAt,
                 occurredAt,
                 "scheduler-fatal:plan-purchase:" + planId,
                 Map.of(

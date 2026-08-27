@@ -10,6 +10,7 @@ import com.multind.bitpongo.plan.*;
 import com.multind.bitpongo.strategy.*;
 import java.math.BigDecimal;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
@@ -126,12 +127,18 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
                 log.error("计划币种下单失败，planId={}, coinId={}", planId, coin.getId(), failure);
             }
         }
-        publishOutcome(NotificationEventType.TRADE_SUCCEEDED, plan, scheduledFireTime,
+        Instant occurredAt = clock.instant();
+        publishOutcome(NotificationEventType.TRADE_SUCCEEDED, plan, scheduledFireTime, occurredAt,
                 "trade-success:", "FILLED", succeededSymbols);
-        publishOutcome(NotificationEventType.TRADE_FAILED, plan, scheduledFireTime,
+        publishOutcome(NotificationEventType.TRADE_FAILED, plan, scheduledFireTime, occurredAt,
                 "trade-failed:", "FAILED", failedSymbols);
         publishOutcome(NotificationEventType.PLAN_EXECUTION_SKIPPED, plan, scheduledFireTime,
+                occurredAt,
                 "plan-skipped:", "PRICE_UNAVAILABLE", skippedSymbols);
+        Duration delay = Duration.between(scheduledFireTime, occurredAt);
+        if (!succeededSymbols.isEmpty() && delay.compareTo(Duration.ofMinutes(2)) > 0) {
+            publishDelay(plan, scheduledFireTime, occurredAt, delay);
+        }
     }
 
     @Override
@@ -143,6 +150,7 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
             NotificationEventType type,
             PlanEntity plan,
             Instant scheduledFireTime,
+            Instant occurredAt,
             String dedupePrefix,
             String status,
             List<String> symbols) {
@@ -154,6 +162,7 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
                 plan.getId(),
                 null,
                 scheduledFireTime,
+                occurredAt,
                 dedupePrefix + plan.getId() + ":" + scheduledFireTime,
                 Map.of("symbols", stableSymbols, "status", status));
         try {
@@ -161,6 +170,30 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
         } catch (RuntimeException failure) {
             log.warn("计划执行通知发布失败 planId={} eventType={} errorType={}",
                     plan.getId(), type, failure.getClass().getSimpleName());
+        }
+    }
+
+    private void publishDelay(
+            PlanEntity plan,
+            Instant scheduledFireTime,
+            Instant occurredAt,
+            Duration delay) {
+        NotificationEvent event = new NotificationEvent(
+                NotificationEventType.PLAN_EXECUTION_DELAYED,
+                plan.getUserId(),
+                plan.getId(),
+                null,
+                scheduledFireTime,
+                occurredAt,
+                "plan-delayed:" + plan.getId() + ":" + scheduledFireTime,
+                Map.of("status", "DELAYED", "delaySeconds", Long.toString(delay.getSeconds())),
+                null,
+                null);
+        try {
+            notifications.publish(event);
+        } catch (RuntimeException failure) {
+            log.warn("计划延迟通知发布失败 planId={} errorType={}",
+                    plan.getId(), failure.getClass().getSimpleName());
         }
     }
 

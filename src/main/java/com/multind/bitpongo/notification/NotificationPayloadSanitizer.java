@@ -17,7 +17,7 @@ final class NotificationPayloadSanitizer {
     private static final Set<String> ERROR_FIELDS = Set.of(
             "status", "resultStatus", "error", "errorSummary");
     private static final Set<String> PLAN_FIELDS = Set.of(
-            "symbols", "status", "resultStatus", "error", "errorSummary");
+            "symbols", "status", "resultStatus", "error", "errorSummary", "delaySeconds");
     private static final Set<String> TRADE_FIELDS = Set.of(
             "symbol", "symbols", "status", "resultStatus", "error", "errorSummary");
     private static final Set<String> SUCCESS_FIELDS = Set.of(
@@ -33,6 +33,8 @@ final class NotificationPayloadSanitizer {
         putIfNotNull(payload, "userId", event.userId());
         putIfNotNull(payload, "planId", event.planId());
         putIfNotNull(payload, "intentId", event.intentId());
+        putIfNotNull(payload, "scheduledAt",
+                event.scheduledAt() == null ? null : event.scheduledAt().toString());
         putIfNotNull(payload, "occurredAt",
                 event.occurredAt() == null ? null : event.occurredAt().toString());
         payload.put("attributes", sanitizedAttributes(event));
@@ -106,7 +108,7 @@ final class NotificationPayloadSanitizer {
     private static Set<String> allowedFields(NotificationEventType type) {
         return switch (type) {
             case SCHEDULER_FATAL, MARKET_OUTAGE, ASSET_SNAPSHOT_FAILED -> ERROR_FIELDS;
-            case PLAN_EXECUTION_SKIPPED -> PLAN_FIELDS;
+            case PLAN_EXECUTION_SKIPPED, PLAN_EXECUTION_DELAYED -> PLAN_FIELDS;
             case ORDER_MANUAL_REVIEW, TRADE_FAILED -> TRADE_FIELDS;
             case TRADE_SUCCEEDED -> SUCCESS_FIELDS;
             case SYSTEM_RECOVERED -> RECOVERY_FIELDS;

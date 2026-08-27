@@ -6,7 +6,7 @@ import com.multind.bitpongo.auth.UserRepository;
 import com.multind.bitpongo.exchange.ExchangeApplicationService;
 import com.multind.bitpongo.plan.PlanApplicationService;
 import com.multind.bitpongo.strategy.StrategyApplicationService;
-import java.time.LocalDateTime;
+import java.time.Instant;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,7 +43,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @org.springframework.context.annotation.Import(com.multind.bitpongo.TestNotificationPublisherConfiguration.class)
 class NotificationControllerContractTest {
 
-    private static final LocalDateTime UPDATED_AT = LocalDateTime.of(2026, 8, 23, 12, 0);
+    private static final Instant UPDATED_AT = Instant.parse("2026-08-23T12:00:00Z");
 
     @Autowired private MockMvc mvc;
     @Autowired private JwtTokenService tokens;

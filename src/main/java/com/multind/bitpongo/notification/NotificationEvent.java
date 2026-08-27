@@ -12,6 +12,7 @@ public record NotificationEvent(
         Long userId,
         Long planId,
         Long intentId,
+        Instant scheduledAt,
         Instant occurredAt,
         String dedupeKey,
         Map<String, Object> attributes,
@@ -55,11 +56,38 @@ public record NotificationEvent(
             Long userId,
             Long planId,
             Long intentId,
+            Instant scheduledAt,
+            Instant occurredAt,
+            String dedupeKey,
+            Map<String, Object> attributes) {
+        this(type, userId, planId, intentId, scheduledAt, occurredAt, dedupeKey, attributes,
+                null, null);
+    }
+
+    public NotificationEvent(
+            NotificationEventType type,
+            Long userId,
+            Long planId,
+            Long intentId,
+            Instant occurredAt,
+            String dedupeKey,
+            Map<String, Object> attributes,
+            NotificationAudienceContext audienceContext,
+            NotificationDedupeWindow dedupeWindow) {
+        this(type, userId, planId, intentId, null, occurredAt, dedupeKey, attributes,
+                audienceContext, dedupeWindow);
+    }
+
+    public NotificationEvent(
+            NotificationEventType type,
+            Long userId,
+            Long planId,
+            Long intentId,
             Instant occurredAt,
             String dedupeKey,
             Map<String, Object> attributes,
             NotificationAudienceContext audienceContext) {
-        this(type, userId, planId, intentId, occurredAt, dedupeKey, attributes,
+        this(type, userId, planId, intentId, null, occurredAt, dedupeKey, attributes,
                 audienceContext, null);
     }
 
@@ -71,7 +99,7 @@ public record NotificationEvent(
             Instant occurredAt,
             String dedupeKey,
             Map<String, Object> attributes) {
-        this(type, userId, planId, intentId, occurredAt, dedupeKey, attributes,
+        this(type, userId, planId, intentId, null, occurredAt, dedupeKey, attributes,
                 null, null);
     }
 }

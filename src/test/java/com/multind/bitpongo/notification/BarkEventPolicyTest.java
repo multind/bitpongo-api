@@ -41,6 +41,8 @@ class BarkEventPolicyTest {
                         "timeSensitive", null, false, "alarm", "Bitpongo·行情"),
                 Arguments.of(NotificationEventType.PLAN_EXECUTION_SKIPPED,
                         "timeSensitive", null, false, null, "Bitpongo·计划"),
+                Arguments.of(NotificationEventType.PLAN_EXECUTION_DELAYED,
+                        "timeSensitive", null, false, null, "Bitpongo·计划"),
                 Arguments.of(NotificationEventType.TRADE_SUCCEEDED,
                         "active", null, false, "minuet", "Bitpongo·交易"),
                 Arguments.of(NotificationEventType.ASSET_SNAPSHOT_FAILED,

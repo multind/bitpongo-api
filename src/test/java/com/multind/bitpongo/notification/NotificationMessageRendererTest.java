@@ -17,6 +17,33 @@ class NotificationMessageRendererTest {
     private final NotificationMessageRenderer renderer =
             new NotificationMessageRenderer(new BarkEventPolicy());
 
+    @Test
+    void rendersDistinctScheduledAndActualTradeTimesWithDelay() {
+        NotificationEvent event = new NotificationEvent(
+                NotificationEventType.TRADE_SUCCEEDED,
+                7L,
+                11L,
+                null,
+                Instant.parse("2026-08-25T13:00:00Z"),
+                Instant.parse("2026-08-25T21:00:01Z"),
+                "trade-success-11",
+                Map.of("symbols", List.of("BTCUSDT"), "status", "FILLED"),
+                null,
+                null);
+
+        BarkMessage message = renderer.render(
+                event, "zh-CN", "Asia/Shanghai", null);
+        Map<String, Object> payload = new NotificationPayloadSanitizer().sanitize(event);
+
+        assertThat(message.body())
+                .contains("计划时间：2026-08-25 21:00:00 Asia/Shanghai")
+                .contains("成交时间：2026-08-26 05:00:01 Asia/Shanghai")
+                .contains("延迟：28801秒");
+        assertThat(payload)
+                .containsEntry("scheduledAt", "2026-08-25T13:00:00Z")
+                .containsEntry("occurredAt", "2026-08-25T21:00:01Z");
+    }
+
     @ParameterizedTest
     @MethodSource("localizedMessages")
     void rendersApprovedLocaleTextAndIanaTimezone(
