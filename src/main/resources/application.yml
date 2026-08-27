@@ -18,6 +18,8 @@ spring:
     open-in-view: false
     hibernate:
       ddl-auto: validate
+    properties:
+      hibernate.jdbc.time_zone: UTC
   quartz:
     job-store-type: jdbc
     jdbc:
