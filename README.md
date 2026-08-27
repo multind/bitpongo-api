@@ -11,7 +11,7 @@
 - 默认连接 Binance Testnet。只有 `BINANCE_LIVE_TRADING=true` 且生产 REST 主机为 `api.binance.com` 时才允许真实交易。
 - 下单使用确定性 `clientOrderId`、数据库唯一约束和结果不明确对账，不对下单请求做盲目重试。
 - Binance 5xx、超时和连接中断都按“结果不明确”处理；对账会恢复陈旧的 `READY`/`SUBMITTING`/`RECONCILING` 意图，未成交订单不会计入持仓。
-- 五段 Cron 会完整转换日期/星期字段，Quartz 默认按 `Asia/Shanghai` 执行；可通过 `SCHEDULING_ZONE` 调整。
+- 五段 Cron 会完整转换日期/星期字段；每个策略以自身的 IANA `schedule_timezone` 绑定 Quartz 触发器，不能用服务器默认时区替代。
 
 ## 本地构建
 
@@ -72,11 +72,30 @@ docker compose push
 
 1. 停止 Python 服务的写入，使用 `mysqldump --single-transaction` 完整备份业务库。
 2. 核对字符集、时区和数据库账号权限。
-3. Java 服务首次连接现有库时，Flyway 以版本 1 建立基线，不删除或重建 `user`、`order` 等业务表；V2 增加 `client_order_id`、`order_intent` 和 Quartz 表，V3 增加按计划/触发时间唯一的 `plan_fire_execution` 审计表，V4 增加账号生命周期和外部身份注销记录。
+3. Java 服务首次连接现有库时，Flyway 以版本 1 建立基线，不删除或重建 `user`、`order` 等业务表；后续迁移依次补充幂等下单、Quartz、账号生命周期、通知和时区契约。V11 增加策略执行时区与用户显示时区字段。
 4. 先使用 Testnet 密钥启动，检查 `/actuator/health`、用户登录、交易所列表、策略和计划详情。
 5. 检查 `QRTZ_` 表中活动计划任务恢复正常，再切换入口流量。
 
-空库会按 V1、V2、V3、V4 顺序创建兼容表。不要手工修改 `flyway_schema_history`。升级前始终备份。
+空库会按 Flyway 版本顺序创建兼容表。不要手工修改 `flyway_schema_history`。升级前始终备份。
+
+## 时区契约与部署顺序
+
+- 数据库和 API 的绝对时间统一使用 UTC instant；响应必须包含 `Z` 或明确偏移。
+- 策略的 `schedule_timezone` 是执行语义，创建后用于计算 Cron、Quartz 触发器和下次执行时间。
+- 用户的显示时区仅影响页面和通知格式，不会改变策略执行时刻。
+- 通知分别记录计划触发时间 `scheduledAt` 与实际事件时间 `occurredAt`，不得用其中一个冒充另一个。
+
+生产部署严格按以下顺序执行：
+
+1. 备份 MySQL，并使用只读账号执行 `scripts/audit-timezone-data.sql` 保存上线前结果。
+2. 部署包含 Flyway V11 和兼容 API 的后端版本，确认 `/actuator/health` 正常且 V11 只执行一次。
+3. 对照每个活动策略，核对 Quartz trigger 的 Cron 和 `TIME_ZONE` 与 `strategy.schedule_timezone` 一致。
+4. 部署 Web 前端。
+5. 将已验证的前端资源打入移动端，并按正常流程发布 App。
+6. 至少观察一个完整计划执行周期，核对延迟、misfire、订单和通知时间。
+7. 旧字段或 API 别名只允许在后续独立版本中移除，本次兼容发布不得删除。
+
+对于 `21:00 Asia/Shanghai` 的验证策略，计划 instant 应为 `13:00Z`；页面主时间和 Bark 计划时间应为上海 `21:00`，实际成交时间应由 `occurredAt` 转换，并处于允许的执行延迟范围内。错过执行窗口的恢复流程不得补发市场单。
 
 ## Binance 配置
 
