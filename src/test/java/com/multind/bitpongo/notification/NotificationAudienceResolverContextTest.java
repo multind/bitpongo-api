@@ -27,6 +27,24 @@ class NotificationAudienceResolverContextTest {
                         NotificationRecipientType.USER, 41L));
     }
 
+    @Test
+    void recoverySkipWithoutAResolvedOwnerFallsBackToConfiguredAdmin() {
+        NotificationAudienceResolver resolver = new NotificationAudienceResolver(
+                null, properties(true, "https://localhost/admin-device"));
+        NotificationEvent skipped = new NotificationEvent(
+                NotificationEventType.PLAN_EXECUTION_SKIPPED,
+                null,
+                42L,
+                null,
+                Instant.parse("2026-08-23T04:00:00Z"),
+                "plan-execution-skipped:recovery:42",
+                Map.of("status", "RECOVERY_SKIPPED"));
+
+        assertThat(resolver.resolve(skipped))
+                .containsExactly(new NotificationAudienceResolver.Audience(
+                        NotificationRecipientType.ADMIN, null));
+    }
+
     private static NotificationEvent recovered(NotificationAudienceContext context) {
         return new NotificationEvent(
                 NotificationEventType.SYSTEM_RECOVERED,

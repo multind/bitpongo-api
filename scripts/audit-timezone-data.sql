@@ -1,9 +1,23 @@
 -- Bitpongo timezone rollout audit (read-only).
 -- Run against a backup or a read-only production connection before and after deployment.
 
-SELECT id, cron, schedule_timezone
-FROM strategy
-ORDER BY id;
+-- V11 adds strategy.schedule_timezone. Select it when present, otherwise emit
+-- NULL so the same preflight also works immediately before the migration.
+SET @has_schedule_timezone := (
+    SELECT COUNT(*)
+    FROM information_schema.COLUMNS
+    WHERE TABLE_SCHEMA = DATABASE()
+      AND TABLE_NAME = 'strategy'
+      AND COLUMN_NAME = 'schedule_timezone'
+);
+SET @strategy_audit_sql := IF(
+    @has_schedule_timezone > 0,
+    'SELECT id, cron, schedule_timezone FROM strategy ORDER BY id',
+    'SELECT id, cron, NULL AS schedule_timezone FROM strategy ORDER BY id'
+);
+PREPARE strategy_audit FROM @strategy_audit_sql;
+EXECUTE strategy_audit;
+DEALLOCATE PREPARE strategy_audit;
 
 SELECT id, status, next_time
 FROM plan

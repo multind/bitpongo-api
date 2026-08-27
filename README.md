@@ -87,7 +87,7 @@ docker compose push
 
 生产部署严格按以下顺序执行：
 
-1. 备份 MySQL，并使用只读账号执行 `scripts/audit-timezone-data.sql` 保存上线前结果。
+1. 备份 MySQL，并使用只读账号执行 `scripts/audit-timezone-data.sql` 保存上线前结果；脚本会在 V11 前将 `schedule_timezone` 输出为 `NULL`。
 2. 部署包含 Flyway V11 和兼容 API 的后端版本，确认 `/actuator/health` 正常且 V11 只执行一次。
 3. 对照每个活动策略，核对 Quartz trigger 的 Cron 和 `TIME_ZONE` 与 `strategy.schedule_timezone` 一致。
 4. 部署 Web 前端。

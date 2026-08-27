@@ -47,6 +47,8 @@ class UserTimeZoneServiceTest {
                 .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> service.save(7L, FIXED, "+08:00"))
                 .isInstanceOf(BusinessException.class);
+        assertThatThrownBy(() -> service.save(7L, FIXED, "Etc/GMT+8"))
+                .isInstanceOf(BusinessException.class);
         assertThatThrownBy(() -> service.syncDeviceZone(7L, "Not/AZone"))
                 .isInstanceOf(BusinessException.class);
     }

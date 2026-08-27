@@ -100,6 +100,9 @@ class StrategyApplicationServiceTest {
         assertThatThrownBy(() -> StrategyApplicationService.scheduleZone("+08:00"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("地区名称");
+        assertThatThrownBy(() -> StrategyApplicationService.scheduleZone("Etc/GMT+8"))
+                .isInstanceOf(BusinessException.class)
+                .hasMessageContaining("地区名称");
         assertThatThrownBy(() -> StrategyApplicationService.scheduleZone("Not/AZone"))
                 .isInstanceOf(BusinessException.class)
                 .hasMessageContaining("无效");

@@ -206,7 +206,9 @@ public class StrategyApplicationService {
         } catch (DateTimeException invalid) {
             throw new BusinessException(400, "策略时区无效");
         }
-        if (zone instanceof ZoneOffset || (!("UTC".equals(effective) || effective.contains("/")))) {
+        if (zone instanceof ZoneOffset
+                || (!("UTC".equals(effective) || effective.contains("/")))
+                || (!("UTC".equals(effective)) && zone.getRules().isFixedOffset())) {
             throw new BusinessException(400, "策略时区必须使用地区名称");
         }
         return zone;

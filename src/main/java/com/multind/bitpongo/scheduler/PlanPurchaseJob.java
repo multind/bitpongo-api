@@ -5,6 +5,7 @@ import com.multind.bitpongo.notification.NotificationEvent;
 import com.multind.bitpongo.notification.NotificationEventType;
 import com.multind.bitpongo.notification.NotificationMessageRenderer;
 import com.multind.bitpongo.notification.NotificationPublisher;
+import com.multind.bitpongo.plan.PlanRepository;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -23,6 +24,7 @@ public class PlanPurchaseJob implements Job {
     @Autowired private ScheduledPurchaseUseCase purchases;
     @Autowired private NotificationPublisher notifications;
     @Autowired private PlanExecutionMetrics metrics;
+    @Autowired private PlanRepository plans;
     private Clock clock = Clock.systemUTC();
 
     public PlanPurchaseJob() {}
@@ -68,9 +70,12 @@ public class PlanPurchaseJob implements Job {
     }
 
     private void publishRecoverySkipped(long planId, Instant scheduledAt, Instant occurredAt) {
+        Long userId = plans == null ? null : plans.findById(planId)
+                .map(plan -> plan.getUserId())
+                .orElse(null);
         NotificationEvent event = new NotificationEvent(
                 NotificationEventType.PLAN_EXECUTION_SKIPPED,
-                null,
+                userId,
                 planId,
                 null,
                 scheduledAt,

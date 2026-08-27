@@ -53,8 +53,11 @@ public final class NotificationAudienceResolver {
                     resolveContext(event.audienceContext(), audiences);
                 }
             }
-            case PLAN_EXECUTION_SKIPPED, PLAN_EXECUTION_DELAYED,
-                    TRADE_SUCCEEDED, ASSET_SNAPSHOT_FAILED ->
+            case PLAN_EXECUTION_SKIPPED -> {
+                if (event.userId() == null) addAdmin(audiences);
+                else addUser(audiences, event.userId());
+            }
+            case PLAN_EXECUTION_DELAYED, TRADE_SUCCEEDED, ASSET_SNAPSHOT_FAILED ->
                     addUser(audiences, event.userId());
             case SYSTEM_RECOVERED -> resolveContext(event.audienceContext(), audiences);
             case SERVICE_STARTED -> addAdmin(audiences);

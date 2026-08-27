@@ -4,6 +4,8 @@ import com.multind.bitpongo.notification.NotificationDedupeWindow;
 import com.multind.bitpongo.notification.NotificationEvent;
 import com.multind.bitpongo.notification.NotificationEventType;
 import com.multind.bitpongo.notification.NotificationPublisher;
+import com.multind.bitpongo.plan.PlanEntity;
+import com.multind.bitpongo.plan.PlanRepository;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.lang.reflect.Field;
 import java.time.Clock;
@@ -13,6 +15,7 @@ import java.time.ZoneOffset;
 import java.util.ArrayList;
 import java.util.Date;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.quartz.JobDataMap;
 import org.quartz.JobExecutionContext;
@@ -44,6 +47,12 @@ class PlanPurchaseJobTest {
         injectIfPresent(job, "notifications", notifications);
         injectIfPresent(job, "clock", Clock.fixed(scheduled.plusSeconds(90), ZoneOffset.UTC));
         injectIfPresent(job, "metrics", new PlanExecutionMetrics(registry));
+        PlanRepository plans = mock(PlanRepository.class);
+        PlanEntity plan = new PlanEntity();
+        plan.setId(42L);
+        plan.setUserId(7L);
+        when(plans.findById(42L)).thenReturn(Optional.of(plan));
+        injectIfPresent(job, "plans", plans);
 
         job.execute(context);
 
@@ -54,6 +63,7 @@ class PlanPurchaseJobTest {
         assertThat(notifications.events()).singleElement().satisfies(event -> {
             assertThat(event.type()).isEqualTo(NotificationEventType.PLAN_EXECUTION_SKIPPED);
             assertThat(event.planId()).isEqualTo(42L);
+            assertThat(event.userId()).isEqualTo(7L);
             assertThat(event.occurredAt()).isEqualTo(scheduled.plusSeconds(90));
             assertThat(event.attributes()).containsEntry("status", "RECOVERY_SKIPPED");
         });

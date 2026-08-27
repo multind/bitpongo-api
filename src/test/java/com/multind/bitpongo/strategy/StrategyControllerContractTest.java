@@ -108,7 +108,7 @@ class StrategyControllerContractTest {
         exchange.setExchange("binance");
         when(exchanges.findByIdAndUserId(3L, 7L)).thenReturn(java.util.Optional.of(exchange));
 
-        for (String timezone : List.of("CST", "+08:00", "Not/AZone")) {
+        for (String timezone : List.of("CST", "+08:00", "Etc/GMT+8", "Not/AZone")) {
             mvc.perform(post("/api/strategies/create").header("Authorization", bearer())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("""
