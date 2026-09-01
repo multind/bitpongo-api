@@ -40,6 +40,7 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
     private final PriceCache prices;
     private final OrderIdFactory orderIds;
     private final OrderPersistenceService persistence;
+    private final AssetSnapshotUseCase snapshots;
     private final NotificationPublisher notifications;
     private final Clock clock;
 
@@ -50,9 +51,10 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
             ExchangeRepository exchanges, OrderIntentRepository intents,
             ExchangeGatewayRegistry gateways, OrderSizingService sizing, PriceCache prices,
             OrderIdFactory orderIds, OrderPersistenceService persistence,
+            AssetSnapshotUseCase snapshots,
             NotificationPublisher notifications) {
         this(plans, strategies, coins, orders, exchanges, intents, gateways, sizing, prices,
-                orderIds, persistence, notifications, Clock.systemUTC());
+                orderIds, persistence, snapshots, notifications, Clock.systemUTC());
     }
 
     ScheduledPurchaseService(
@@ -61,11 +63,13 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
             ExchangeRepository exchanges, OrderIntentRepository intents,
             ExchangeGatewayRegistry gateways, OrderSizingService sizing, PriceCache prices,
             OrderIdFactory orderIds, OrderPersistenceService persistence,
+            AssetSnapshotUseCase snapshots,
             NotificationPublisher notifications, Clock clock) {
         this.plans = plans; this.strategies = strategies; this.coins = coins; this.orders = orders;
         this.exchanges = exchanges; this.intents = intents; this.gateways = gateways;
         this.sizing = sizing; this.prices = prices; this.orderIds = orderIds;
-        this.persistence = persistence; this.notifications = notifications; this.clock = clock;
+        this.persistence = persistence; this.snapshots = snapshots;
+        this.notifications = notifications; this.clock = clock;
     }
 
     @Override
@@ -138,6 +142,14 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
         Duration delay = Duration.between(scheduledFireTime, occurredAt);
         if (!succeededSymbols.isEmpty() && delay.compareTo(Duration.ofMinutes(2)) > 0) {
             publishDelay(plan, scheduledFireTime, occurredAt, delay);
+        }
+        if (!succeededSymbols.isEmpty()) {
+            try {
+                snapshots.capture(planId);
+            } catch (RuntimeException failure) {
+                log.warn("成交后收益快照生成失败 planId={} errorType={}",
+                        planId, failure.getClass().getSimpleName());
+            }
         }
     }
 

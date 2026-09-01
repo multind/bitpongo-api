@@ -26,4 +26,11 @@ public final class PlanDtos {
             List<CoinEntity> coins,
             List<OrderEntity> orders,
             List<SnapshotEntity> snapshots) {}
+
+    public record OrderPage(
+            List<OrderEntity> items,
+            int page,
+            int size,
+            long total,
+            boolean hasMore) {}
 }

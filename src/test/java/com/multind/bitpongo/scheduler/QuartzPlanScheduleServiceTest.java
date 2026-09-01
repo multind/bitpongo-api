@@ -14,6 +14,9 @@ import java.time.ZoneId;
 import java.util.Date;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class QuartzPlanScheduleServiceTest {
     private Scheduler scheduler;
@@ -86,5 +89,33 @@ class QuartzPlanScheduleServiceTest {
                 Instant.parse("2026-11-01T05:30:00Z"),
                 Instant.parse("2026-11-01T06:30:00Z"));
         assertThat(second.toInstant()).isEqualTo(Instant.parse("2026-11-02T06:30:00Z"));
+    }
+
+    @Test
+    void repairsAnExistingAssetSnapshotTriggerInErrorState() throws Exception {
+        Scheduler broken = mock(Scheduler.class);
+        JobKey jobKey = JobKey.jobKey("job_asset_snapshot", "system");
+        TriggerKey triggerKey = TriggerKey.triggerKey("trigger_asset_snapshot", "system");
+        when(broken.checkExists(jobKey)).thenReturn(true);
+        when(broken.getTrigger(triggerKey)).thenReturn(mock(CronTrigger.class));
+        when(broken.getTriggerState(triggerKey)).thenReturn(Trigger.TriggerState.ERROR);
+        org.springframework.beans.factory.ObjectProvider<Scheduler> provider =
+                new org.springframework.beans.factory.ObjectProvider<>() {
+                    @Override public Scheduler getObject() { return broken; }
+                    @Override public Scheduler getObject(java.lang.Object... args) { return broken; }
+                    @Override public Scheduler getIfAvailable() { return broken; }
+                    @Override public Scheduler getIfUnique() { return broken; }
+                };
+
+        new QuartzPlanScheduleService(provider, ZoneId.of("Asia/Shanghai"))
+                .scheduleAssetSnapshot();
+
+        verify(broken).rescheduleJob(
+                org.mockito.ArgumentMatchers.eq(triggerKey),
+                org.mockito.ArgumentMatchers.argThat(value ->
+                        value.getJobKey().equals(jobKey)
+                                && value instanceof CronTrigger cron
+                                && cron.getCronExpression().equals("0 0 * * * ?")));
+        verify(broken).triggerJob(jobKey);
     }
 }

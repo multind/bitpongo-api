@@ -163,6 +163,19 @@ class ScheduleReconcilerIntegrationTest {
         });
     }
 
+    @Test
+    void periodicAssetSnapshotReconciliationChecksTheQuartzTrigger() {
+        PlanRepository plans = mock(PlanRepository.class);
+        StrategyRepository strategies = mock(StrategyRepository.class);
+        QuartzPlanScheduleService schedules = mock(QuartzPlanScheduleService.class);
+        ScheduleReconciler reconciler = new ScheduleReconciler(
+                provider(plans), provider(strategies), provider(schedules), event -> {});
+
+        reconciler.reconcileAssetSnapshotSchedule();
+
+        verify(schedules).scheduleAssetSnapshot();
+    }
+
     @SuppressWarnings("unchecked")
     private static <T> ObjectProvider<T> provider(T value) {
         ObjectProvider<T> provider = mock(ObjectProvider.class);

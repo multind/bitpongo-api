@@ -59,6 +59,34 @@ class OrderReconciliationServiceTest {
     }
 
     @Test
+    void capturesPlanSnapshotAfterReconciliationConfirmsAnOrder() {
+        OrderIntentRepository intents = mock(OrderIntentRepository.class);
+        PlanRepository plans = mock(PlanRepository.class);
+        ExchangeRepository exchanges = mock(ExchangeRepository.class);
+        ExchangeGatewayRegistry gateways = mock(ExchangeGatewayRegistry.class);
+        ExchangeGateway gateway = mock(ExchangeGateway.class);
+        OrderPersistenceService persistence = mock(OrderPersistenceService.class);
+        AssetSnapshotUseCase snapshots = mock(AssetSnapshotUseCase.class);
+        OrderIntentEntity intent = intent("PENDING_RECONCILIATION", 1);
+        PlanEntity plan = new PlanEntity(); plan.setId(42L); plan.setExchangeId(3L);
+        OrderResult result = new OrderResult("BTCUSDT", "99", "client-1", "FILLED",
+                new BigDecimal("0.1"), new BigDecimal("10"), new BigDecimal("100"), Map.of());
+        when(intents.findByStatusInAndUpdatedAtBeforeOrderByCreatedAtAsc(any(), any()))
+                .thenReturn(List.of(intent));
+        when(intents.acquireForReconciliation(eq(1L), any(), any(), any())).thenReturn(1);
+        when(plans.findById(42L)).thenReturn(Optional.of(plan));
+        when(exchanges.findByIdAndUserId(3L, 7L)).thenReturn(Optional.of(exchange()));
+        when(gateways.require("binance")).thenReturn(gateway);
+        when(gateway.findOrder(any(), any(), any())).thenReturn(Optional.of(result));
+        when(persistence.confirmAfterReconciliation(any(), any(), any())).thenReturn(true);
+
+        service(intents, plans, exchanges, gateways, persistence, event -> {}, snapshots)
+                .reconcilePending();
+
+        verify(snapshots).capture(42L);
+    }
+
+    @Test
     void staleSubmittingIntentIsRecoveredAfterCrash() {
         OrderIntentRepository intents = mock(OrderIntentRepository.class);
         PlanRepository plans = mock(PlanRepository.class);
@@ -300,8 +328,17 @@ class OrderReconciliationServiceTest {
             OrderIntentRepository intents, PlanRepository plans, ExchangeRepository exchanges,
             ExchangeGatewayRegistry gateways, OrderPersistenceService persistence,
             NotificationPublisher notifications) {
+        return service(intents, plans, exchanges, gateways, persistence, notifications,
+                mock(AssetSnapshotUseCase.class));
+    }
+
+    private static OrderReconciliationService service(
+            OrderIntentRepository intents, PlanRepository plans, ExchangeRepository exchanges,
+            ExchangeGatewayRegistry gateways, OrderPersistenceService persistence,
+            NotificationPublisher notifications, AssetSnapshotUseCase snapshots) {
         return new OrderReconciliationService(
                 intents, plans, exchanges, gateways,
-                persistence, notifications, Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofSeconds(30), 20);
+                persistence, snapshots, notifications,
+                Clock.fixed(NOW, ZoneOffset.UTC), Duration.ofSeconds(30), 20);
     }
 }

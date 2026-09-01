@@ -18,6 +18,7 @@ import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -80,15 +81,22 @@ public class ScheduleReconciler {
                         "PLAN_REGISTRATION_FAILED", exception);
             }
         });
-        if (scheduleService instanceof QuartzPlanScheduleService quartz) {
-            try {
-                quartz.scheduleAssetSnapshot();
-            } catch (RuntimeException exception) {
-                log.warn("资产快照任务注册失败，将在下次启动时重试: {}", exception.getMessage());
-                publishFailure(
-                        null, null, "asset-snapshot-registration",
-                        "ASSET_SNAPSHOT_REGISTRATION_FAILED", exception);
-            }
+        reconcileAssetSnapshotSchedule();
+    }
+
+    @Scheduled(
+            initialDelayString = "${zhitoubao.scheduler.asset-snapshot-health-delay:60s}",
+            fixedDelayString = "${zhitoubao.scheduler.asset-snapshot-health-delay:60s}")
+    public void reconcileAssetSnapshotSchedule() {
+        PlanScheduleService scheduleService = schedules.getIfAvailable();
+        if (!(scheduleService instanceof QuartzPlanScheduleService quartz)) return;
+        try {
+            quartz.scheduleAssetSnapshot();
+        } catch (RuntimeException exception) {
+            log.warn("资产快照任务注册或恢复失败，将自动重试: {}", exception.getMessage());
+            publishFailure(
+                    null, null, "asset-snapshot-registration",
+                    "ASSET_SNAPSHOT_REGISTRATION_FAILED", exception);
         }
     }
 

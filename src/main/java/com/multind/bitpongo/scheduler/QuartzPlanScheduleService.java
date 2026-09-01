@@ -9,6 +9,7 @@ import org.quartz.JobDetail;
 import org.quartz.JobKey;
 import org.quartz.Scheduler;
 import org.quartz.SchedulerException;
+import org.quartz.Trigger;
 import org.quartz.TriggerBuilder;
 import org.quartz.TriggerKey;
 import org.slf4j.Logger;
@@ -98,15 +99,34 @@ public class QuartzPlanScheduleService implements PlanScheduleService {
         if (scheduler == null) return;
         try {
             JobKey key = JobKey.jobKey("job_asset_snapshot", "system");
-            if (scheduler.checkExists(key)) return;
+            TriggerKey triggerKey = TriggerKey.triggerKey("trigger_asset_snapshot", "system");
+            boolean jobExists = scheduler.checkExists(key);
+            Trigger existingTrigger = scheduler.getTrigger(triggerKey);
+            Trigger.TriggerState triggerState = existingTrigger == null
+                    ? Trigger.TriggerState.NONE : scheduler.getTriggerState(triggerKey);
+            if (jobExists && existingTrigger != null
+                    && triggerState != Trigger.TriggerState.ERROR
+                    && triggerState != Trigger.TriggerState.COMPLETE
+                    && triggerState != Trigger.TriggerState.NONE) {
+                return;
+            }
             JobDetail job = JobBuilder.newJob(AssetSnapshotJob.class).withIdentity(key).build();
             CronTrigger trigger = TriggerBuilder.newTrigger()
-                    .withIdentity("trigger_asset_snapshot", "system")
+                    .withIdentity(triggerKey)
+                    .forJob(key)
                     .withSchedule(CronScheduleBuilder.cronSchedule("0 0 * * * ?")
                             .inTimeZone(timeZone)
                             .withMisfireHandlingInstructionDoNothing())
                     .build();
-            scheduler.scheduleJob(job, trigger);
+            if (!jobExists) {
+                scheduler.scheduleJob(job, trigger);
+            } else if (existingTrigger == null) {
+                scheduler.scheduleJob(trigger);
+            } else {
+                log.warn("重建异常资产快照触发器，原状态={}", triggerState);
+                scheduler.rescheduleJob(triggerKey, trigger);
+            }
+            scheduler.triggerJob(key);
         } catch (SchedulerException exception) {
             throw new IllegalStateException("资产快照任务调度失败", exception);
         }

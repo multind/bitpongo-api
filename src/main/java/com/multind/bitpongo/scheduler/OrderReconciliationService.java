@@ -35,6 +35,7 @@ public class OrderReconciliationService {
     private final ExchangeRepository exchanges;
     private final ExchangeGatewayRegistry gateways;
     private final OrderPersistenceService persistence;
+    private final AssetSnapshotUseCase snapshots;
     private final Clock clock;
     private final Duration staleAge;
     private final int maxAttempts;
@@ -45,10 +46,11 @@ public class OrderReconciliationService {
             OrderIntentRepository intents, PlanRepository plans,
             ExchangeRepository exchanges, ExchangeGatewayRegistry gateways,
             OrderPersistenceService persistence,
+            AssetSnapshotUseCase snapshots,
             NotificationPublisher notifications,
             @Value("${zhitoubao.orders.reconciliation-stale-age:PT30S}") Duration staleAge,
             @Value("${zhitoubao.orders.reconciliation-max-attempts:20}") int maxAttempts) {
-        this(intents, plans, exchanges, gateways, persistence, notifications,
+        this(intents, plans, exchanges, gateways, persistence, snapshots, notifications,
                 Clock.systemUTC(), staleAge, maxAttempts);
     }
 
@@ -56,10 +58,11 @@ public class OrderReconciliationService {
             OrderIntentRepository intents, PlanRepository plans,
             ExchangeRepository exchanges, ExchangeGatewayRegistry gateways,
             OrderPersistenceService persistence,
+            AssetSnapshotUseCase snapshots,
             NotificationPublisher notifications,
             Clock clock, Duration staleAge, int maxAttempts) {
         this.intents = intents; this.plans = plans; this.exchanges = exchanges;
-        this.gateways = gateways; this.persistence = persistence;
+        this.gateways = gateways; this.persistence = persistence; this.snapshots = snapshots;
         this.notifications = notifications;
         this.clock = clock; this.staleAge = staleAge; this.maxAttempts = maxAttempts;
     }
@@ -109,7 +112,7 @@ public class OrderReconciliationService {
             if (result.quantity().signum() <= 0) {
                 mark(intent, "MANUAL_REVIEW", leaseAcquiredAt);
             } else {
-                persistence.confirmAfterReconciliation(intent, result, leaseAcquiredAt);
+                confirmAndSnapshot(intent, result, leaseAcquiredAt);
             }
             return;
         }
@@ -119,13 +122,24 @@ public class OrderReconciliationService {
         }
         if (TERMINAL_STATUSES.contains(status)) {
             if (result.quantity().signum() > 0) {
-                persistence.confirmAfterReconciliation(intent, result, leaseAcquiredAt);
+                confirmAndSnapshot(intent, result, leaseAcquiredAt);
             } else {
                 mark(intent, status, leaseAcquiredAt);
             }
             return;
         }
         requeueOrEscalate(intent, leaseAcquiredAt);
+    }
+
+    private void confirmAndSnapshot(
+            OrderIntentEntity intent, OrderResult result, LocalDateTime leaseAcquiredAt) {
+        if (!persistence.confirmAfterReconciliation(intent, result, leaseAcquiredAt)) return;
+        try {
+            snapshots.capture(intent.getPlanId());
+        } catch (RuntimeException failure) {
+            log.warn("对账成交后收益快照生成失败 planId={} intentId={} errorType={}",
+                    intent.getPlanId(), intent.getId(), failure.getClass().getSimpleName());
+        }
     }
 
     private void requeueOrEscalate(OrderIntentEntity intent, LocalDateTime leaseAcquiredAt) {

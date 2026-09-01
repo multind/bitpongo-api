@@ -15,12 +15,15 @@ import java.util.List;
 import java.util.Set;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import static com.multind.bitpongo.plan.PlanDtos.PlanView;
+import static com.multind.bitpongo.plan.PlanDtos.OrderPage;
 
 @Service
 public class PlanApplicationService {
@@ -70,7 +73,24 @@ public class PlanApplicationService {
 
     @Transactional(readOnly = true)
     public PlanView detail(long userId, long planId) {
-        return view(owned(userId, planId), userId, true);
+        return detail(userId, planId, true);
+    }
+
+    @Transactional(readOnly = true)
+    public PlanView detail(long userId, long planId, boolean includeOrders) {
+        return view(owned(userId, planId), userId, includeOrders);
+    }
+
+    @Transactional(readOnly = true)
+    public OrderPage orders(long userId, long planId, int page, int size) {
+        owned(userId, planId);
+        if (page < 0) throw new BusinessException(400, "页码不能小于 0");
+        int pageSize = Math.max(1, Math.min(size, 50));
+        var result = orders.findByPlanIdAndUserId(
+                planId, userId, PageRequest.of(page, pageSize,
+                        Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))));
+        return new OrderPage(result.getContent(), result.getNumber(), result.getSize(),
+                result.getTotalElements(), result.hasNext());
     }
 
     @Transactional

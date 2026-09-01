@@ -32,6 +32,7 @@ class ScheduledPurchaseServiceTest {
     private final ExchangeGatewayRegistry gateways = mock(ExchangeGatewayRegistry.class);
     private final ExchangeGateway gateway = mock(ExchangeGateway.class);
     private final OrderPersistenceService persistence = mock(OrderPersistenceService.class);
+    private final AssetSnapshotUseCase snapshots = mock(AssetSnapshotUseCase.class);
     private final Instant fire = Instant.parse("2026-08-09T00:00:00Z");
     private final PriceCache prices = new PriceCache(Duration.ofMinutes(1));
     private final CollectingNotificationPublisher notifications =
@@ -71,7 +72,7 @@ class ScheduledPurchaseServiceTest {
         service = new ScheduledPurchaseService(
                 plans, strategies, coins, orders,
                 exchanges, intents, gateways, new OrderSizingService(), prices,
-                new OrderIdFactory(), persistence, notifications,
+                new OrderIdFactory(), persistence, snapshots, notifications,
                 Clock.fixed(fire, ZoneOffset.UTC));
     }
 
@@ -82,6 +83,13 @@ class ScheduledPurchaseServiceTest {
         verify(gateway, times(1)).marketBuy(any(), eq("BTCUSDT"), any(), any());
         verify(persistence).confirm(any(OrderIntentEntity.class), any(OrderResult.class));
         verify(persistence, times(2)).beginTrigger(42L, fire);
+    }
+
+    @Test
+    void capturesAPlanSnapshotAfterAtLeastOneFilledOrder() {
+        service.execute(42L, fire);
+
+        verify(snapshots).capture(42L);
     }
 
     @Test
@@ -178,7 +186,7 @@ class ScheduledPurchaseServiceTest {
         service = new ScheduledPurchaseService(
                 plans, strategies, coins, orders,
                 exchanges, intents, gateways, new OrderSizingService(), prices,
-                new OrderIdFactory(), persistence, notifications,
+                new OrderIdFactory(), persistence, snapshots, notifications,
                 Clock.fixed(completed, ZoneOffset.UTC));
 
         service.execute(42L, fire);

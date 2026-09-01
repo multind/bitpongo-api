@@ -2,6 +2,8 @@ package com.multind.bitpongo.plan;
 
 import java.util.List;
 import java.util.Optional;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface OrderRepository extends JpaRepository<OrderEntity, Long> {
@@ -9,4 +11,5 @@ public interface OrderRepository extends JpaRepository<OrderEntity, Long> {
     Optional<OrderEntity> findByClientOrderId(String clientOrderId);
     Optional<OrderEntity> findFirstByPlanIdAndSymbolOrderByCreatedAtDesc(Long planId, String symbol);
     List<OrderEntity> findByPlanIdAndUserId(Long planId, Long userId);
+    Page<OrderEntity> findByPlanIdAndUserId(Long planId, Long userId, Pageable pageable);
 }

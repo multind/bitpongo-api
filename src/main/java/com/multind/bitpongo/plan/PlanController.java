@@ -7,6 +7,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import static com.multind.bitpongo.plan.PlanDtos.PlanView;
@@ -35,7 +36,17 @@ public class PlanController {
     @GetMapping("/{planId}")
     public ApiResponse<PlanView> detail(
             @AuthenticationPrincipal AuthenticatedUser user,
-            @PathVariable long planId) {
-        return ApiResponse.success(plans.detail(user.id(), planId));
+            @PathVariable long planId,
+            @RequestParam(name = "include_orders", defaultValue = "true") boolean includeOrders) {
+        return ApiResponse.success(plans.detail(user.id(), planId, includeOrders));
+    }
+
+    @GetMapping("/{planId}/orders")
+    public ApiResponse<PlanDtos.OrderPage> orders(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable long planId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(plans.orders(user.id(), planId, page, size));
     }
 }

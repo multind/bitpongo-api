@@ -59,7 +59,7 @@ class PlanControllerContractTest {
                 Instant.parse("2026-08-09T08:00:00Z"),
                 null, List.of(), List.of(order), List.of(snapshot));
         when(plans.active(7L)).thenReturn(List.of(view));
-        when(plans.detail(7L, 42L)).thenReturn(view);
+        when(plans.detail(7L, 42L, true)).thenReturn(view);
 
         mvc.perform(get("/api/plans/list/active").header("Authorization", bearer()))
                 .andExpect(status().isOk())
@@ -76,6 +76,46 @@ class PlanControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data").doesNotExist());
         verify(plans).updateStatus(7L, 42L, "stop");
+    }
+
+    @Test
+    void tradeHistorySupportsNewestFirstPagination() throws Exception {
+        var user = new com.multind.bitpongo.auth.UserEntity();
+        user.setId(7L); user.setStatus("active");
+        when(users.findById(7L)).thenReturn(java.util.Optional.of(user));
+        OrderEntity order = new OrderEntity();
+        order.setId(9L); order.setSymbol("BTC/USDT");
+        order.setCreatedAt(LocalDateTime.parse("2026-08-09T08:15:30"));
+        when(plans.orders(7L, 42L, 0, 20)).thenReturn(
+                new PlanDtos.OrderPage(List.of(order), 0, 20, 1, false));
+
+        mvc.perform(get("/api/plans/42/orders?page=0&size=20")
+                        .header("Authorization", bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].id").value(9))
+                .andExpect(jsonPath("$.data.items[0].created_at")
+                        .value("2026-08-09T08:15:30Z"))
+                .andExpect(jsonPath("$.data.page").value(0))
+                .andExpect(jsonPath("$.data.has_more").value(false));
+        verify(plans).orders(7L, 42L, 0, 20);
+    }
+
+    @Test
+    void detailCanSkipTheLegacyUnpagedOrderList() throws Exception {
+        var user = new com.multind.bitpongo.auth.UserEntity();
+        user.setId(7L); user.setStatus("active");
+        when(users.findById(7L)).thenReturn(java.util.Optional.of(user));
+        PlanDtos.PlanView view = new PlanDtos.PlanView(
+                42L, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO, BigDecimal.ZERO,
+                null, null, "active", 7L, 0, Instant.parse("2026-08-09T08:00:00Z"),
+                null, List.of(), List.of(), List.of());
+        when(plans.detail(7L, 42L, false)).thenReturn(view);
+
+        mvc.perform(get("/api/plans/42?include_orders=false")
+                        .header("Authorization", bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.orders").isEmpty());
+        verify(plans).detail(7L, 42L, false);
     }
 
     private String bearer() { return "Bearer " + tokens.issue(7L); }
