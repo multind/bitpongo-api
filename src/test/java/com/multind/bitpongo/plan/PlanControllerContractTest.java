@@ -15,6 +15,7 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -86,8 +87,11 @@ class PlanControllerContractTest {
         OrderEntity order = new OrderEntity();
         order.setId(9L); order.setSymbol("BTC/USDT");
         order.setCreatedAt(LocalDateTime.parse("2026-08-09T08:15:30"));
+        PlanEntity associatedPlan = new PlanEntity();
+        associatedPlan.setId(42L);
+        ReflectionTestUtils.setField(order, "plan", associatedPlan);
         when(plans.orders(7L, 42L, 0, 20)).thenReturn(
-                new PlanDtos.OrderPage(List.of(order), 0, 20, 1, false));
+                new PlanDtos.OrderPage(List.of(PlanDtos.OrderView.from(order)), 0, 20, 1, false));
 
         mvc.perform(get("/api/plans/42/orders?page=0&size=20")
                         .header("Authorization", bearer()))
@@ -95,6 +99,7 @@ class PlanControllerContractTest {
                 .andExpect(jsonPath("$.data.items[0].id").value(9))
                 .andExpect(jsonPath("$.data.items[0].created_at")
                         .value("2026-08-09T08:15:30Z"))
+                .andExpect(jsonPath("$.data.items[0].plan").doesNotExist())
                 .andExpect(jsonPath("$.data.page").value(0))
                 .andExpect(jsonPath("$.data.has_more").value(false));
         verify(plans).orders(7L, 42L, 0, 20);

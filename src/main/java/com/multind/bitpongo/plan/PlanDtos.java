@@ -28,9 +28,29 @@ public final class PlanDtos {
             List<SnapshotEntity> snapshots) {}
 
     public record OrderPage(
-            List<OrderEntity> items,
+            List<OrderView> items,
             int page,
             int size,
             long total,
             boolean hasMore) {}
+
+    public record OrderView(
+            Long id,
+            String symbol,
+            String orderNo,
+            String clientOrderId,
+            BigDecimal totalAmount,
+            BigDecimal averagePrice,
+            BigDecimal totalCost,
+            BigDecimal fee,
+            Long userId,
+            @JsonProperty("created_at") Instant createdAt,
+            Long planId) {
+        public static OrderView from(OrderEntity order) {
+            return new OrderView(
+                    order.getId(), order.getSymbol(), order.getOrderNo(), order.getClientOrderId(),
+                    order.getTotalAmount(), order.getAveragePrice(), order.getTotalCost(),
+                    order.getFee(), order.getUserId(), order.getCreatedAtInstant(), order.getPlanId());
+        }
+    }
 }

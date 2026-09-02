@@ -24,6 +24,7 @@ import org.springframework.transaction.support.TransactionSynchronizationManager
 
 import static com.multind.bitpongo.plan.PlanDtos.PlanView;
 import static com.multind.bitpongo.plan.PlanDtos.OrderPage;
+import static com.multind.bitpongo.plan.PlanDtos.OrderView;
 
 @Service
 public class PlanApplicationService {
@@ -89,7 +90,8 @@ public class PlanApplicationService {
         var result = orders.findByPlanIdAndUserId(
                 planId, userId, PageRequest.of(page, pageSize,
                         Sort.by(Sort.Order.desc("createdAt"), Sort.Order.desc("id"))));
-        return new OrderPage(result.getContent(), result.getNumber(), result.getSize(),
+        return new OrderPage(result.getContent().stream().map(OrderView::from).toList(),
+                result.getNumber(), result.getSize(),
                 result.getTotalElements(), result.hasNext());
     }
 
