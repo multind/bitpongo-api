@@ -13,6 +13,12 @@ Bitpongo API 是 Bitpongo 自动化投资平台的后端服务，提供账号管
 > [!WARNING]
 > 自动化交易存在重大风险。本软件仅用于技术和教育目的，不构成投资建议。启用真实交易前，必须先使用交易所 Testnet 凭据验证所有策略。
 
+## 在线体验 Bitpongo
+
+打开在线应用：[https://app.imastermind.io](https://app.imastermind.io)。注册或登录账号，连接受支持的交易所账户后，即可直接在浏览器中创建并监控自动化策略。
+
+这是正式在线服务，不是模拟演示。根据交易所和策略配置，操作可能提交真实订单。API Key 只应开启交易权限，必须关闭提现权限，并在启动策略前仔细检查全部配置。
+
 ## 功能
 
 - 与 Bitpongo 前端兼容的 REST 和 WebSocket API。
