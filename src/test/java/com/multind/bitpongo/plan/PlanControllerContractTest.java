@@ -20,6 +20,7 @@ import org.springframework.test.util.ReflectionTestUtils;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -121,6 +122,20 @@ class PlanControllerContractTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.orders").isEmpty());
         verify(plans).detail(7L, 42L, false);
+    }
+
+    @Test
+    void renamePersistsTheOwnedPlansStrategyName() throws Exception {
+        var user = new com.multind.bitpongo.auth.UserEntity();
+        user.setId(7L); user.setStatus("active");
+        when(users.findById(7L)).thenReturn(java.util.Optional.of(user));
+
+        mvc.perform(put("/api/plans/42/name")
+                        .header("Authorization", bearer())
+                        .contentType(org.springframework.http.MediaType.APPLICATION_JSON)
+                        .content("{\"name\":\"新的策略名称\"}"))
+                .andExpect(status().isOk());
+        verify(plans).rename(7L, 42L, "新的策略名称");
     }
 
     private String bearer() { return "Bearer " + tokens.issue(7L); }

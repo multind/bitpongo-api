@@ -118,6 +118,15 @@ public class PlanApplicationService {
         afterCommit(scheduleMutation);
     }
 
+    @Transactional
+    public void rename(long userId, long planId, String name) {
+        PlanEntity plan = owned(userId, planId);
+        StrategyEntity strategy = strategies.findByIdAndUserId(plan.getStrategyId(), userId)
+                .orElseThrow(() -> new BusinessException(404, "定投策略不存在"));
+        strategy.setName(name.trim());
+        strategies.save(strategy);
+    }
+
     private static void afterCommit(Runnable action) {
         if (TransactionSynchronizationManager.isSynchronizationActive()) {
             TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {

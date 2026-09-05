@@ -3,12 +3,17 @@ package com.multind.bitpongo.plan;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.multind.bitpongo.strategy.CoinEntity;
 import com.multind.bitpongo.strategy.StrategyEntity;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 import java.time.Instant;
 import java.util.List;
 
 public final class PlanDtos {
     private PlanDtos() {}
+
+    public record PlanRenameRequest(
+            @NotBlank @Size(max = 100) String name) {}
 
     public record PlanView(
             Long id,

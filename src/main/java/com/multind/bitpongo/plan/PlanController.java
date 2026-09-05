@@ -2,15 +2,19 @@ package com.multind.bitpongo.plan;
 
 import com.multind.bitpongo.auth.AuthenticatedUser;
 import com.multind.bitpongo.common.api.ApiResponse;
+import jakarta.validation.Valid;
 import java.util.List;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import static com.multind.bitpongo.plan.PlanDtos.PlanView;
+import static com.multind.bitpongo.plan.PlanDtos.PlanRenameRequest;
 
 @RestController
 @RequestMapping("/api/plans")
@@ -30,6 +34,15 @@ public class PlanController {
             @PathVariable long planId,
             @PathVariable String status) {
         plans.updateStatus(user.id(), planId, status);
+        return ApiResponse.success(null);
+    }
+
+    @PutMapping("/{planId}/name")
+    public ApiResponse<Void> rename(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable long planId,
+            @Valid @RequestBody PlanRenameRequest request) {
+        plans.rename(user.id(), planId, request.name());
         return ApiResponse.success(null);
     }
 
