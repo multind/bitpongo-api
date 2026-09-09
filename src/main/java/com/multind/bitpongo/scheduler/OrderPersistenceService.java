@@ -13,6 +13,7 @@ import java.math.RoundingMode;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -142,8 +143,9 @@ public class OrderPersistenceService {
     public boolean beginTrigger(long planId, Instant scheduledFireTime) {
         LocalDateTime fireTime = UtcDateTimes.toDatabase(scheduledFireTime);
         int inserted = jdbc.update("""
-                INSERT IGNORE INTO plan_fire_execution(plan_id, scheduled_fire_time, created_at)
-                VALUES (?, ?, ?)
+                INSERT IGNORE INTO plan_fire_execution(
+                    plan_id, scheduled_fire_time, result_status, created_at)
+                VALUES (?, ?, 'RUNNING', ?)
                 """, planId, fireTime, now());
         if (inserted == 0) return false;
         PlanEntity plan = plans.findById(planId)
@@ -151,6 +153,26 @@ public class OrderPersistenceService {
         plan.setTriggeredCount((plan.getTriggeredCount() == null ? 0 : plan.getTriggeredCount()) + 1);
         plans.save(plan);
         return true;
+    }
+
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    public void completeTrigger(
+            long planId,
+            Instant scheduledFireTime,
+            String resultStatus,
+            String reason,
+            List<String> symbols) {
+        jdbc.update("""
+                UPDATE plan_fire_execution
+                SET result_status = ?, reason = ?, symbols = ?, completed_at = ?
+                WHERE plan_id = ? AND scheduled_fire_time = ?
+                """,
+                resultStatus,
+                reason,
+                String.join(",", symbols),
+                now(),
+                planId,
+                UtcDateTimes.toDatabase(scheduledFireTime));
     }
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)

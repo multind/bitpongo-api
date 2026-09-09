@@ -53,6 +53,7 @@ class ScheduledPurchaseServiceTest {
         when(coins.findByPlanIdAndUserId(42L, 7L)).thenReturn(List.of(coin));
         when(exchanges.findByIdAndUserId(3L, 7L)).thenReturn(Optional.of(exchange));
         when(gateways.require("binance")).thenReturn(gateway);
+        when(persistence.beginTrigger(42L, fire)).thenReturn(true);
         when(gateway.getMarketRules(anyString())).thenReturn(new MarketRules(
                 new BigDecimal("10"), new BigDecimal("0.0001"),
                 new BigDecimal("0.0001"), new BigDecimal("100")));
@@ -78,11 +79,14 @@ class ScheduledPurchaseServiceTest {
 
     @Test
     void sameScheduledFireOnlySubmitsOnce() {
+        when(persistence.beginTrigger(42L, fire)).thenReturn(true, false);
         service.execute(42L, fire);
         service.execute(42L, fire);
         verify(gateway, times(1)).marketBuy(any(), eq("BTCUSDT"), any(), any());
         verify(persistence).confirm(any(OrderIntentEntity.class), any(OrderResult.class));
         verify(persistence, times(2)).beginTrigger(42L, fire);
+        verify(persistence, times(1)).completeTrigger(
+                42L, fire, "SUCCEEDED", null, List.of("BTCUSDT"));
     }
 
     @Test
@@ -239,6 +243,40 @@ class ScheduledPurchaseServiceTest {
             assertThat(event.attributes()).containsEntry("status", "PRICE_UNAVAILABLE");
             assertThat(event.attributes().get("symbols")).isEqualTo(List.of("BTCUSDT"));
         });
+    }
+
+    @Test
+    void reportsAverageDownPriceConditionAsOneSkippedEventWithoutSubmittingOrder() {
+        StrategyEntity strategy = new StrategyEntity();
+        strategy.setId(11L);
+        strategy.setUserId(7L);
+        strategy.setInstalment(100);
+        strategy.setCondition("total_average");
+        when(strategies.findById(11L)).thenReturn(Optional.of(strategy));
+        CoinEntity coin = coin(5L, "BTC", "100");
+        coin.setAverageDown(true);
+        coin.setAverage(new BigDecimal("60000"));
+        when(coins.findByPlanIdAndUserId(42L, 7L)).thenReturn(List.of(coin));
+
+        service.execute(42L, fire);
+
+        verify(gateway, never()).marketBuy(any(), anyString(), any(), any());
+        assertThat(notifications.events()).singleElement().satisfies(event -> {
+            assertThat(event.type()).isEqualTo(NotificationEventType.PLAN_EXECUTION_SKIPPED);
+            assertThat(event.userId()).isEqualTo(7L);
+            assertThat(event.planId()).isEqualTo(42L);
+            assertThat(event.scheduledAt()).isEqualTo(fire);
+            assertThat(event.occurredAt()).isEqualTo(fire);
+            assertThat(event.dedupeKey()).isEqualTo("plan-average-down-skipped:42:" + fire);
+            assertThat(event.attributes()).containsEntry("status", "PRICE_NOT_BELOW_AVERAGE");
+            assertThat(event.attributes().get("symbols")).isEqualTo(List.of("BTCUSDT"));
+        });
+        verify(persistence).completeTrigger(
+                42L,
+                fire,
+                "SKIPPED",
+                "PRICE_NOT_BELOW_AVERAGE",
+                List.of("BTCUSDT"));
     }
 
     @Test

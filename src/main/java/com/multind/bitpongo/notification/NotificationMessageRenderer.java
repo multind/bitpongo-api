@@ -88,7 +88,7 @@ public final class NotificationMessageRenderer {
         Object status = attributes.containsKey("status")
                 ? attributes.get("status")
                 : attributes.get("resultStatus");
-        addSanitized(lines, language.result, status);
+        addSanitized(lines, language.result, language.resultText(status));
         Object error = attributes.containsKey("error")
                 ? attributes.get("error")
                 : attributes.get("errorSummary");
@@ -235,6 +235,17 @@ public final class NotificationMessageRenderer {
                     case SERVICE_STARTED -> "Service started";
                     case BARK_TEST -> "Bark test";
                 };
+            };
+        }
+
+        private String resultText(Object status) {
+            if (!"PRICE_NOT_BELOW_AVERAGE".equals(status)) {
+                return status == null ? null : String.valueOf(status);
+            }
+            return switch (this) {
+                case ZH_CN -> "当前价格未低于持仓均价，本轮未买入";
+                case ZH_TW -> "目前價格未低於持倉均價，本輪未買入";
+                case EN_US -> "Current price is not below the average holding price; no purchase was made";
             };
         }
     }

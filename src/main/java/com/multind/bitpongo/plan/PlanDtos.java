@@ -39,6 +39,31 @@ public final class PlanDtos {
             long total,
             boolean hasMore) {}
 
+    public record ExecutionPage(
+            List<ExecutionView> items,
+            int page,
+            int size,
+            long total,
+            boolean hasMore) {}
+
+    public record ExecutionView(
+            Long id,
+            @JsonProperty("result_status") String resultStatus,
+            String reason,
+            List<String> symbols,
+            @JsonProperty("scheduled_at") Instant scheduledAt,
+            @JsonProperty("completed_at") Instant completedAt) {
+        public static ExecutionView from(PlanExecutionEntity execution) {
+            return new ExecutionView(
+                    execution.getId(),
+                    execution.getResultStatus(),
+                    execution.getReason(),
+                    execution.getSymbolList(),
+                    execution.getScheduledAtInstant(),
+                    execution.getCompletedAtInstant());
+        }
+    }
+
     public record OrderView(
             Long id,
             String symbol,

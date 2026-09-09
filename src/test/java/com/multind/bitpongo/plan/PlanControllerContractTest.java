@@ -38,6 +38,7 @@ class PlanControllerContractTest {
     @Autowired MockMvc mvc;
     @Autowired JwtTokenService tokens;
     @MockitoBean PlanApplicationService plans;
+    @MockitoBean PlanExecutionHistoryService executionHistory;
     @MockitoBean ExchangeApplicationService exchangeApplicationService;
     @MockitoBean StrategyApplicationService strategyApplicationService;
     @MockitoBean UserRepository users;
@@ -104,6 +105,34 @@ class PlanControllerContractTest {
                 .andExpect(jsonPath("$.data.page").value(0))
                 .andExpect(jsonPath("$.data.has_more").value(false));
         verify(plans).orders(7L, 42L, 0, 20);
+    }
+
+    @Test
+    void executionHistoryExposesLocalizedReasonCodesAndUtcTimes() throws Exception {
+        var user = new com.multind.bitpongo.auth.UserEntity();
+        user.setId(7L); user.setStatus("active");
+        when(users.findById(7L)).thenReturn(java.util.Optional.of(user));
+        var item = new PlanDtos.ExecutionView(
+                15L,
+                "SKIPPED",
+                "PRICE_NOT_BELOW_AVERAGE",
+                List.of("BTCUSDT", "ETHUSDT"),
+                Instant.parse("2026-09-08T13:00:00Z"),
+                Instant.parse("2026-09-08T13:00:01Z"));
+        when(executionHistory.list(7L, 42L, 0, 20)).thenReturn(
+                new PlanDtos.ExecutionPage(List.of(item), 0, 20, 1, false));
+
+        mvc.perform(get("/api/plans/42/executions?page=0&size=20")
+                        .header("Authorization", bearer()))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.items[0].result_status").value("SKIPPED"))
+                .andExpect(jsonPath("$.data.items[0].reason").value("PRICE_NOT_BELOW_AVERAGE"))
+                .andExpect(jsonPath("$.data.items[0].symbols[1]").value("ETHUSDT"))
+                .andExpect(jsonPath("$.data.items[0].scheduled_at")
+                        .value("2026-09-08T13:00:00Z"))
+                .andExpect(jsonPath("$.data.items[0].completed_at")
+                        .value("2026-09-08T13:00:01Z"));
+        verify(executionHistory).list(7L, 42L, 0, 20);
     }
 
     @Test

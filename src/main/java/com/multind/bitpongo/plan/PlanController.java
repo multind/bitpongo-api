@@ -20,8 +20,14 @@ import static com.multind.bitpongo.plan.PlanDtos.PlanRenameRequest;
 @RequestMapping("/api/plans")
 public class PlanController {
     private final PlanApplicationService plans;
+    private final PlanExecutionHistoryService executionHistory;
 
-    public PlanController(PlanApplicationService plans) { this.plans = plans; }
+    public PlanController(
+            PlanApplicationService plans,
+            PlanExecutionHistoryService executionHistory) {
+        this.plans = plans;
+        this.executionHistory = executionHistory;
+    }
 
     @GetMapping("/list/active")
     public ApiResponse<List<PlanView>> active(@AuthenticationPrincipal AuthenticatedUser user) {
@@ -61,5 +67,14 @@ public class PlanController {
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "20") int size) {
         return ApiResponse.success(plans.orders(user.id(), planId, page, size));
+    }
+
+    @GetMapping("/{planId}/executions")
+    public ApiResponse<PlanDtos.ExecutionPage> executions(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable long planId,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "20") int size) {
+        return ApiResponse.success(executionHistory.list(user.id(), planId, page, size));
     }
 }

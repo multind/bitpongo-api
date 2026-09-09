@@ -191,6 +191,36 @@ class NotificationMessageRendererTest {
         assertThat(message.body()).contains("币种：BTCUSDT, ETHUSDT", "结果：FILLED");
     }
 
+    @ParameterizedTest
+    @MethodSource("averageDownSkippedMessages")
+    void explainsAverageDownSkipInTheRecipientsLanguage(
+            String locale, String expectedExplanation) {
+        NotificationEvent event = new NotificationEvent(
+                NotificationEventType.PLAN_EXECUTION_SKIPPED,
+                7L,
+                11L,
+                null,
+                Instant.parse("2026-09-08T13:00:00Z"),
+                "plan-average-down-skipped:11:2026-09-08T13:00:00Z",
+                Map.of(
+                        "symbols", List.of("BTCUSDT", "ETHUSDT"),
+                        "status", "PRICE_NOT_BELOW_AVERAGE"));
+
+        BarkMessage message = renderer.render(event, locale, "Asia/Shanghai", null);
+
+        assertThat(message.body())
+                .contains("BTCUSDT, ETHUSDT")
+                .contains(expectedExplanation)
+                .doesNotContain("结果：PRICE_NOT_BELOW_AVERAGE");
+    }
+
+    private static Stream<Arguments> averageDownSkippedMessages() {
+        return Stream.of(
+                Arguments.of("zh-CN", "当前价格未低于持仓均价，本轮未买入"),
+                Arguments.of("zh-TW", "目前價格未低於持倉均價，本輪未買入"),
+                Arguments.of("en-US", "Current price is not below the average holding price; no purchase was made"));
+    }
+
     private static Stream<Arguments> localizedMessages() {
         return Stream.of(
                 Arguments.of("zh-CN", "Asia/Shanghai", "交易失败",

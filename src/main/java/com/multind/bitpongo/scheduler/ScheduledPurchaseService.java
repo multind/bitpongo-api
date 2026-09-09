@@ -84,8 +84,10 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
                 exchange.getAccessKey(), exchange.getSecretKey(), exchange.getPassword());
         List<String> succeededSymbols = new ArrayList<>();
         List<String> failedSymbols = new ArrayList<>();
+        List<String> pendingSymbols = new ArrayList<>();
         List<String> skippedSymbols = new ArrayList<>();
-        persistence.beginTrigger(planId, scheduledFireTime);
+        List<String> averageDownSkippedSymbols = new ArrayList<>();
+        if (!persistence.beginTrigger(planId, scheduledFireTime)) return;
         for (CoinEntity coin : coins.findByPlanIdAndUserId(planId, plan.getUserId())) {
             String marketSymbol = coin.getSymbol().toUpperCase() + "USDT";
             String internalSymbol = coin.getSymbol().toUpperCase() + "/USDT";
@@ -101,7 +103,10 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
                     continue;
                 }
             }
-            if (shouldSkipAverageDown(planId, strategy, coin, internalSymbol, price)) continue;
+            if (shouldSkipAverageDown(planId, strategy, coin, internalSymbol, price)) {
+                averageDownSkippedSymbols.add(marketSymbol);
+                continue;
+            }
             String clientOrderId = orderIds.create(planId, marketSymbol, scheduledFireTime);
             if (intents.findByClientOrderId(clientOrderId).isPresent()) continue;
             BigDecimal quantity = sizing.calculate(BigDecimal.valueOf(strategy.getInstalment()),
@@ -122,9 +127,11 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
                     failedSymbols.add(marketSymbol);
                 } else {
                     persistence.mark(intent, "PENDING_RECONCILIATION");
+                    pendingSymbols.add(marketSymbol);
                 }
             } catch (AmbiguousOrderException ambiguous) {
                 persistence.mark(intent, "PENDING_RECONCILIATION");
+                pendingSymbols.add(marketSymbol);
             } catch (RuntimeException failure) {
                 persistence.mark(intent, "FAILED");
                 failedSymbols.add(marketSymbol);
@@ -139,6 +146,22 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
         publishOutcome(NotificationEventType.PLAN_EXECUTION_SKIPPED, plan, scheduledFireTime,
                 occurredAt,
                 "plan-skipped:", "PRICE_UNAVAILABLE", skippedSymbols);
+        publishOutcome(NotificationEventType.PLAN_EXECUTION_SKIPPED, plan, scheduledFireTime,
+                occurredAt,
+                "plan-average-down-skipped:", "PRICE_NOT_BELOW_AVERAGE",
+                averageDownSkippedSymbols);
+        ExecutionOutcome executionOutcome = summarizeExecution(
+                succeededSymbols,
+                failedSymbols,
+                pendingSymbols,
+                skippedSymbols,
+                averageDownSkippedSymbols);
+        persistence.completeTrigger(
+                planId,
+                scheduledFireTime,
+                executionOutcome.status(),
+                executionOutcome.reason(),
+                executionOutcome.symbols());
         Duration delay = Duration.between(scheduledFireTime, occurredAt);
         if (!succeededSymbols.isEmpty() && delay.compareTo(Duration.ofMinutes(2)) > 0) {
             publishDelay(plan, scheduledFireTime, occurredAt, delay);
@@ -152,6 +175,41 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
             }
         }
     }
+
+    private static ExecutionOutcome summarizeExecution(
+            List<String> succeededSymbols,
+            List<String> failedSymbols,
+            List<String> pendingSymbols,
+            List<String> unavailableSymbols,
+            List<String> averageDownSkippedSymbols) {
+        List<List<String>> nonEmptyGroups = List.of(
+                        succeededSymbols,
+                        failedSymbols,
+                        pendingSymbols,
+                        unavailableSymbols,
+                        averageDownSkippedSymbols)
+                .stream()
+                .filter(group -> !group.isEmpty())
+                .toList();
+        List<String> symbols = nonEmptyGroups.stream()
+                .flatMap(List::stream)
+                .distinct()
+                .sorted()
+                .toList();
+        if (nonEmptyGroups.size() > 1) {
+            return new ExecutionOutcome("PARTIAL", "MULTIPLE_OUTCOMES", symbols);
+        }
+        if (!succeededSymbols.isEmpty()) return new ExecutionOutcome("SUCCEEDED", null, symbols);
+        if (!failedSymbols.isEmpty()) return new ExecutionOutcome("FAILED", "ORDER_FAILED", symbols);
+        if (!pendingSymbols.isEmpty()) return new ExecutionOutcome("PENDING", "ORDER_RECONCILIATION", symbols);
+        if (!unavailableSymbols.isEmpty()) return new ExecutionOutcome("SKIPPED", "PRICE_UNAVAILABLE", symbols);
+        if (!averageDownSkippedSymbols.isEmpty()) {
+            return new ExecutionOutcome("SKIPPED", "PRICE_NOT_BELOW_AVERAGE", symbols);
+        }
+        return new ExecutionOutcome("SKIPPED", "NO_ACTION", List.of());
+    }
+
+    private record ExecutionOutcome(String status, String reason, List<String> symbols) {}
 
     @Override
     public void updateNextFireTime(long planId, Instant nextFireTime) {

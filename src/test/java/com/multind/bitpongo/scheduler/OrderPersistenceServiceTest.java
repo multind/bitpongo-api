@@ -67,6 +67,32 @@ class OrderPersistenceServiceTest {
     }
 
     @Test
+    void completesTriggerWithStableSymbolsAndUtcTimestamps() {
+        JdbcTemplate jdbc = mock(JdbcTemplate.class);
+        Instant completedAt = Instant.parse("2026-09-08T13:00:01Z");
+        OrderPersistenceService service = new OrderPersistenceService(
+                mock(OrderIntentRepository.class), mock(OrderRepository.class),
+                mock(CoinRepository.class), mock(PlanRepository.class), jdbc,
+                Clock.fixed(completedAt, ZoneId.of("Asia/Shanghai")));
+
+        service.completeTrigger(
+                42L,
+                Instant.parse("2026-09-08T13:00:00Z"),
+                "SKIPPED",
+                "PRICE_NOT_BELOW_AVERAGE",
+                java.util.List.of("BTCUSDT", "ETHUSDT"));
+
+        verify(jdbc).update(
+                contains("UPDATE plan_fire_execution"),
+                eq("SKIPPED"),
+                eq("PRICE_NOT_BELOW_AVERAGE"),
+                eq("BTCUSDT,ETHUSDT"),
+                eq(LocalDateTime.parse("2026-09-08T13:00:01")),
+                eq(42L),
+                eq(LocalDateTime.parse("2026-09-08T13:00:00")));
+    }
+
+    @Test
     void accountsEachCommissionAssetWithoutMixingCurrencies() {
         OrderIntentRepository intents = mock(OrderIntentRepository.class);
         OrderRepository orders = mock(OrderRepository.class);
