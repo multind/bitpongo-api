@@ -37,6 +37,10 @@ public class AccountDeletionService {
     private final PlanScheduleService schedules;
     private final UserBarkSettingService barkSettings;
     private final Clock clock;
+    private com.multind.bitpongo.notification.NativePushService nativePush;
+
+    @Autowired(required = false)
+    void nativePush(com.multind.bitpongo.notification.NativePushService service) { this.nativePush = service; }
 
     @Autowired
     public AccountDeletionService(
@@ -75,6 +79,7 @@ public class AccountDeletionService {
         if (!passwords.matches(password, user.getPassword())) {
             throw new BusinessException(400, "密码错误");
         }
+        if (nativePush != null) nativePush.deleteForUser(userId);
 
         List<PlanEntity> userPlans = plans.findAllForAccountDeletion(userId);
         List<ExchangeEntity> userExchanges = exchanges.findAllForAccountDeletion(userId);

@@ -70,12 +70,20 @@ public final class NotificationAudienceResolver {
 
     public NotificationAudienceContext snapshotMarketOutageAudience() {
         LinkedHashSet<Long> userIds = new LinkedHashSet<>();
-        if (properties.userNotificationsEnabled()) {
-            userIds.addAll(activePlanUserIds());
-        }
+        userIds.addAll(activePlanUserIds());
         boolean admin = properties.adminPushUrl() != null
                 && !properties.adminPushUrl().isBlank();
         return new NotificationAudienceContext(userIds, admin);
+    }
+
+    public java.util.Set<Long> resolveNative(NotificationEvent event) {
+        return switch (event.type()) {
+            case MARKET_OUTAGE -> event.audienceContext() == null ? activePlanUserIds() : event.audienceContext().recipientUserIds();
+            case SYSTEM_RECOVERED -> event.audienceContext() == null ? java.util.Set.of() : event.audienceContext().recipientUserIds();
+            case SERVICE_STARTED -> activePlanUserIds();
+            case BARK_TEST -> java.util.Set.of();
+            default -> event.userId() == null ? java.util.Set.of() : java.util.Set.of(event.userId());
+        };
     }
 
     private void resolveTradeFailure(Long userId, List<Audience> audiences) {

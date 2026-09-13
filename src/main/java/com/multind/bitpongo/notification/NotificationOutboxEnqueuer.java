@@ -29,6 +29,10 @@ class NotificationOutboxEnqueuer {
     private final NotificationPayloadSanitizer payloads;
     private final NotificationDedupeWindowStore windows;
     private final Clock clock;
+    private NativePushOutbox nativePush;
+
+    @Autowired
+    void nativePush(NativePushOutbox nativePush) { this.nativePush = nativePush; }
 
     @Autowired
     NotificationOutboxEnqueuer(
@@ -63,6 +67,7 @@ class NotificationOutboxEnqueuer {
         String baseDedupeKey = Objects.requireNonNull(event.dedupeKey(), "dedupeKey");
         Instant instant = clock.instant();
         LocalDateTime now = LocalDateTime.ofInstant(instant, ZoneOffset.UTC);
+        if (nativePush != null) nativePush.enqueue(event, now);
         for (NotificationAudienceResolver.Audience audience : audiences.resolve(event)) {
             String dedupeKey;
             if (event.dedupeWindow() == null) {
