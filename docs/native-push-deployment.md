@@ -38,6 +38,8 @@ services:
 
 Device registration also accepts optional `activate` (default false). Remote DELETE revokes the binding and clears queued work; an automatic sync keeps it revoked and returns `registered=false`. Only a new account binding or explicit user activation (`activate=true`) clears that revocation. Device listings retain revoked devices as disabled. An invalid token is distinct from user revocation: a rotated token can recover an invalid binding.
 
+Ordinary logout, permission loss and account switch use authenticated `POST /api/users/notifications/push/devices/{installationId}/logout` with `{ "token": "old-device-token" }`, returning the usual envelope with null data. This atomically detaches only the matching account/token fingerprint when the binding is not explicitly revoked; pending deliveries cascade away. Delayed cleanup for an older rotated token cannot remove a new binding. Explicit DELETE revocation survives this logout cleanup. Native clients retain the old token only in secure pending-cleanup storage until the request succeeds; they do not use DELETE for ordinary logout.
+
 ## Device configuration
 
 Register Android/iOS applications in Firebase matching the mobile package/bundle IDs. Mobile uses public Firebase application configuration, never service-account credentials. Upload the Apple APNs authentication key in Firebase, configure matching Apple team/bundle IDs and provisioning capabilities, and verify production/sandbox behavior on physical devices. The mobile guide specifies native build setup.
@@ -47,6 +49,8 @@ The authenticated `/api/users/notifications/push` endpoints manage account prefe
 Payload data contains string fields `eventId`, `userId`, `eventType`, optional `planId`. Titles/bodies use the existing sanitized localized renderer. Native tests use `PUSH_TEST`. Financial fields are not sent via topics. Frontend/native handlers must validate the signed-in account and allowlisted route before opening a plan. Locale variants such as `en-us` are accepted and stored as `en-US`; timezone must be an IANA name.
 
 Device presentation uses the registration's canonical locale and IANA timezone when each delivery is queued (including tests). Different devices on the same account can use different languages/timezones immediately after registration; saving account settings is not required. Account preferences still control categories, enabled state and sound. Already queued messages retain their rendered language/timezone.
+
+Android channel selection follows urgency independently of category preferences: all time-sensitive events (including failed trades, manual review and market outage) use `bitpongo_alerts`; normal successful trades use `bitpongo_trades`; other events use `bitpongo_system`. Silent/passive variants append `_silent`. This matches foreground native channel importance.
 
 ## Reliability and operational limits
 

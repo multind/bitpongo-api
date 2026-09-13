@@ -19,11 +19,8 @@ final class NativePushPolicy {
         };
     }
     static String channel(NotificationEventType type, boolean sound) {
-        String channel = switch (category(type)) {
-            case "tradeSucceeded", "tradeFailed" -> "bitpongo_trades";
-            case "planAlerts" -> "bitpongo_alerts";
-            default -> "bitpongo_system";
-        };
+        String channel = "time-sensitive".equals(urgency(type)) ? "bitpongo_alerts"
+                : type == NotificationEventType.TRADE_SUCCEEDED ? "bitpongo_trades" : "bitpongo_system";
         return channel + (sound && !urgency(type).equals("passive") ? "" : "_silent");
     }
 }

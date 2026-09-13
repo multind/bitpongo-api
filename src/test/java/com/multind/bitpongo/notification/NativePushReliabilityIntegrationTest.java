@@ -168,4 +168,24 @@ class NativePushReliabilityIntegrationTest {
         jdbc.update("delete from push_delivery");service.test(user,a);
         assertThat(jdbc.queryForObject("select message from push_delivery",String.class)).contains("Notification test");
     }
+    @Test void logoutDetachesLiveBindingAndSameAccountCanRegisterAgain() {
+        register(user,a,"token-a");enqueue();service.logout(user,a,"token-a");
+        assertThat(service.devices(user)).isEmpty();
+        assertThat(jdbc.queryForObject("select count(*) from push_delivery",Integer.class)).isZero();
+        assertThat(service.register(user,a,new NativePushController.Registration("token-new","android","authorized","1","en-US","UTC"))).isTrue();
+        assertThat(service.devices(user).getFirst().enabled()).isTrue();
+    }
+    @Test void staleLogoutTokenOrDifferentOwnerCannotRemoveCurrentRegistration() {
+        register(user,a,"token-a");register(user,a,"token-rotated");
+        service.logout(user,a,"token-a");service.logout(other,a,"token-rotated");
+        assertThat(service.devices(user)).hasSize(1);
+        assertThat(service.devices(user).getFirst().enabled()).isTrue();
+        service.logout(user,a,"token-rotated");assertThat(service.devices(user)).isEmpty();
+    }
+    @Test void logoutCleanupPreservesExplicitRevocationTombstone() {
+        register(user,a,"token-a");service.remove(user,a);service.logout(user,a,"token-a");
+        assertThat(service.devices(user)).hasSize(1);
+        assertThat(service.register(user,a,new NativePushController.Registration("token-new","android","authorized","1","en-US","UTC"))).isFalse();
+        assertThat(service.devices(user).getFirst().enabled()).isFalse();
+    }
 }

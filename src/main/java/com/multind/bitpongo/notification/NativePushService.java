@@ -103,6 +103,14 @@ public class NativePushService {
         jdbc.update("delete from push_device where user_id=?", userId);
         jdbc.update("delete from user_push_setting where user_id=?", userId);
     }
+    @Transactional public void logout(long userId, String id, String token) {
+        uuid(id); active(userId);
+        if (token == null || token.isBlank() || token.length() > 4096 || token.chars().anyMatch(Character::isWhitespace))
+            throw invalid("设备推送参数无效");
+        // Atomic conditional detach: delayed offline cleanup must never remove a newer token or explicit revoke.
+        jdbc.update("delete from push_device where installation_id=? and user_id=? and token_hash=? and revoked=false",
+                id,userId,hash(token));
+    }
     @Transactional public void test(long userId, String id) {
         uuid(id); active(userId); ensureSettings(userId);
         if (!client.available()) throw new BusinessException(503, "服务器尚未配置原生推送");

@@ -57,4 +57,14 @@ class NativePushControllerContractTest {
                 .content("{\"installationId\":\"f1b959fe-52ca-41cb-a75c-c54712f0c58b\"}"))
                 .andExpect(status().isOk()).andExpect(jsonPath("$.data.queued").value(true)).andExpect(jsonPath("$.data.sent").doesNotExist());
     }
+    @Test void logoutEndpointUsesPrincipalAndRejectsUnexpectedOwnershipField() throws Exception {
+        String id="f1b959fe-52ca-41cb-a75c-c54712f0c58b";
+        mvc.perform(post("/api/users/notifications/push/devices/"+id+"/logout").contentType("application/json")
+                .content("{\"token\":\"old-token\"}"))
+                .andExpect(status().isOk());
+        verify(service).logout(7L,id,"old-token");
+        mvc.perform(post("/api/users/notifications/push/devices/"+id+"/logout").contentType("application/json")
+                .content("{\"token\":\"old-token\",\"userId\":99}"))
+                .andExpect(status().isBadRequest());
+    }
 }

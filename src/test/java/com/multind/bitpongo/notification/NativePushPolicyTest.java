@@ -15,8 +15,10 @@ class NativePushPolicyTest {
         assertThat(NativePushPolicy.urgency(NotificationEventType.TRADE_FAILED)).isEqualTo("time-sensitive");
         assertThat(NativePushPolicy.urgency(NotificationEventType.TRADE_SUCCEEDED)).isEqualTo("active");
         assertThat(NativePushPolicy.urgency(NotificationEventType.SYSTEM_RECOVERED)).isEqualTo("passive");
-        assertThat(NativePushPolicy.channel(NotificationEventType.TRADE_FAILED, false)).isEqualTo("bitpongo_trades_silent");
-        assertThat(NativePushPolicy.channel(NotificationEventType.MARKET_OUTAGE, true)).isEqualTo("bitpongo_system");
+        assertThat(NativePushPolicy.channel(NotificationEventType.TRADE_FAILED, false)).isEqualTo("bitpongo_alerts_silent");
+        assertThat(NativePushPolicy.channel(NotificationEventType.ORDER_MANUAL_REVIEW, true)).isEqualTo("bitpongo_alerts");
+        assertThat(NativePushPolicy.channel(NotificationEventType.MARKET_OUTAGE, true)).isEqualTo("bitpongo_alerts");
+        assertThat(NativePushPolicy.channel(NotificationEventType.TRADE_SUCCEEDED, true)).isEqualTo("bitpongo_trades");
     }
     @Test void genericInvalidPayloadDoesNotInvalidateToken() {
         assertThat(FcmPushClient.classify(400, "INVALID_ARGUMENT", 0).invalidToken()).isFalse();
@@ -34,7 +36,7 @@ class NativePushPolicyTest {
         assertThat(android.get("priority")).isEqualTo("high");
         assertThat(android.get("ttl")).isEqualTo("60s");
         var notification=(java.util.Map<?,?>)android.get("notification");
-        assertThat(notification.get("channel_id")).isEqualTo("bitpongo_trades_silent");
+        assertThat(notification.get("channel_id")).isEqualTo("bitpongo_alerts_silent");
         assertThat(notification.containsKey("sound")).isFalse();
     }
 }
