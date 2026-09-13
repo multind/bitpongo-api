@@ -98,7 +98,9 @@ public class NativePushDispatcher {
     public void cleanup() { cleanup(NativePushService.now()); }
     void cleanup(LocalDateTime now) {
         tx.executeWithoutResult(status->{
-            jdbc.update("delete from push_device where last_seen_at<?",now.minusDays(staleDays));
+            // Retain explicit opt-out across arbitrarily long offline periods, without retaining a live token.
+            jdbc.update("update push_device set token='',token_hash=sha2(concat('revoked:',installation_id,':',uuid()),256) where revoked=true and token<>''");
+            jdbc.update("delete from push_device where last_seen_at<? and revoked=false",now.minusDays(staleDays));
             jdbc.update("update push_delivery set status='EXPIRED',lease_token=null,lease_until=null,updated_at=? where expires_at<=? and (status in ('PENDING','RETRY') or (status='SENDING' and lease_until<=?))",now,now,now);
             jdbc.update("delete from push_delivery where updated_at<? and status in ('ACCEPTED','SKIPPED','DEAD','EXPIRED')",now.minusDays(retentionDays));
         });

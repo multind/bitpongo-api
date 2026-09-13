@@ -188,4 +188,34 @@ class NativePushReliabilityIntegrationTest {
         assertThat(service.register(user,a,new NativePushController.Registration("token-new","android","authorized","1","en-US","UTC"))).isFalse();
         assertThat(service.devices(user).getFirst().enabled()).isFalse();
     }
+    @Test void staleRevokedDeviceRemainsRevokedAfterCleanupUntilExplicitActivation() {
+        register(user,a,"token-a");service.remove(user,a);
+        jdbc.update("update push_device set last_seen_at=? where installation_id=?",NativePushService.now().minusDays(91),a);
+        dispatcher.cleanup(NativePushService.now());
+        assertThat(service.register(user,a,new NativePushController.Registration("token-new","android","authorized","1","en-US","UTC"))).isFalse();
+        assertThat(service.devices(user).getFirst().enabled()).isFalse();
+        assertThat(service.register(user,a,new NativePushController.Registration("token-new","android","authorized","1","en-US","UTC",true))).isTrue();
+        assertThat(service.devices(user).getFirst().enabled()).isTrue();
+    }
+    @Test void tokenTransferCannotEraseAnotherInstallationsRevocation() {
+        register(user,a,"token-a");service.remove(user,a);
+        assertThat(service.register(user,a,new NativePushController.Registration("shared-token","android","authorized","1","en-US","UTC"))).isFalse();
+        assertThat(jdbc.queryForObject("select token from push_device where installation_id=?",String.class,a)).isEmpty();
+        register(user,b,"shared-token");
+        assertThat(service.register(user,a,new NativePushController.Registration("shared-token","android","authorized","1","en-US","UTC"))).isFalse();
+        assertThat(service.devices(user)).hasSize(2);
+        assertThat(service.devices(user).stream().filter(d->d.installationId().equals(b)).findFirst().orElseThrow().enabled()).isTrue();
+        assertThat(service.register(user,a,new NativePushController.Registration("token-returned","android","authorized","1","en-US","UTC"))).isFalse();
+        assertThat(service.devices(user).stream().filter(d->d.installationId().equals(a)).findFirst().orElseThrow().enabled()).isFalse();
+        service.deleteForUser(user);
+        assertThat(jdbc.queryForObject("select count(*) from push_device where user_id=?",Integer.class,user)).isZero();
+    }
+    @Test void legacyUnscrubbedTombstoneCannotBeReactivatedThroughUniqueTokenConflict() {
+        register(user,a,"legacy-token");service.remove(user,a);
+        jdbc.update("update push_device set token=?,token_hash=? where installation_id=?","legacy-token",NativePushService.hash("legacy-token"),a);
+        register(user,b,"legacy-token");
+        assertThat(service.devices(user)).hasSize(2);
+        assertThat(service.devices(user).stream().filter(d->d.installationId().equals(a)).findFirst().orElseThrow().enabled()).isFalse();
+        assertThat(jdbc.queryForObject("select token from push_device where installation_id=?",String.class,a)).isEmpty();
+    }
 }

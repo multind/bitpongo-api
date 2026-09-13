@@ -64,16 +64,21 @@ public class NativePushService {
         ensureSettings(userId);
         jdbc.queryForObject("select id from push_registration_lock where id=1 for update", Integer.class);
         String hash = hash(r.token());
-        // Delete the previous token owner atomically; FK removes its queued notifications as well.
-        jdbc.update("delete from push_device where token_hash=? and installation_id<>?", hash, installationId);
         var previous = jdbc.queryForList("select * from push_device where installation_id=? for update", installationId);
+        boolean revoked = !previous.isEmpty() && ((Number)previous.getFirst().get("user_id")).longValue()==userId
+                && truth(previous.getFirst().get("revoked")) && !Boolean.TRUE.equals(r.activate());
+        if (!revoked) {
+            // Upgrade older unsanitized tombstones before a unique-token conflict can hit the upsert path.
+            jdbc.update("update push_device set token='',token_hash=sha2(concat('revoked:',installation_id,':',uuid()),256) where token_hash=? and installation_id<>? and revoked=true",
+                    hash,installationId);
+            // Only a live registration may transfer a token. A revoked sync must not detach another device.
+            jdbc.update("delete from push_device where token_hash=? and installation_id<>? and revoked=false", hash, installationId);
+        }
         boolean enabled = Set.of("authorized", "provisional").contains(r.permission());
-        boolean revoked = false;
         String version = UUID.randomUUID().toString();
         if (!previous.isEmpty()) {
             var old = previous.getFirst();
             boolean sameOwner = ((Number) old.get("user_id")).longValue() == userId;
-            revoked = sameOwner && truth(old.get("revoked")) && !Boolean.TRUE.equals(r.activate());
             if (sameOwner && hash.equals(old.get("token_hash")) && r.permission().equals(old.get("permission"))
                     && !truth(old.get("enabled")) && !truth(old.get("revoked"))) enabled = false;
             if (sameOwner && hash.equals(old.get("token_hash")) && revoked == truth(old.get("revoked"))
@@ -81,19 +86,23 @@ public class NativePushService {
             else jdbc.update("delete from push_delivery where installation_id=?", installationId);
         }
         LocalDateTime now = now();
+        // A revoked installation keeps its identity, but never retains the submitted live token.
+        String storedToken = revoked ? "" : r.token();
+        String storedHash = revoked ? tombstoneHash(installationId) : hash;
         jdbc.update("""
                 insert into push_device(installation_id,user_id,token,token_hash,binding_version,platform,permission,
                     enabled,app_version,locale,timezone,last_seen_at,created_at,revoked) values(?,?,?,?,?,?,?,?,?,?,?,?,?,?)
                 on duplicate key update user_id=values(user_id),token=values(token),token_hash=values(token_hash),
                     binding_version=values(binding_version),platform=values(platform),permission=values(permission),
                     enabled=values(enabled),app_version=values(app_version),locale=values(locale),timezone=values(timezone),last_seen_at=values(last_seen_at),revoked=values(revoked)
-                """, installationId,userId,r.token(),hash,version,r.platform(),r.permission(),enabled && !revoked,
+                """, installationId,userId,storedToken,storedHash,version,r.platform(),r.permission(),enabled && !revoked,
                 r.appVersion(),canonicalLocale(r.locale()),r.timezone(),now,now,revoked);
         return !revoked;
     }
     @Transactional public void remove(long userId, String id) {
         uuid(id); active(userId);
-        jdbc.update("update push_device set enabled=false,revoked=true,binding_version=? where installation_id=? and user_id=?", UUID.randomUUID().toString(),id,userId);
+        jdbc.update("update push_device set enabled=false,revoked=true,binding_version=?,token='',token_hash=? where installation_id=? and user_id=?",
+                UUID.randomUUID().toString(),tombstoneHash(id),id,userId);
         jdbc.update("delete from push_delivery where installation_id=? and user_id=?",id,userId);
     }
     @Transactional public void deleteForUser(long userId) {
@@ -156,6 +165,7 @@ public class NativePushService {
     }
     static BusinessException invalid(String message) { return new BusinessException(400,message); }
     static boolean truth(Object value) { return Boolean.TRUE.equals(value) || value instanceof Number n && n.intValue()!=0; }
+    private static String tombstoneHash(String id) { return hash("revoked:"+id+":"+UUID.randomUUID()); }
     static LocalDateTime now() { return LocalDateTime.ofInstant(Instant.now(), ZoneOffset.UTC); }
     static String hash(String text) {
         try { return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(text.getBytes(StandardCharsets.UTF_8))); }
