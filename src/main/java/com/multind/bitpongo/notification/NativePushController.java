@@ -9,6 +9,8 @@ import java.util.List;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.databind.annotation.JsonNaming;
 
 @Profile("!test")
 @RestController
@@ -16,12 +18,17 @@ import org.springframework.web.bind.annotation.*;
 public class NativePushController {
     private final NativePushService service;
     public NativePushController(NativePushService service) { this.service = service; }
+    // Installed native clients and the notification page use camelCase. Keep the legacy API's
+    // global SNAKE_CASE policy, but pin this boundary's request and response contract explicitly.
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record Settings(Boolean enabled, Boolean tradeSucceeded, Boolean tradeFailed,
             Boolean planAlerts, Boolean systemAlerts, Boolean soundEnabled, String locale, String timezone) {
         @JsonAnySetter public void unknown(String field, Object value) { throw bad(); }
     }
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record SettingView(boolean available, boolean enabled, boolean tradeSucceeded, boolean tradeFailed,
             boolean planAlerts, boolean systemAlerts, boolean soundEnabled, String locale, String timezone, int deviceCount) {}
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record Registration(String token, String platform, String permission, String appVersion, String locale, String timezone, Boolean activate) {
         public Registration(String token, String platform, String permission, String appVersion, String locale, String timezone) {
             this(token,platform,permission,appVersion,locale,timezone,false);
@@ -29,9 +36,11 @@ public class NativePushController {
         @JsonAnySetter public void unknown(String field, Object value) { throw bad(); }
         @Override public String toString() { return "Registration[token=<redacted>]"; }
     }
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record DeviceView(String installationId, String platform, String appVersion, boolean enabled,
             Instant lastSeenAt, Instant createdAt) {}
     public record Registered(boolean registered) {}
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record TestRequest(String installationId) {
         @JsonAnySetter public void unknown(String field, Object value) { throw bad(); }
     }
