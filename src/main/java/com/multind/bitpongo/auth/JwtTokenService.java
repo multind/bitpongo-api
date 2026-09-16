@@ -31,7 +31,7 @@ public class JwtTokenService {
     @Autowired
     public JwtTokenService(
             @Value("${zhitoubao.jwt.secret-key:}") String secret,
-            @Value("${zhitoubao.jwt.access-token-expire-minutes:300}") long expireMinutes) {
+            @Value("${zhitoubao.jwt.access-token-expire-minutes:43200}") long expireMinutes) {
         this(secret, Duration.ofMinutes(expireMinutes), Clock.systemUTC());
     }
 

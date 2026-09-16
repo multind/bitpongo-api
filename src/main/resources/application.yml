@@ -63,7 +63,7 @@ zhitoubao:
     allowed-origins: ${BACKEND_CORS_ORIGINS:*}
   jwt:
     secret-key: ${JWT_SECRET_KEY:}
-    access-token-expire-minutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:300}
+    access-token-expire-minutes: ${JWT_ACCESS_TOKEN_EXPIRE_MINUTES:43200}
   binance:
     live-trading: ${BINANCE_LIVE_TRADING:false}
     testnet-rest-base-url: ${BINANCE_TESTNET_REST_BASE_URL:https://testnet.binance.vision}
