@@ -39,6 +39,8 @@ public final class BarkEventPolicy {
                     new Policy("timeSensitive", null, false, "minuet", "Bitpongo·价格提醒");
             case WEBHOOK_TRIGGERED ->
                     new Policy("timeSensitive", null, false, "minuet", "Bitpongo·Webhook");
+            case STRATEGY_SIGNAL ->
+                    new Policy("timeSensitive", null, false, "minuet", "Bitpongo·策略提醒");
             case ASSET_SNAPSHOT_FAILED ->
                     new Policy("active", null, false, null, "Bitpongo·资产");
             case SYSTEM_RECOVERED ->

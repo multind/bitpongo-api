@@ -35,7 +35,7 @@ public class SecurityConfiguration {
                 .authorizeHttpRequests(requests -> requests
                         .requestMatchers(
                                 "/", "/health", "/actuator/health",
-                                "/api/ws/price", "/api/market/symbols", "/api/market/tickers", "/api/market/candles",
+                                "/api/ws/price", "/api/market/symbols", "/api/market/tickers", "/api/market/candles", "/api/market/indicators/fear-greed",
                                 "/api/users/login", "/api/users/v1/login", "/api/users/register", "/api/webhooks/receive/*")
                         .permitAll()
                         .anyRequest().authenticated())

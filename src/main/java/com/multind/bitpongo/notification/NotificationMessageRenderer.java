@@ -206,6 +206,7 @@ public final class NotificationMessageRenderer {
                     case TRADE_SUCCEEDED -> "交易成功";
                     case PRICE_ALERT_TRIGGERED -> "价格提醒";
                     case WEBHOOK_TRIGGERED -> "Webhook 提醒";
+                    case STRATEGY_SIGNAL -> "策略信号提醒";
                     case ASSET_SNAPSHOT_FAILED -> "资产快照失败";
                     case SYSTEM_RECOVERED -> "系统已恢复";
                     case SERVICE_STARTED -> "服务已启动";
@@ -221,6 +222,7 @@ public final class NotificationMessageRenderer {
                     case TRADE_SUCCEEDED -> "交易成功";
                     case PRICE_ALERT_TRIGGERED -> "價格提醒";
                     case WEBHOOK_TRIGGERED -> "Webhook 提醒";
+                    case STRATEGY_SIGNAL -> "策略訊號提醒";
                     case ASSET_SNAPSHOT_FAILED -> "資產快照失敗";
                     case SYSTEM_RECOVERED -> "系統已恢復";
                     case SERVICE_STARTED -> "服務已啟動";
@@ -236,6 +238,7 @@ public final class NotificationMessageRenderer {
                     case TRADE_SUCCEEDED -> "Trade succeeded";
                     case PRICE_ALERT_TRIGGERED -> "Price alert";
                     case WEBHOOK_TRIGGERED -> "Webhook alert";
+                    case STRATEGY_SIGNAL -> "Strategy signal";
                     case ASSET_SNAPSHOT_FAILED -> "Asset snapshot failed";
                     case SYSTEM_RECOVERED -> "System recovered";
                     case SERVICE_STARTED -> "Service started";

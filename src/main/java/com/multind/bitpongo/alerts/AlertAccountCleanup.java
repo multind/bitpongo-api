@@ -21,5 +21,6 @@ public class AlertAccountCleanup {
         jdbc.update("DELETE FROM alert_event WHERE user_id = ?", userId);
         jdbc.update("DELETE FROM price_alert WHERE user_id = ?", userId);
         jdbc.update("DELETE FROM webhook_rule WHERE user_id = ?", userId);
+        jdbc.update("DELETE FROM strategy_subscription WHERE user_id = ?", userId);
     }
 }

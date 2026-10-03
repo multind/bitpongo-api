@@ -57,7 +57,7 @@ public final class NotificationAudienceResolver {
                 if (event.userId() == null) addAdmin(audiences);
                 else addUser(audiences, event.userId());
             }
-            case PLAN_EXECUTION_DELAYED, TRADE_SUCCEEDED, ASSET_SNAPSHOT_FAILED, PRICE_ALERT_TRIGGERED, WEBHOOK_TRIGGERED ->
+            case PLAN_EXECUTION_DELAYED, TRADE_SUCCEEDED, ASSET_SNAPSHOT_FAILED, PRICE_ALERT_TRIGGERED, WEBHOOK_TRIGGERED, STRATEGY_SIGNAL ->
                     addUser(audiences, event.userId());
             case SYSTEM_RECOVERED -> resolveContext(event.audienceContext(), audiences);
             case SERVICE_STARTED -> addAdmin(audiences);

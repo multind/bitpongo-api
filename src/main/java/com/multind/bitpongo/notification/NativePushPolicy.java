@@ -6,14 +6,14 @@ final class NativePushPolicy {
         return switch (type) {
             case TRADE_SUCCEEDED -> "tradeSucceeded";
             case TRADE_FAILED, ORDER_MANUAL_REVIEW -> "tradeFailed";
-            case SCHEDULER_FATAL, PLAN_EXECUTION_SKIPPED, PLAN_EXECUTION_DELAYED, PRICE_ALERT_TRIGGERED, WEBHOOK_TRIGGERED -> "planAlerts";
+            case SCHEDULER_FATAL, PLAN_EXECUTION_SKIPPED, PLAN_EXECUTION_DELAYED, PRICE_ALERT_TRIGGERED, WEBHOOK_TRIGGERED, STRATEGY_SIGNAL -> "planAlerts";
             default -> "systemAlerts";
         };
     }
     static String urgency(NotificationEventType type) {
         return switch (type) {
             case TRADE_FAILED, SCHEDULER_FATAL, ORDER_MANUAL_REVIEW, MARKET_OUTAGE,
-                    PLAN_EXECUTION_SKIPPED, PLAN_EXECUTION_DELAYED, PRICE_ALERT_TRIGGERED, WEBHOOK_TRIGGERED -> "time-sensitive";
+                    PLAN_EXECUTION_SKIPPED, PLAN_EXECUTION_DELAYED, PRICE_ALERT_TRIGGERED, WEBHOOK_TRIGGERED, STRATEGY_SIGNAL -> "time-sensitive";
             case SYSTEM_RECOVERED, SERVICE_STARTED -> "passive";
             default -> "active";
         };
