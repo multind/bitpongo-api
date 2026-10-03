@@ -53,7 +53,8 @@ public class PriceAlertService {
     public AlertDtos.Page<AlertDtos.Rule> list(long userId, String query, String status, int page, int size) {
         bounds(page, size);
         if (query == null || query.length() > 100 || status == null || !Set.of("all", "active", "inactive").contains(status)) throw invalid("筛选条件无效");
-        String filter = "user_id=? and name like ?" + ("active".equals(status) ? " and enabled=true" : "inactive".equals(status) ? " and enabled=false" : "");
+        String expiryNow = "UTC_TIMESTAMP(6)";
+        String filter = "user_id=? and name like ?" + ("active".equals(status) ? " and enabled=true and (expires_at is null or expires_at>"+expiryNow+")" : "inactive".equals(status) ? " and (enabled=false or expires_at<="+expiryNow+")" : "");
         Long total = jdbc.queryForObject("select count(*) from price_alert where " + filter, Long.class, userId, "%" + query + "%");
         var items = jdbc.query("select * from price_alert where " + filter + " order by id desc limit ? offset ?", PriceAlertService::rule,
                 userId, "%" + query + "%", size, (long) page * size);
@@ -62,6 +63,18 @@ public class PriceAlertService {
     public AlertDtos.Rule detail(long userId, long id) {
         return jdbc.query("select * from price_alert where user_id=? and id=?", PriceAlertService::rule, userId, id).stream()
                 .findFirst().orElseThrow(() -> new BusinessException(404, "提醒不存在"));
+    }
+    @Transactional public void update(long userId, long id, AlertDtos.Create request) {
+        validate(request);
+        String symbol = request.symbol().trim().toUpperCase(Locale.ROOT).replace("/", "");
+        detail(userId, id);
+        if (market.symbols(symbol).stream().noneMatch(s -> s.symbol().equals(symbol))) throw invalid("交易对不可用");
+        boolean channel = request.condition().equals("CHANNEL_OUTSIDE");
+        jdbc.update("""
+            update price_alert set name=?,symbol=?,condition_type=?,target=?,lower_price=?,upper_price=?,frequency=?,
+            candle_interval=?,expires_at=?,last_price=null,last_sample_at=null,last_bucket=null,sample_valid_from=? where user_id=? and id=?
+            """, request.name().trim(),symbol,request.condition(),channel?null:request.target(),channel?request.lower():null,
+                channel?request.upper():null,request.frequency(),request.interval(),utc(request.expiresAt()),utc(Instant.now()),userId,id);
     }
     public void enabled(long userId, long id, boolean enabled) {
         var rule = detail(userId, id);
@@ -97,7 +110,8 @@ public class PriceAlertService {
         Instant expiry = instant(row.get("expires_at"));
         Instant lastSample = instant(row.get("last_sample_at"));
         Instant created = instant(row.get("created_at"));
-        if (sampleAt == null || (created != null && sampleAt.isBefore(created)) || price == null || price.signum() <= 0
+        Instant validFrom = instant(row.get("sample_valid_from"));
+        if (sampleAt == null || (created != null && sampleAt.isBefore(created)) || (validFrom != null && sampleAt.isBefore(validFrom)) || price == null || price.signum() <= 0
                 || (expiry != null && (!sampleAt.isBefore(expiry) || !Instant.now().isBefore(expiry)))
                 || (lastSample != null && !sampleAt.isAfter(lastSample))) return;
         boolean match = PriceAlertEvaluator.matches((String) row.get("condition_type"), (BigDecimal) row.get("last_price"), price,

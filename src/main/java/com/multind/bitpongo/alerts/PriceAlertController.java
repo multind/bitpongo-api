@@ -18,5 +18,6 @@ public class PriceAlertController {
     @PutMapping("/{id}/enabled") public ApiResponse<Void> enabled(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable long id, @RequestBody AlertDtos.Enabled body) { service.enabled(user.id(),id,body.enabled()); return ApiResponse.success(null); }
     @PostMapping("/{id}/copy") public ApiResponse<Long> copy(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable long id) { return ApiResponse.success(service.copy(user.id(),id)); }
     @DeleteMapping("/{id}") public ApiResponse<Void> delete(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable long id) { service.delete(user.id(),id); return ApiResponse.success(null); }
+    @PutMapping("/{id}") public ApiResponse<Void> update(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable long id, @RequestBody AlertDtos.Create body) { service.update(user.id(),id,body); return ApiResponse.success(null); }
     @PostMapping("/bulk") public ApiResponse<Void> bulk(@AuthenticationPrincipal AuthenticatedUser user, @RequestBody AlertDtos.Bulk body) { service.bulk(user.id(),body); return ApiResponse.success(null); }
 }

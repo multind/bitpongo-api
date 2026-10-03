@@ -36,7 +36,7 @@ public class SecurityConfiguration {
                         .requestMatchers(
                                 "/", "/health", "/actuator/health",
                                 "/api/ws/price", "/api/market/symbols", "/api/market/tickers", "/api/market/candles",
-                                "/api/users/login", "/api/users/v1/login", "/api/users/register")
+                                "/api/users/login", "/api/users/v1/login", "/api/users/register", "/api/webhooks/receive/*")
                         .permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, error) -> {

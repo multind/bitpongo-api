@@ -15,4 +15,7 @@ public class AlertNotificationBridge {
         enqueuer.enqueueInCurrentTransaction(new NotificationEvent(NotificationEventType.PRICE_ALERT_TRIGGERED, userId,
                 null, null, at, eventKey, Map.of("symbol", symbol, "status", summary)));
     }
+    @Transactional public void webhook(long userId,String eventKey,String summary,Instant at) {
+        enqueuer.enqueueInCurrentTransaction(new NotificationEvent(NotificationEventType.WEBHOOK_TRIGGERED,userId,null,null,at,eventKey,Map.of("status",summary)));
+    }
 }

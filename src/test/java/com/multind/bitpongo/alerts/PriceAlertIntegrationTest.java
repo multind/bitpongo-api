@@ -36,6 +36,8 @@ class PriceAlertIntegrationTest {
     @Autowired AlertEventService inbox;
     @Autowired NativePushService devices;
     @Autowired org.springframework.transaction.PlatformTransactionManager transactions;
+    @Autowired com.multind.bitpongo.auth.AccountDeletionService accounts;
+    @Autowired com.multind.bitpongo.auth.PasswordCompatibilityService passwords;
     @MockitoBean MarketDataService market;
     @MockitoBean NativePushClient push;
     long user;
@@ -50,6 +52,28 @@ class PriceAlertIntegrationTest {
         return alerts.create(user, new AlertDtos.Create("Bitcoin alert", "BTCUSDT", "ABOVE", new BigDecimal("100"), null, null, frequency, "1h", null));
     }
     int count(String table) { return jdbc.queryForObject("select count(*) from "+table+" where user_id=?", Integer.class, user); }
+    @Test void editingPreservesPauseAndHistoryButResetsSampleBaseline() {
+        long id=rule("EVERY_TIME");
+        alerts.sample(user,id,new BigDecimal("110"),Instant.now().plusSeconds(1),1);
+        alerts.enabled(user,id,false);
+        alerts.update(user,id,new AlertDtos.Create("Updated alert","BTCUSDT","CROSS_UP",new BigDecimal("200"),null,null,"ONCE","1h",null));
+        var saved=alerts.detail(user,id);
+        assertThat(saved.name()).isEqualTo("Updated alert");
+        assertThat(saved.target()).isEqualByComparingTo("200");
+        assertThat(saved.enabled()).isFalse();
+        assertThat(saved.triggeredCount()).isEqualTo(1);
+        assertThat(count("alert_event")).isEqualTo(1);
+        assertThatThrownBy(()->alerts.update(user+1,id,new AlertDtos.Create("stolen","BTCUSDT","ABOVE",BigDecimal.ONE,null,null,"ONCE","1h",null))).hasMessageContaining("不存在");
+    }
+    @Test void expiredRulesAreNotListedAsActiveOrAllowedToResume() {
+        long id=rule("ONCE");
+        jdbc.update("update price_alert set expires_at=? where id=?",PriceAlertService.utc(Instant.now().minusSeconds(1)),id);
+        assertThat(alerts.list(user,"","active",0,20).items()).isEmpty();
+        assertThat(alerts.list(user,"","inactive",0,20).items()).hasSize(1);
+        assertThatThrownBy(()->alerts.enabled(user,id,true)).hasMessageContaining("过期");
+        alerts.sample(user,id,new BigDecimal("110"),Instant.now(),1);
+        assertThat(count("alert_event")).isZero();
+    }
     @Test void concurrentDuplicateSamplesProduceOneEventAndOnePush() throws Exception {
         long id = rule("EVERY_TIME"); Instant at = Instant.now().plusSeconds(1);
         try (var pool = Executors.newFixedThreadPool(2)) {
@@ -110,5 +134,31 @@ class PriceAlertIntegrationTest {
         alerts.sample(user,id,new BigDecimal("120"),at.plusSeconds(60),0);
         assertThat(alerts.detail(user,id).triggeredCount()).isEqualTo(2);
         assertThat(count("push_delivery")).isEqualTo(2);
+    }
+    @Test void inboxAndLogsCanBeDeletedIndependentlyWithUserIsolation() {
+        long id=rule("ONCE");alerts.sample(user,id,new BigDecimal("110"),Instant.now().plusSeconds(1),1);
+        long eventId=inbox.list(user,false,0,20).items().getFirst().id();
+        inbox.deleteLog(user+1,eventId);
+        assertThat(inbox.logs(user,0,20).items()).hasSize(1);
+        inbox.clear(user);
+        assertThat(inbox.list(user,false,0,20).items()).isEmpty();
+        assertThat(inbox.unread(user)).isZero();
+        assertThat(inbox.logs(user,0,20).items()).hasSize(1);
+        inbox.deleteLog(user,eventId);
+        assertThat(inbox.logs(user,0,20).items()).isEmpty();
+    }
+    @Test void clearingLogsLeavesInboxAndUnreadIntact() {
+        long id=rule("ONCE");alerts.sample(user,id,new BigDecimal("110"),Instant.now().plusSeconds(1),1);
+        inbox.clearLogs(user);
+        assertThat(inbox.logs(user,0,20).items()).isEmpty();
+        assertThat(inbox.list(user,false,0,20).items()).hasSize(1);
+        assertThat(inbox.unread(user)).isEqualTo(1);
+    }
+    @Test void accountDeletionRemovesAlertDataAndWebhookCredentials() {
+        long id=rule("ONCE");alerts.sample(user,id,new BigDecimal("110"),Instant.now().plusSeconds(1),1);
+        jdbc.update("update user set password=? where id=?",passwords.hash("Delete-me-123"),user);
+        jdbc.update("insert into webhook_rule(user_id,name,description,keywords,allowed_ips,public_id,created_at,updated_at) values(?,'private','','','',?,?,?)",user,UUID.randomUUID().toString(),PriceAlertService.utc(Instant.now()),PriceAlertService.utc(Instant.now()));
+        accounts.delete(user,"Delete-me-123");
+        assertThat(count("price_alert")).isZero();assertThat(count("alert_event")).isZero();assertThat(count("webhook_rule")).isZero();
     }
 }

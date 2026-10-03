@@ -38,6 +38,10 @@ public class AccountDeletionService {
     private final UserBarkSettingService barkSettings;
     private final Clock clock;
     private com.multind.bitpongo.notification.NativePushService nativePush;
+    private com.multind.bitpongo.alerts.AlertAccountCleanup alertCleanup;
+
+    @Autowired(required = false)
+    void alertCleanup(com.multind.bitpongo.alerts.AlertAccountCleanup service) { this.alertCleanup = service; }
 
     @Autowired(required = false)
     void nativePush(com.multind.bitpongo.notification.NativePushService service) { this.nativePush = service; }
@@ -79,6 +83,7 @@ public class AccountDeletionService {
         if (!passwords.matches(password, user.getPassword())) {
             throw new BusinessException(400, "密码错误");
         }
+        if (alertCleanup != null) alertCleanup.deleteForUser(userId);
         if (nativePush != null) nativePush.deleteForUser(userId);
 
         List<PlanEntity> userPlans = plans.findAllForAccountDeletion(userId);
