@@ -63,6 +63,10 @@ class NotificationOutboxEnqueuer {
 
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public void enqueue(NotificationEvent event) {
+        enqueueInCurrentTransaction(event);
+    }
+
+    void enqueueInCurrentTransaction(NotificationEvent event) {
         Objects.requireNonNull(event, "event");
         String baseDedupeKey = Objects.requireNonNull(event.dedupeKey(), "dedupeKey");
         Instant instant = clock.instant();

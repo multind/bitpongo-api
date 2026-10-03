@@ -11,5 +11,6 @@ public enum NotificationEventType {
     ASSET_SNAPSHOT_FAILED,
     SYSTEM_RECOVERED,
     SERVICE_STARTED,
-    BARK_TEST
+    BARK_TEST,
+    PRICE_ALERT_TRIGGERED
 }

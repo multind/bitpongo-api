@@ -204,6 +204,7 @@ public final class NotificationMessageRenderer {
                     case PLAN_EXECUTION_SKIPPED -> "计划执行已跳过";
                     case PLAN_EXECUTION_DELAYED -> "计划执行延迟";
                     case TRADE_SUCCEEDED -> "交易成功";
+                    case PRICE_ALERT_TRIGGERED -> "价格提醒";
                     case ASSET_SNAPSHOT_FAILED -> "资产快照失败";
                     case SYSTEM_RECOVERED -> "系统已恢复";
                     case SERVICE_STARTED -> "服务已启动";
@@ -217,6 +218,7 @@ public final class NotificationMessageRenderer {
                     case PLAN_EXECUTION_SKIPPED -> "計畫執行已略過";
                     case PLAN_EXECUTION_DELAYED -> "計畫執行延遲";
                     case TRADE_SUCCEEDED -> "交易成功";
+                    case PRICE_ALERT_TRIGGERED -> "價格提醒";
                     case ASSET_SNAPSHOT_FAILED -> "資產快照失敗";
                     case SYSTEM_RECOVERED -> "系統已恢復";
                     case SERVICE_STARTED -> "服務已啟動";
@@ -230,6 +232,7 @@ public final class NotificationMessageRenderer {
                     case PLAN_EXECUTION_SKIPPED -> "Plan execution skipped";
                     case PLAN_EXECUTION_DELAYED -> "Plan execution delayed";
                     case TRADE_SUCCEEDED -> "Trade succeeded";
+                    case PRICE_ALERT_TRIGGERED -> "Price alert";
                     case ASSET_SNAPSHOT_FAILED -> "Asset snapshot failed";
                     case SYSTEM_RECOVERED -> "System recovered";
                     case SERVICE_STARTED -> "Service started";

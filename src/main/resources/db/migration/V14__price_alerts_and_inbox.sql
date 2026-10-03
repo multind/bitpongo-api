@@ -1,0 +1,41 @@
+CREATE TABLE price_alert (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  name VARCHAR(100) NOT NULL,
+  symbol VARCHAR(24) NOT NULL,
+  condition_type VARCHAR(24) NOT NULL,
+  target DECIMAL(38,18) NULL,
+  lower_price DECIMAL(38,18) NULL,
+  upper_price DECIMAL(38,18) NULL,
+  frequency VARCHAR(24) NOT NULL,
+  candle_interval VARCHAR(8) NOT NULL,
+  expires_at DATETIME(6) NULL,
+  enabled BOOLEAN NOT NULL DEFAULT TRUE,
+  last_price DECIMAL(38,18) NULL,
+  last_sample_at DATETIME(6) NULL,
+  last_triggered_at DATETIME(6) NULL,
+  last_bucket BIGINT NULL,
+  triggered_count BIGINT NOT NULL DEFAULT 0,
+  created_at DATETIME(6) NOT NULL,
+  INDEX ix_price_alert_user(user_id,id),
+  INDEX ix_price_alert_active(enabled,expires_at),
+  CONSTRAINT fk_price_alert_user FOREIGN KEY(user_id) REFERENCES user(id) ON DELETE CASCADE
+) ENGINE=InnoDB;
+
+CREATE TABLE alert_event (
+  id BIGINT NOT NULL AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  rule_id BIGINT NULL,
+  event_type VARCHAR(48) NOT NULL,
+  event_key VARCHAR(191) NOT NULL,
+  title VARCHAR(100) NOT NULL,
+  body VARCHAR(1000) NOT NULL,
+  symbol VARCHAR(24) NULL,
+  price DECIMAL(38,18) NULL,
+  read_at DATETIME(6) NULL,
+  occurred_at DATETIME(6) NOT NULL,
+  UNIQUE KEY uk_alert_event(event_key),
+  INDEX ix_alert_event_user(user_id,id),
+  CONSTRAINT fk_alert_event_user FOREIGN KEY(user_id) REFERENCES user(id) ON DELETE CASCADE,
+  CONSTRAINT fk_alert_event_rule FOREIGN KEY(rule_id) REFERENCES price_alert(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
