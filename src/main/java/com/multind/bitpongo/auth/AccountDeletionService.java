@@ -40,6 +40,10 @@ public class AccountDeletionService {
     private com.multind.bitpongo.notification.NativePushService nativePush;
     private com.multind.bitpongo.alerts.AlertAccountCleanup alertCleanup;
     private UserProfileService profiles;
+    private com.multind.bitpongo.content.ContentService content;
+
+    @Autowired(required = false)
+    void content(com.multind.bitpongo.content.ContentService service) { this.content=service; }
 
     @Autowired(required = false)
     void profiles(UserProfileService service) { this.profiles = service; }
@@ -89,6 +93,7 @@ public class AccountDeletionService {
         }
         if (alertCleanup != null) alertCleanup.deleteForUser(userId);
         if (profiles != null) profiles.deleteForUser(userId);
+        if (content != null) content.clear(userId);
         if (nativePush != null) nativePush.deleteForUser(userId);
 
         List<PlanEntity> userPlans = plans.findAllForAccountDeletion(userId);
