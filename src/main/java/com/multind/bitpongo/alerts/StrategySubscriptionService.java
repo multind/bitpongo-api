@@ -9,9 +9,12 @@ import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.databind.annotation.JsonNaming;
 
 @Service @Profile("!test")
 public class StrategySubscriptionService {
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record Settings(boolean enabled,int fearThreshold,int greedThreshold) {}
     private final JdbcTemplate jdbc;
     private final AlertNotificationBridge notifications;

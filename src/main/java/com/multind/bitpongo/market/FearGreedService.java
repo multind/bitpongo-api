@@ -8,10 +8,14 @@ import java.util.List;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.databind.annotation.JsonNaming;
 
 @Service
 public class FearGreedService {
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record Point(int value, String classification, Instant observedAt) {}
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record History(List<Point> points, Instant fetchedAt, boolean stale, String sourceUrl) {}
     private static final Set<String> CLASSES=Set.of("Extreme Fear","Fear","Neutral","Greed","Extreme Greed");
     private final FearGreedClient client;

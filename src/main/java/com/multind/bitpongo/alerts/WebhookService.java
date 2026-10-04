@@ -15,11 +15,16 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tools.jackson.databind.json.JsonMapper;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.databind.annotation.JsonNaming;
 
 @Service @Profile("!test")
 public class WebhookService {
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record Draft(String name,String description,String keywords,String allowedIps) {}
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record Rule(long id,String name,String description,String keywords,String allowedIps,String status,String publicId) {}
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record Activation(String publicId,String signingKey) {}
     private final JdbcTemplate jdbc;
     private final AlertNotificationBridge notifications;

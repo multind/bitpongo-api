@@ -39,6 +39,10 @@ public class AccountDeletionService {
     private final Clock clock;
     private com.multind.bitpongo.notification.NativePushService nativePush;
     private com.multind.bitpongo.alerts.AlertAccountCleanup alertCleanup;
+    private UserProfileService profiles;
+
+    @Autowired(required = false)
+    void profiles(UserProfileService service) { this.profiles = service; }
 
     @Autowired(required = false)
     void alertCleanup(com.multind.bitpongo.alerts.AlertAccountCleanup service) { this.alertCleanup = service; }
@@ -84,6 +88,7 @@ public class AccountDeletionService {
             throw new BusinessException(400, "密码错误");
         }
         if (alertCleanup != null) alertCleanup.deleteForUser(userId);
+        if (profiles != null) profiles.deleteForUser(userId);
         if (nativePush != null) nativePush.deleteForUser(userId);
 
         List<PlanEntity> userPlans = plans.findAllForAccountDeletion(userId);
