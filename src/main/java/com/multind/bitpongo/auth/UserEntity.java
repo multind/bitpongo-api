@@ -26,6 +26,9 @@ public class UserEntity {
     @Column(length = 255)
     private String password;
 
+    @Column(name = "security_version", nullable = false)
+    private long securityVersion;
+
     @Column(length = 16, nullable = false)
     private String status = "active";
 
@@ -55,6 +58,8 @@ public class UserEntity {
     public void setEmail(String email) { this.email = email; }
     public String getPassword() { return password; }
     public void setPassword(String password) { this.password = password; }
+    public long getSecurityVersion() { return securityVersion; }
+    public void setSecurityVersion(long version) { this.securityVersion = version; }
     public String getStatus() { return status; }
     public void setStatus(String status) { this.status = status; }
     public boolean isActive() { return "active".equals(status); }

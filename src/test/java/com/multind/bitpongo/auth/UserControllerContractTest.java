@@ -58,6 +58,7 @@ class UserControllerContractTest {
         localUser.setStatus("active");
         localUser.setCreatedAt(LocalDateTime.of(2025, 1, 2, 3, 4));
         when(users.findByEmail("local@example.com")).thenReturn(Optional.of(localUser));
+        when(users.findByEmailForUpdate("local@example.com")).thenReturn(Optional.of(localUser));
         when(users.findById(7L)).thenReturn(Optional.of(localUser));
         when(users.save(any(UserEntity.class))).thenAnswer(invocation -> {
             UserEntity saved = invocation.getArgument(0);

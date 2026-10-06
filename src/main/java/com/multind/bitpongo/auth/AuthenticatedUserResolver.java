@@ -22,7 +22,8 @@ public class AuthenticatedUserResolver {
         var verified = jwtTokens.verify(token);
         long userId = verified.userId();
         UserEntity user = requireActive(userId);
-        if (sessions != null) sessions.authenticate(userId,token,verified.expiresAt());
+        if (user.getSecurityVersion() != verified.securityVersion()) throw unavailable();
+        if (sessions != null) sessions.authenticate(userId,token,verified.expiresAt(),verified.securityVersion());
         return new AuthenticatedUser(userId, user.getEmail(), user.getName());
     }
 

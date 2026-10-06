@@ -162,6 +162,10 @@ docker compose build
 docker compose push
 ```
 
+## Account security email
+
+Password change, email-code password recovery and verified email changes are documented in [Account security](docs/account-security.md). Email flows require a configured SMTP provider; `.env.example` keeps `ACCOUNT_EMAIL_ENABLED=false` by default. Successful security changes invalidate all prior login tokens, including unused tokens. Apply Flyway V24 and read the rollback warning before deploying.
+
 ## Database upgrades
 
 Flyway manages schema changes. Back up MySQL before every production upgrade and never edit `flyway_schema_history` manually. Validate login, exchanges, strategies, Quartz triggers, orders, notifications, and time-zone data before enabling live trading after a migration.

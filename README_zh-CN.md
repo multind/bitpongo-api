@@ -155,6 +155,10 @@ docker compose build
 docker compose push
 ```
 
+## 账号安全邮件
+
+修改密码、邮件验证码找回密码及邮箱变更见 [账号安全配置](docs/account-security.md)。邮件流程需要配置 SMTP 提供器，`.env.example` 默认 `ACCOUNT_EMAIL_ENABLED=false`。安全变更成功后，所有旧登录 Token（包括未使用的 Token）失效。部署前执行 Flyway V24 并阅读安全回退说明。
+
 ## 数据库升级
 
 数据库结构由 Flyway 管理。每次生产升级前必须备份 MySQL，不要手工修改 `flyway_schema_history`。迁移后，应在开启真实交易前核对登录、交易所、策略、Quartz Trigger、订单、通知和时区数据。

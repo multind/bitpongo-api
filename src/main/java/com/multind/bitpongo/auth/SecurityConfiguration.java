@@ -38,6 +38,7 @@ public class SecurityConfiguration {
                                 "/api/ws/price", "/api/market/symbols", "/api/market/tickers", "/api/market/candles", "/api/market/indicators/fear-greed",
                                 "/api/users/login", "/api/users/v1/login", "/api/users/register", "/api/webhooks/receive/*")
                         .permitAll()
+                        .requestMatchers("/api/users/security/status", "/api/users/security/code", "/api/users/security/reset").permitAll()
                         .anyRequest().authenticated())
                 .exceptionHandling(exceptions -> exceptions.authenticationEntryPoint((request, response, error) -> {
                     response.setStatus(HttpServletResponse.SC_UNAUTHORIZED);

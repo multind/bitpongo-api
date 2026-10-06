@@ -103,6 +103,7 @@ public class AccountDeletionService {
         if (profiles != null) profiles.deleteForUser(userId);
         if (avatars != null) avatars.deleteForUser(userId);
         if (loginSessions != null) loginSessions.deleteForUser(userId);
+        if (recovery != null) recovery.deleteForUser(userId);
         if (content != null) content.clear(userId);
         if (nativePush != null) nativePush.deleteForUser(userId);
 
@@ -118,6 +119,10 @@ public class AccountDeletionService {
         anonymize(user, userId, now);
         pausePlansAfterCommit(planIds);
     }
+
+    private AccountRecoveryService recovery;
+    @org.springframework.beans.factory.annotation.Autowired(required=false)
+    void recovery(AccountRecoveryService recovery) { this.recovery=recovery; }
 
     private void anonymize(UserEntity user, long userId, LocalDateTime now) {
         user.setName("已注销用户");

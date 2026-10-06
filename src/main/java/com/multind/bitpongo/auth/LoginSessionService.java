@@ -27,7 +27,14 @@ public class LoginSessionService {
     /** Adopts existing signed tokens on first use; revoked rows are never resurrected. */
     @Transactional
     public void authenticate(long userId, String token, Instant expiresAt) {
+        authenticate(userId, token, expiresAt, 0);
+    }
+
+    @Transactional
+    public void authenticate(long userId, String token, Instant expiresAt, long securityVersion) {
         active(userId);
+        if (jdbc.queryForObject("select security_version from user where id=?",Long.class,userId) != securityVersion)
+            throw new IllegalArgumentException("登录凭据已失效");
         String hash = hash(token);
         jdbc.update("""
                 insert into login_session(id,user_id,token_hash,created_at,last_seen_at,expires_at)

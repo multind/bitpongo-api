@@ -44,12 +44,12 @@ public class UserApplicationService {
 
     @Transactional
     public LoginData login(UserLoginRequest request) {
-        UserEntity user = users.findByEmail(normalizeEmail(request.username()))
+        UserEntity user = users.findByEmailForUpdate(normalizeEmail(request.username()))
                 .filter(UserEntity::isActive)
                 .filter(found -> passwords.matches(request.password(), found.getPassword()))
                 .orElseThrow(() -> new BusinessException(401, "用户名或密码错误"));
         user.setLastLogin(now());
-        return new LoginData(tokens.issue(user.getId()), info(user));
+        return new LoginData(tokens.issue(user.getId(),user.getSecurityVersion()), info(user));
     }
 
     @Transactional
