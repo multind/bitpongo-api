@@ -130,6 +130,12 @@ set +a
 
 ## Bark 通知
 
+将 Bark URL 和 Device Key 作为凭据保管。使用 `BARK_ALLOWED_HOSTS` 限制目标，默认保持 `BARK_ALLOW_PRIVATE_HOSTS=false`。
+
+用户接口：`GET /api/users/notifications/bark` 查询脱敏配置；`PUT /api/users/notifications/bark` 保存；`DELETE /api/users/notifications/bark` 删除；`POST /api/users/notifications/bark/test` 发送测试通知。
+
+事务 Outbox 支持重试和业务事件去重，但外部服务接收成功后响应丢失仍可能造成重复通知，不承诺恰好一次送达。`SCHEDULER_FATAL`、`ORDER_MANUAL_REVIEW` 使用 `critical` 和 `call=1`；粘贴 URL 的查询参数不会覆盖服务端策略。可选冒烟测试读取 `BITPONGO_BARK_SMOKE_URL` 并实际发送通知，请仅在明确测试时安全提供，勿提交或打印该值。
+
 用户可以配置各自的 Bark 地址，管理员通知通过独立环境变量配置。URL 和 Device Key 均作为 Secret 处理，API 不会返回完整值。
 
 生成凭据加密密钥：

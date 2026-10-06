@@ -140,6 +140,19 @@ openssl rand -base64 32
 
 See the [Bitpongo documentation](https://github.com/multind/bitpongo-doc) for the user setup guide.
 
+Treat the Bark URL and Device Key as credentials. Restrict destinations with `BARK_ALLOWED_HOSTS` and keep `BARK_ALLOW_PRIVATE_HOSTS=false` unless a separately reviewed self-hosted deployment requires otherwise.
+
+Authenticated user operations:
+
+- `GET /api/users/notifications/bark`: masked configuration.
+- `PUT /api/users/notifications/bark`: save the user's endpoint and preferences.
+- `DELETE /api/users/notifications/bark`: remove the user's configuration.
+- `POST /api/users/notifications/bark/test`: send a test notification.
+
+The transactional Outbox supports retries and business-event deduplication. Delivery is not exactly-once: a provider may accept a request before its response is lost, so a retry can produce a duplicate. `SCHEDULER_FATAL` and `ORDER_MANUAL_REVIEW` use `critical` priority and `call=1`; pasted URL query parameters do not override server policy.
+
+The opt-in smoke test reads `BITPONGO_BARK_SMOKE_URL`. It sends a real notification: provide the value securely only when intentionally testing, never commit or print it.
+
 ## Docker image
 
 The Compose configuration builds and tags `docker.io/corbettzhang/bitpongoapi:latest`.

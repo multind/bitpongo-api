@@ -77,11 +77,12 @@ class BarkDocumentationContractTest {
                 "DELETE /api/users/notifications/bark",
                 "POST /api/users/notifications/bark/test",
                 "Outbox",
-                "重试",
-                "去重",
+                "retries",
+                "deduplication",
                 "BITPONGO_BARK_SMOKE_URL",
                 "call=1");
         assertThat(readme).contains("SCHEDULER_FATAL", "ORDER_MANUAL_REVIEW", "critical");
+        assertThat(Files.readString(Path.of("README_zh-CN.md"))).contains("重试", "去重");
     }
 
     @Test

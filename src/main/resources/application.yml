@@ -3,6 +3,10 @@ server:
   shutdown: graceful
 
 spring:
+  servlet:
+    multipart:
+      max-file-size: 2MB
+      max-request-size: 3MB
   application:
     name: bitpongo-api
   jackson:

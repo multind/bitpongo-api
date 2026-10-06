@@ -20,13 +20,20 @@ public class FearGreedService {
     private static final Set<String> CLASSES=Set.of("Extreme Fear","Fear","Neutral","Greed","Extreme Greed");
     private final FearGreedClient client;
     private final Clock clock;
+    private final FearGreedArchive archive;
     private List<Point> cached;
     private Instant fetchedAt;
     private Instant refreshAt=Instant.MIN;
     private boolean failed;
 
-    @Autowired public FearGreedService(FearGreedClient client) { this(client,Clock.systemUTC()); }
-    FearGreedService(FearGreedClient client,Clock clock) { this.client=client;this.clock=clock; }
+    @Autowired public FearGreedService(FearGreedClient client,org.springframework.beans.factory.ObjectProvider<FearGreedArchive> archives) {
+        this(client,Clock.systemUTC(),archives.getIfAvailable());
+    }
+    public FearGreedService(FearGreedClient client) { this(client,Clock.systemUTC(),null); }
+    FearGreedService(FearGreedClient client,Clock clock) { this(client,clock,null); }
+    public FearGreedService(FearGreedClient client,Clock clock,FearGreedArchive archive) {
+        this.client=client;this.clock=clock;this.archive=archive;
+    }
 
     public synchronized History history(int limit) {
         if(limit<1 || limit>365) throw new BusinessException(400,"指数数据条数必须为 1–365");
@@ -39,8 +46,17 @@ public class FearGreedService {
                     throw new BusinessException(502,"指数数据格式无效");
                 var sorted=result.stream().sorted(Comparator.comparing(Point::observedAt).reversed()).toList();
                 if(sorted.stream().map(Point::observedAt).distinct().count()!=sorted.size()) throw new BusinessException(502,"指数数据格式无效");
+                if(archive!=null) archive.save(sorted,now);
                 cached=List.copyOf(sorted);fetchedAt=now;refreshAt=now.plusSeconds(300);failed=false;
             } catch(RuntimeException error) {
+                if(cached==null && archive!=null) {
+                    try {
+                        var saved=archive.load();
+                        if(!saved.points().isEmpty()) { cached=saved.points();fetchedAt=saved.fetchedAt(); }
+                    } catch(RuntimeException unavailable) {
+                        throw new BusinessException(503,"指数历史暂时不可用");
+                    }
+                }
                 if(cached==null) {
                     if(error instanceof BusinessException business) throw business;
                     throw new BusinessException(503,"指数服务暂时不可用");

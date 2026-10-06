@@ -50,7 +50,7 @@ public class JwtTokenService {
     public String issue(long userId) {
         long expiresAt = clock.instant().plus(lifetime).getEpochSecond();
         try {
-            String payload = encode(JSON.writeValueAsBytes(Map.of("id", userId, "exp", expiresAt)));
+            String payload = encode(JSON.writeValueAsBytes(Map.of("id", userId, "exp", expiresAt, "jti", java.util.UUID.randomUUID().toString())));
             String content = HEADER + "." + payload;
             return content + "." + BASE64_URL_ENCODER.encodeToString(sign(content));
         } catch (JsonProcessingException exception) {
@@ -59,6 +59,12 @@ public class JwtTokenService {
     }
 
     public long decodeUserId(String token) {
+        return verify(token).userId();
+    }
+
+    public record VerifiedToken(long userId, java.time.Instant expiresAt) {}
+
+    public VerifiedToken verify(String token) {
         try {
             String[] parts = token == null ? new String[0] : token.split("\\.", -1);
             if (parts.length != 3) {
@@ -78,7 +84,7 @@ public class JwtTokenService {
             if (expiresAt <= clock.instant().getEpochSecond()) {
                 throw new IllegalArgumentException("Token 已过期");
             }
-            return payload.get("id").asLong();
+            return new VerifiedToken(payload.get("id").asLong(), java.time.Instant.ofEpochSecond(expiresAt));
         } catch (IllegalArgumentException exception) {
             throw exception;
         } catch (Exception exception) {
