@@ -1,0 +1,1 @@
+ALTER TABLE price_alert ADD COLUMN revision BIGINT NOT NULL DEFAULT 0;

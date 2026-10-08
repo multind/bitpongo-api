@@ -34,6 +34,7 @@ public class PriceAlertService {
 
     @Transactional public long create(long userId, AlertDtos.Create request) {
         validate(request);
+        activeUser(userId);
         String symbol = request.symbol().trim().toUpperCase(Locale.ROOT).replace("/", "");
         if (market.symbols(symbol).stream().noneMatch(s -> s.symbol().equals(symbol))) throw invalid("交易对不可用");
         var key = new GeneratedKeyHolder();
@@ -72,14 +73,14 @@ public class PriceAlertService {
         boolean channel = request.condition().equals("CHANNEL_OUTSIDE");
         jdbc.update("""
             update price_alert set name=?,symbol=?,condition_type=?,target=?,lower_price=?,upper_price=?,frequency=?,
-            candle_interval=?,expires_at=?,last_price=null,last_sample_at=null,last_bucket=null,sample_valid_from=? where user_id=? and id=?
+            candle_interval=?,expires_at=?,last_price=null,last_sample_at=null,last_bucket=null,sample_valid_from=?,revision=revision+1 where user_id=? and id=?
             """, request.name().trim(),symbol,request.condition(),channel?null:request.target(),channel?request.lower():null,
                 channel?request.upper():null,request.frequency(),request.interval(),utc(request.expiresAt()),utc(Instant.now()),userId,id);
     }
     public void enabled(long userId, long id, boolean enabled) {
         var rule = detail(userId, id);
         if (enabled && rule.expiresAt() != null && !rule.expiresAt().isAfter(Instant.now())) throw invalid("提醒已过期");
-        if (jdbc.update("update price_alert set enabled=?,last_price=null,last_sample_at=null,last_bucket=null where user_id=? and id=?", enabled, userId, id) == 0)
+        if (jdbc.update("update price_alert set enabled=?,last_price=null,last_sample_at=null,last_bucket=null,sample_valid_from=?,revision=revision+1 where user_id=? and id=?", enabled, utc(Instant.now()), userId, id) == 0)
             throw new BusinessException(404, "提醒不存在");
     }
     public void delete(long userId, long id) {
@@ -98,15 +99,16 @@ public class PriceAlertService {
     }
 
     public List<Map<String, Object>> activeRules() {
-        return jdbc.queryForList("select p.id,p.user_id,p.symbol,p.frequency,p.candle_interval from price_alert p join user u on u.id=p.user_id where p.enabled=true and u.status='active' and (p.expires_at is null or p.expires_at>?) order by p.id", utc(Instant.now()));
+        return jdbc.queryForList("select p.id,p.user_id,p.symbol,p.frequency,p.candle_interval,p.revision from price_alert p join user u on u.id=p.user_id where p.enabled=true and u.status='active' and (p.expires_at is null or p.expires_at>?) order by p.id", utc(Instant.now()));
     }
 
-    @Transactional public void sample(long userId, long id, BigDecimal price, Instant sampleAt, long candleBucket) {
+    @Transactional public void sample(long userId, long id, BigDecimal price, Instant sampleAt, long candleBucket, long expectedRevision) {
         var user = jdbc.queryForList("select id from user where id=? and status='active' for update", userId);
         if (user.isEmpty()) return;
         var rows = jdbc.queryForList("select * from price_alert where user_id=? and id=? and enabled=true for update", userId, id);
         if (rows.isEmpty()) return;
         var row = rows.getFirst();
+        if (((Number) row.get("revision")).longValue() != expectedRevision) return;
         Instant expiry = instant(row.get("expires_at"));
         Instant lastSample = instant(row.get("last_sample_at"));
         Instant created = instant(row.get("created_at"));
@@ -132,6 +134,11 @@ public class PriceAlertService {
         notifications.priceAlert(userId, eventKey, symbol, body, sampleAt);
         jdbc.update("update price_alert set triggered_count=?,last_triggered_at=?,last_bucket=?,enabled=? where id=?",
                 count, utc(sampleAt), bucket, !frequency.equals("ONCE"), id);
+    }
+
+    private void activeUser(long userId) {
+        if (jdbc.queryForList("select id from user where id=? and status='active' for update",userId).isEmpty())
+            throw new BusinessException(401,"账号不可用");
     }
 
     static void validate(AlertDtos.Create r) {

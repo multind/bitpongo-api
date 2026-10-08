@@ -41,6 +41,8 @@ public class WebhookService {
     }
     @Transactional public long create(long userId,Draft draft) {
         validate(draft);
+        if(jdbc.queryForList("select id from user where id=? and status='active' for update",userId).isEmpty())
+            throw new BusinessException(401,"账号不可用");
         String publicId=UUID.randomUUID().toString();Instant now=Instant.now();
         jdbc.update("insert into webhook_rule(user_id,name,description,keywords,allowed_ips,public_id,created_at,updated_at) values(?,?,?,?,?,?,?,?)",
                 userId,draft.name().trim(),draft.description(),draft.keywords().trim(),draft.allowedIps().trim(),publicId,PriceAlertService.utc(now),PriceAlertService.utc(now));

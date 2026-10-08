@@ -23,6 +23,8 @@ Publish content through a reviewed database migration or the deployment team's d
 
 Configure only versions already available to the intended users in the stores, not unreleased TestFlight/internal builds:
 
+The supplied `compose.yml` does not forward `BITPONGO_*` release metadata automatically. Add it explicitly to the API service's `environment` in a local deployment override; `.env` alone does not inject it. Docker/1Panel deployments must set it directly on the API container. Market-provider overrides similarly need explicit container environment entries when not listed in `compose.yml`.
+
 ```dotenv
 BITPONGO_IOS_LATEST_VERSION=
 BITPONGO_IOS_LATEST_BUILD=

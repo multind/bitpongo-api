@@ -39,7 +39,7 @@ public class PriceAlertJob {
                         bucket = c.openTime();
                         if (frequency.equals("CANDLE_CLOSE")) { price = c.close(); sample = Instant.ofEpochMilli(c.closeTime()); }
                     }
-                    alerts.sample(((Number)rule.get("user_id")).longValue(), ((Number)rule.get("id")).longValue(), price, sample, bucket);
+                    alerts.sample(((Number)rule.get("user_id")).longValue(), ((Number)rule.get("id")).longValue(), price, sample, bucket, ((Number)rule.get("revision")).longValue());
                 } catch (Exception e) { LoggerFactory.getLogger(getClass()).warn("提醒采样失败 ruleId={} errorType={}", rule.get("id"), e.getClass().getSimpleName()); }
             }
         } catch (Exception e) { LoggerFactory.getLogger(getClass()).warn("提醒行情加载失败 errorType={}", e.getClass().getSimpleName()); }

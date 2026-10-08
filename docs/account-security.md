@@ -6,6 +6,8 @@ Independent Bitpongo email/password workflows; no dependency on the old tradebot
 
 Set these environment variables in the API container (not the frontend):
 
+The supplied `compose.yml` does not forward `ACCOUNT_EMAIL_*` or `ACCOUNT_SMTP_*` automatically. Adding them to `.env` alone is insufficient: explicitly add these variables to the API service's `environment` in a local deployment override. With Docker/1Panel, set them on the API container itself. Keep the override and credentials outside Git; no SMTP configuration is enabled by this migration.
+
 ```dotenv
 ACCOUNT_EMAIL_ENABLED=true
 ACCOUNT_SMTP_HOST=your-smtp-host

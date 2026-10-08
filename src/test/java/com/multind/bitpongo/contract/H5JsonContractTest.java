@@ -24,6 +24,16 @@ class H5JsonContractTest {
     private final Instant time=Instant.parse("2026-10-04T00:00:00Z");
     private JsonNode tree(Object dto) throws Exception { return json.readTree(json.writeValueAsString(dto)); }
 
+    @Test void alertDecimalsRoundTripWithoutExponentOrJavascriptRounding() throws Exception {
+        var rule=new AlertDtos.Rule(1,"alert","BTCUSDT","CHANNEL_OUTSIDE",new BigDecimal("0.00000001"),
+                new BigDecimal("100.123456789012345677"),new BigDecimal("100.123456789012345678"),"ONCE","1h",null,true,0,null,time);
+        var result=tree(rule);
+        assertThat(result.path("target").isString()).isTrue();
+        assertThat(result.path("target").asString()).isEqualTo("0.00000001");
+        assertThat(result.path("lower").asString()).isEqualTo("100.123456789012345677");
+        assertThat(result.path("upper").asString()).isEqualTo("100.123456789012345678");
+    }
+
     @Test void marketDirectoryAndTickerExposeFieldsConsumedByTheH5Page() throws Exception {
         var symbol=tree(new MarketDtos.Symbol("BTCUSDT","BTC","USDT"));
         assertThat(symbol.path("baseAsset").asString()).isEqualTo("BTC");
