@@ -40,11 +40,11 @@ public class PriceAlertService {
         var key = new GeneratedKeyHolder();
         jdbc.update(connection -> {
             var statement = connection.prepareStatement("""
-                insert into price_alert(user_id,name,symbol,condition_type,target,lower_price,upper_price,frequency,candle_interval,expires_at,created_at)
-                values(?,?,?,?,?,?,?,?,?,?,?)
+                insert into price_alert(user_id,name,symbol,condition_type,target,lower_price,upper_price,frequency,candle_interval,expires_at,created_at,delivery_channels)
+                values(?,?,?,?,?,?,?,?,?,?,?,?)
                 """, java.sql.Statement.RETURN_GENERATED_KEYS);
             Object[] values = { userId, request.name().trim(), symbol, request.condition(), request.target(), request.lower(),
-                    request.upper(), request.frequency(), request.interval(), utc(request.expiresAt()), utc(Instant.now()) };
+                    request.upper(), request.frequency(), request.interval(), utc(request.expiresAt()), utc(Instant.now()), encodeChannels(request.channels()) };
             for (int i = 0; i < values.length; i++) statement.setObject(i + 1, values[i]);
             return statement;
         }, key);
@@ -53,9 +53,9 @@ public class PriceAlertService {
 
     public AlertDtos.Page<AlertDtos.Rule> list(long userId, String query, String status, int page, int size) {
         bounds(page, size);
-        if (query == null || query.length() > 100 || status == null || !Set.of("all", "active", "inactive").contains(status)) throw invalid("筛选条件无效");
+        if (query == null || query.length() > 100 || status == null || !Set.of("all", "active", "inactive", "expired").contains(status)) throw invalid("筛选条件无效");
         String expiryNow = "UTC_TIMESTAMP(6)";
-        String filter = "user_id=? and name like ?" + ("active".equals(status) ? " and enabled=true and (expires_at is null or expires_at>"+expiryNow+")" : "inactive".equals(status) ? " and (enabled=false or expires_at<="+expiryNow+")" : "");
+        String filter = "user_id=? and name like ?" + ("active".equals(status) ? " and enabled=true and (expires_at is null or expires_at>"+expiryNow+")" : "inactive".equals(status) ? " and enabled=false and (expires_at is null or expires_at>"+expiryNow+")" : "expired".equals(status) ? " and expires_at<="+expiryNow : "");
         Long total = jdbc.queryForObject("select count(*) from price_alert where " + filter, Long.class, userId, "%" + query + "%");
         var items = jdbc.query("select * from price_alert where " + filter + " order by id desc limit ? offset ?", PriceAlertService::rule,
                 userId, "%" + query + "%", size, (long) page * size);
@@ -68,14 +68,14 @@ public class PriceAlertService {
     @Transactional public void update(long userId, long id, AlertDtos.Create request) {
         validate(request);
         String symbol = request.symbol().trim().toUpperCase(Locale.ROOT).replace("/", "");
-        detail(userId, id);
+        var existing = detail(userId, id);
         if (market.symbols(symbol).stream().noneMatch(s -> s.symbol().equals(symbol))) throw invalid("交易对不可用");
         boolean channel = request.condition().equals("CHANNEL_OUTSIDE");
         jdbc.update("""
             update price_alert set name=?,symbol=?,condition_type=?,target=?,lower_price=?,upper_price=?,frequency=?,
-            candle_interval=?,expires_at=?,last_price=null,last_sample_at=null,last_bucket=null,sample_valid_from=?,revision=revision+1 where user_id=? and id=?
+            candle_interval=?,expires_at=?,delivery_channels=?,last_price=null,last_sample_at=null,last_bucket=null,sample_valid_from=?,revision=revision+1 where user_id=? and id=?
             """, request.name().trim(),symbol,request.condition(),channel?null:request.target(),channel?request.lower():null,
-                channel?request.upper():null,request.frequency(),request.interval(),utc(request.expiresAt()),utc(Instant.now()),userId,id);
+                channel?request.upper():null,request.frequency(),request.interval(),utc(request.expiresAt()),encodeChannels(request.channels() == null ? existing.channels() : request.channels()),utc(Instant.now()),userId,id);
     }
     public void enabled(long userId, long id, boolean enabled) {
         var rule = detail(userId, id);
@@ -88,7 +88,7 @@ public class PriceAlertService {
     }
     @Transactional public long copy(long userId, long id) {
         var r = detail(userId, id);
-        return create(userId, new AlertDtos.Create(r.name(), r.symbol(), r.condition(), r.target(), r.lower(), r.upper(), r.frequency(), r.interval(), null));
+        return create(userId, new AlertDtos.Create(r.name(), r.symbol(), r.condition(), r.target(), r.lower(), r.upper(), r.frequency(), r.interval(), null, r.channels()));
     }
     @Transactional public void bulk(long userId, AlertDtos.Bulk body) {
         if (body == null || body.ids() == null || body.ids().isEmpty() || body.ids().size() > 100 || body.action() == null || !Set.of("enable", "disable", "delete").contains(body.action())) throw invalid("批量操作无效");
@@ -131,7 +131,7 @@ public class PriceAlertService {
         String eventKey = "price-alert:" + id + ":" + count;
         jdbc.update("insert into alert_event(user_id,rule_id,event_type,event_key,title,body,symbol,price,occurred_at) values(?,?,?,?,?,?,?,?,?)",
                 userId, id, "PRICE_ALERT_TRIGGERED", eventKey, name, body, symbol, price, utc(sampleAt));
-        notifications.priceAlert(userId, eventKey, symbol, body, sampleAt);
+        notifications.priceAlert(userId, eventKey, symbol, body, sampleAt, decodeChannels((String) row.get("delivery_channels")));
         jdbc.update("update price_alert set triggered_count=?,last_triggered_at=?,last_bucket=?,enabled=? where id=?",
                 count, utc(sampleAt), bucket, !frequency.equals("ONCE"), id);
     }
@@ -146,6 +146,7 @@ public class PriceAlertService {
                 || !r.symbol().trim().toUpperCase(Locale.ROOT).replace("/", "").matches("[A-Z0-9]{1,20}USDT")
                 || !CONDITIONS.contains(r.condition() == null ? "" : r.condition()) || !FREQUENCIES.contains(r.frequency() == null ? "" : r.frequency())
                 || !INTERVALS.contains(r.interval() == null ? "" : r.interval()) || (r.expiresAt() != null && !r.expiresAt().isAfter(Instant.now()))) throw invalid("提醒参数无效");
+        if (r.channels() != null && (r.channels().stream().anyMatch(c -> c == null || !Set.of("bitpongo", "email").contains(c)) || r.channels().size() != new java.util.HashSet<>(r.channels()).size())) throw invalid("通知方式无效");
         if (r.condition().equals("CHANNEL_OUTSIDE")) {
             if (!price(r.lower()) || !price(r.upper()) || r.lower().compareTo(r.upper()) >= 0) throw invalid("价格区间无效");
         } else if (!price(r.target())) throw invalid("目标价格必须大于零");
@@ -153,6 +154,8 @@ public class PriceAlertService {
     private static boolean price(BigDecimal n) { return n != null && n.signum() > 0 && n.scale() <= 18 && n.precision() - n.scale() <= 20; }
     static void bounds(int page, int size) { if (page < 0 || page > 100000 || size < 1 || size > 100) throw invalid("分页参数无效"); }
     static BusinessException invalid(String message) { return new BusinessException(400, message); }
+    static String encodeChannels(List<String> channels) { return channels == null ? null : String.join(",", channels); }
+    static List<String> decodeChannels(String channels) { return channels == null ? null : channels.isEmpty() ? List.of() : List.of(channels.split(",")); }
     static LocalDateTime utc(Instant instant) { return instant == null ? null : LocalDateTime.ofInstant(instant, ZoneOffset.UTC); }
     static Instant instant(Object value) {
         if (value == null) return null;
@@ -164,6 +167,6 @@ public class PriceAlertService {
         return new AlertDtos.Rule(rs.getLong("id"), rs.getString("name"), rs.getString("symbol"), rs.getString("condition_type"),
                 rs.getBigDecimal("target"), rs.getBigDecimal("lower_price"), rs.getBigDecimal("upper_price"), rs.getString("frequency"),
                 rs.getString("candle_interval"), time(rs,"expires_at"), rs.getBoolean("enabled"), rs.getLong("triggered_count"),
-                time(rs,"last_triggered_at"), time(rs,"created_at"));
+                time(rs,"last_triggered_at"), time(rs,"created_at"), decodeChannels(rs.getString("delivery_channels")));
     }
 }

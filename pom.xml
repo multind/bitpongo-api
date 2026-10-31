@@ -19,7 +19,8 @@
 
     <properties>
         <java.version>26</java.version>
-        <binance-spot.version>11.0.1</binance-spot.version>
+        <binance-spot.version>11.0.2</binance-spot.version>
+        <binance-futures.version>12.1.1</binance-futures.version>
         <binance-jetty.version>11.0.26</binance-jetty.version>
         <maven-enforcer-plugin.version>3.6.2</maven-enforcer-plugin.version>
         <!-- Binance Spot 11.0.1 pins OkHttp 4.12; its matching test server avoids mixed major runtimes. -->
@@ -106,6 +107,11 @@
             <groupId>io.github.binance</groupId>
             <artifactId>binance-spot</artifactId>
             <version>${binance-spot.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>io.github.binance</groupId>
+            <artifactId>binance-derivatives-trading-usds-futures</artifactId>
+            <version>${binance-futures.version}</version>
         </dependency>
 
         <dependency>

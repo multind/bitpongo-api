@@ -72,6 +72,8 @@ zhitoubao:
     live-trading: ${BINANCE_LIVE_TRADING:false}
     testnet-rest-base-url: ${BINANCE_TESTNET_REST_BASE_URL:https://testnet.binance.vision}
     production-rest-base-url: ${BINANCE_PRODUCTION_REST_BASE_URL:https://api.binance.com}
+    futures-testnet-rest-base-url: ${BINANCE_FUTURES_TESTNET_REST_BASE_URL:https://testnet.binancefuture.com}
+    futures-production-rest-base-url: ${BINANCE_FUTURES_PRODUCTION_REST_BASE_URL:https://fapi.binance.com}
     market-stream-url: ${BINANCE_MARKET_STREAM_URL:wss://stream.binance.com:9443}
     market-stream-max-message-size: ${BINANCE_MARKET_STREAM_MAX_MESSAGE_SIZE:1048576}
   market:
@@ -80,6 +82,8 @@ zhitoubao:
     price-max-age: ${MARKET_PRICE_MAX_AGE_SECONDS:60}s
     health-max-silence: ${MARKET_HEALTH_MAX_SILENCE_SECONDS:120}s
     connection-rotation: ${MARKET_CONNECTION_ROTATION:PT23H50M}
+  fng:
+    execution-enabled: ${FNG_EXECUTION_ENABLED:false}
   orders:
     reconciliation-delay: ${ORDER_RECONCILIATION_DELAY:60s}
     reconciliation-stale-age: ${ORDER_RECONCILIATION_STALE_AGE:PT30S}

@@ -16,6 +16,7 @@ public class AlertEventController {
     }
     @GetMapping("/unread") public ApiResponse<Long> unread(@AuthenticationPrincipal AuthenticatedUser u) { return ApiResponse.success(service.unread(u.id())); }
     @PutMapping("/{id}/read") public ApiResponse<Void> read(@AuthenticationPrincipal AuthenticatedUser u, @PathVariable long id) { service.read(u.id(),id); return ApiResponse.success(null); }
+    @PutMapping("/{id}/confirm") public ApiResponse<Void> confirm(@AuthenticationPrincipal AuthenticatedUser u, @PathVariable long id) { service.confirm(u.id(),id); return ApiResponse.success(null); }
     @PutMapping("/read-all") public ApiResponse<Void> readAll(@AuthenticationPrincipal AuthenticatedUser u) { service.readAll(u.id()); return ApiResponse.success(null); }
     @DeleteMapping("/{id}") public ApiResponse<Void> delete(@AuthenticationPrincipal AuthenticatedUser u, @PathVariable long id) { service.delete(u.id(),id); return ApiResponse.success(null); }
     @DeleteMapping public ApiResponse<Void> clear(@AuthenticationPrincipal AuthenticatedUser u) { service.clear(u.id()); return ApiResponse.success(null); }

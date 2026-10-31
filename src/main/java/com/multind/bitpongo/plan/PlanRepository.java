@@ -11,6 +11,8 @@ import org.springframework.data.repository.query.Param;
 public interface PlanRepository extends JpaRepository<PlanEntity, Long> {
     Optional<PlanEntity> findByIdAndUserId(Long id, Long userId);
     List<PlanEntity> findByUserIdAndStatusNot(Long userId, String status);
+    org.springframework.data.domain.Page<PlanEntity> findByUserIdAndStatusNot(Long userId, String status, org.springframework.data.domain.Pageable pageable);
+    long countByUserIdAndStatus(Long userId, String status);
     List<PlanEntity> findByUserId(Long userId);
     List<PlanEntity> findByStatus(String status);
 

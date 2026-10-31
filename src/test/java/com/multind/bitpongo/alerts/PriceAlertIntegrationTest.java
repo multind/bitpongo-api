@@ -54,6 +54,24 @@ class PriceAlertIntegrationTest {
         return alerts.create(user, new AlertDtos.Create("Bitcoin alert", "BTCUSDT", "ABOVE", new BigDecimal("100"), null, null, frequency, "1h", null));
     }
     int count(String table) { return jdbc.queryForObject("select count(*) from "+table+" where user_id=?", Integer.class, user); }
+    @Test void explicitEmailOnlyRuleDoesNotQueueNativePushAndCopyPreservesChannels() {
+        jdbc.update("insert into user_notification_channel(user_id,email_enabled,confirmation_enabled,updated_at) values(?,true,true,UTC_TIMESTAMP())", user);
+        long id = alerts.create(user, new AlertDtos.Create("Email only", "BTCUSDT", "ABOVE", new BigDecimal("100"), null, null, "EVERY_TIME", "1h", null, List.of("email")));
+        assertThat(alerts.detail(user, id).channels()).containsExactly("email");
+        assertThat(alerts.detail(user, alerts.copy(user, id)).channels()).containsExactly("email");
+        alerts.sample(user, id, new BigDecimal("110"), Instant.now().plusSeconds(1), 1, 0);
+        assertThat(count("alert_event")).isEqualTo(1);
+        assertThat(count("push_delivery")).isZero();
+        assertThat(count("notification_escalation")).isEqualTo(1);
+    }
+    @Test void explicitNoChannelsStillWritesInboxButSchedulesNoDelivery() {
+        jdbc.update("insert into user_notification_channel(user_id,email_enabled,confirmation_enabled,updated_at) values(?,true,true,UTC_TIMESTAMP())", user);
+        long id = alerts.create(user, new AlertDtos.Create("Inbox only", "BTCUSDT", "ABOVE", new BigDecimal("100"), null, null, "EVERY_TIME", "1h", null, List.of()));
+        alerts.sample(user, id, new BigDecimal("110"), Instant.now().plusSeconds(1), 1, 0);
+        assertThat(count("alert_event")).isEqualTo(1);
+        assertThat(count("push_delivery")).isZero();
+        assertThat(count("notification_escalation")).isZero();
+    }
     @Test void editingWhileJobFetchesTickerCannotApplyOldSymbolToNewRule() {
         long id=rule("EVERY_TIME");
         when(market.symbols(anyString())).thenReturn(List.of(new MarketDtos.Symbol("BTCUSDT","BTC","USDT"),new MarketDtos.Symbol("ETHUSDT","ETH","USDT")));
@@ -92,7 +110,8 @@ class PriceAlertIntegrationTest {
         long id=rule("ONCE");
         jdbc.update("update price_alert set expires_at=? where id=?",PriceAlertService.utc(Instant.now().minusSeconds(1)),id);
         assertThat(alerts.list(user,"","active",0,20).items()).isEmpty();
-        assertThat(alerts.list(user,"","inactive",0,20).items()).hasSize(1);
+        assertThat(alerts.list(user,"","inactive",0,20).items()).isEmpty();
+        assertThat(alerts.list(user,"","expired",0,20).items()).hasSize(1);
         assertThatThrownBy(()->alerts.enabled(user,id,true)).hasMessageContaining("过期");
         alerts.sample(user,id,new BigDecimal("110"),Instant.now(),1,0);
         assertThat(count("alert_event")).isZero();

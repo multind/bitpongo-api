@@ -37,4 +37,16 @@ public class EmailCodeSender {
             "\nThis code expires in 10 minutes. Never share it. If you did not request it, ignore this message.");
         sender.send(message);
     }
+    public void sendNotification(String email,String subject,String body) {
+        if(!available()) throw new IllegalStateException("邮件服务未配置");
+        var message=new SimpleMailMessage();
+        message.setFrom(from); message.setTo(email); message.setSubject(subject(subject));
+        message.setText(body == null ? "" : body);
+        sender.send(message);
+    }
+    private static String subject(String value) {
+        if (value == null) return "";
+        String cleaned = value.replaceAll("[\\r\\n]+", " ").trim();
+        return cleaned.length() <= 120 ? cleaned : cleaned.substring(0, 120);
+    }
 }

@@ -27,6 +27,7 @@ class NativePushReliabilityIntegrationTest {
     @Container @ServiceConnection static final MySQLContainer mysql=new MySQLContainer(System.getProperty("test.mysql.image","mysql:9.7.0"));
     @Autowired JdbcTemplate jdbc;
     @Autowired NativePushService service;
+    @Autowired NotificationChannelService channels;
     @Autowired NativePushOutbox outbox;
     @Autowired NativePushDispatcher dispatcher;
     @Autowired NotificationOutboxEnqueuer events;
@@ -45,6 +46,11 @@ class NativePushReliabilityIntegrationTest {
     long account() {
         jdbc.update("insert into user(name,email,password) values('push',?,'unused')",UUID.randomUUID()+"@example.com");
         return jdbc.queryForObject("select last_insert_id()",Long.class);
+    }
+    @Test void appChannelDefaultsEnabledButHonorsExplicitOptOut() {
+        assertThat(channels.get(user).bitpongo().enabled()).isTrue();
+        service.save(user, new NativePushController.Settings(false, true, true, true, true, true, "en-US", "UTC"));
+        assertThat(channels.get(user).bitpongo().enabled()).isFalse();
     }
     void register(long owner,String id,String token) {
         service.register(owner,id,new NativePushController.Registration(token,"android","authorized","1.0","en-US","UTC"));

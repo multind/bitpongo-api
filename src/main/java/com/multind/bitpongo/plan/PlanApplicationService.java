@@ -71,6 +71,15 @@ public class PlanApplicationService {
         return plans.findByUserIdAndStatusNot(userId, "close").stream()
                 .map(plan -> view(plan, userId, false)).toList();
     }
+    @tools.jackson.databind.annotation.JsonNaming(tools.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
+    public record ActivePage(List<PlanView> items, int page, int size, long total, long activeTotal, boolean hasMore) {}
+
+    @Transactional(readOnly = true)
+    public ActivePage activePage(long userId, int page, int size) {
+        if (page < 0 || size < 1 || size > 50) throw new BusinessException(400, "分页参数无效");
+        var result = plans.findByUserIdAndStatusNot(userId, "close", PageRequest.of(page, size, Sort.by(Sort.Direction.DESC, "id")));
+        return new ActivePage(result.getContent().stream().map(plan -> view(plan, userId, false, true)).toList(), page, size, result.getTotalElements(), plans.countByUserIdAndStatus(userId,"active"), result.hasNext());
+    }
 
     @Transactional(readOnly = true)
     public PlanView detail(long userId, long planId) {
@@ -143,6 +152,9 @@ public class PlanApplicationService {
     }
 
     private PlanView view(PlanEntity plan, long userId, boolean includeOrders) {
+        return view(plan,userId,includeOrders,false);
+    }
+    private PlanView view(PlanEntity plan, long userId, boolean includeOrders, boolean summary) {
         List<CoinEntity> planCoins = coins.findByPlanIdAndUserId(plan.getId(), userId);
         String exchange = exchanges.findByIdAndUserId(plan.getExchangeId(), userId)
                 .map(value -> value.getExchange()).orElse("binance");
@@ -160,8 +172,11 @@ public class PlanApplicationService {
         StrategyEntity strategy = strategies.findByIdAndUserId(plan.getStrategyId(), userId).orElse(null);
         List<OrderEntity> planOrders = includeOrders
                 ? orders.findByPlanIdAndUserId(plan.getId(), userId) : List.of();
-        List<SnapshotEntity> planSnapshots = snapshots
-                .findByPlanIdAndUserIdOrderByCreatedAtAsc(plan.getId(), userId);
+        List<SnapshotEntity> planSnapshots;
+        if(summary) {
+            planSnapshots = new java.util.ArrayList<>(snapshots.findByPlanIdAndUserIdOrderByCreatedAtDesc(plan.getId(),userId,PageRequest.of(0,120)));
+            java.util.Collections.reverse(planSnapshots);
+        } else planSnapshots = snapshots.findByPlanIdAndUserIdOrderByCreatedAtAsc(plan.getId(),userId);
         return new PlanView(plan.getId(), plan.getTotalFunds(), totalRevenue, totalRatio,
                 totalValue, UtcDateTimes.toInstant(plan.getNextTime()),
                 UtcDateTimes.toInstant(plan.getNextTime()), plan.getStatus(), plan.getUserId(),

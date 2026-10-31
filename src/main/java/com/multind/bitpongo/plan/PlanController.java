@@ -33,6 +33,10 @@ public class PlanController {
     public ApiResponse<List<PlanView>> active(@AuthenticationPrincipal AuthenticatedUser user) {
         return ApiResponse.success(plans.active(user.id()));
     }
+    @GetMapping("/list/page")
+    public ApiResponse<PlanApplicationService.ActivePage> page(@AuthenticationPrincipal AuthenticatedUser user, @RequestParam(defaultValue="0") int page, @RequestParam(defaultValue="10") int size) {
+        return ApiResponse.success(plans.activePage(user.id(), page, size));
+    }
 
     @GetMapping("/{planId}/{status}")
     public ApiResponse<Void> updateStatus(

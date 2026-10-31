@@ -34,6 +34,17 @@ class H5JsonContractTest {
         assertThat(result.path("upper").asString()).isEqualTo("100.123456789012345678");
     }
 
+    @Test void alertDecimalsDropInsignificantTrailingZeros() throws Exception {
+        var rule=new AlertDtos.Rule(1,"alert","BTCUSDT","CHANNEL_OUTSIDE",null,
+                new BigDecimal("79705.620000000000000000"),new BigDecimal("0.000000000000000000"),"ONCE","1h",null,true,0,null,time);
+        var result=tree(rule);
+        assertThat(result.path("lower").asString()).isEqualTo("79705.62");
+        assertThat(result.path("upper").asString()).isEqualTo("0");
+        var event=tree(new AlertDtos.Event(1,2L,"PRICE_ALERT_TRIGGERED","Alert","Body","BTCUSDT",
+                new BigDecimal("78000.000000000000000000"),time,time));
+        assertThat(event.path("price").asString()).isEqualTo("78000");
+    }
+
     @Test void marketDirectoryAndTickerExposeFieldsConsumedByTheH5Page() throws Exception {
         var symbol=tree(new MarketDtos.Symbol("BTCUSDT","BTC","USDT"));
         assertThat(symbol.path("baseAsset").asString()).isEqualTo("BTC");

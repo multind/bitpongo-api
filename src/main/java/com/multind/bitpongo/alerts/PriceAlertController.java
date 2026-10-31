@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.*;
 public class PriceAlertController {
     private final PriceAlertService service;
     public PriceAlertController(PriceAlertService service) { this.service = service; }
+    @GetMapping("/capabilities") public ApiResponse<java.util.Map<String, Boolean>> capabilities() { return ApiResponse.success(java.util.Map.of("perAlertChannels", true)); }
     @PostMapping public ApiResponse<Long> create(@AuthenticationPrincipal AuthenticatedUser user, @RequestBody AlertDtos.Create body) { return ApiResponse.success(service.create(user.id(), body)); }
     @GetMapping public ApiResponse<AlertDtos.Page<AlertDtos.Rule>> list(@AuthenticationPrincipal AuthenticatedUser user,
             @RequestParam(defaultValue="") String q, @RequestParam(defaultValue="all") String status,

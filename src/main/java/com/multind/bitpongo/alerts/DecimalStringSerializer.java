@@ -8,6 +8,6 @@ import tools.jackson.databind.ValueSerializer;
 /** Preserve exact editable prices across JSON and JavaScript boundaries. */
 public final class DecimalStringSerializer extends ValueSerializer<BigDecimal> {
     @Override public void serialize(BigDecimal value, JsonGenerator output, SerializationContext context) {
-        output.writeString(value.toPlainString());
+        output.writeString(value.signum() == 0 ? "0" : value.stripTrailingZeros().toPlainString());
     }
 }
