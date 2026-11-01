@@ -8,7 +8,9 @@ import tools.jackson.databind.annotation.JsonNaming;
 public final class MarketDtos {
     private MarketDtos() {}
     @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
-    public record Symbol(String symbol, String baseAsset, String quoteAsset) {}
+    public record Symbol(String symbol, String baseAsset, String quoteAsset, String priceTickSize) {
+        public Symbol(String symbol, String baseAsset, String quoteAsset) { this(symbol, baseAsset, quoteAsset, null); }
+    }
     @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record Ticker(String symbol, BigDecimal lastPrice, BigDecimal changePercent, BigDecimal volume, Instant updatedAt) {}
     @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)

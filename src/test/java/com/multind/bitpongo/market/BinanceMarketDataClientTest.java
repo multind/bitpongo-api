@@ -8,6 +8,15 @@ import tools.jackson.databind.json.JsonMapper;
 import static org.assertj.core.api.Assertions.*;
 
 class BinanceMarketDataClientTest {
+    @Test void exposesPriceTickSizeForSpotTradingPairs() throws Exception {
+        try (var server = new MockWebServer()) {
+            server.enqueue(new MockResponse().setBody("""
+                {"symbols":[{"symbol":"BTCUSDT","baseAsset":"BTC","quoteAsset":"USDT","status":"TRADING","isSpotTradingAllowed":true,"filters":[{"filterType":"PRICE_FILTER","tickSize":"0.01000000"}]}]}
+                """));
+            var client = new BinanceMarketDataClient(server.url("/").toString(), JsonMapper.builder().build());
+            assertThat(client.symbols().getFirst().priceTickSize()).isEqualTo("0.01000000");
+        }
+    }
     @Test void parsesPublicSpotSymbolsAndRejectsSuspendedPairs() throws Exception {
         try (var server = new MockWebServer()) {
             server.enqueue(new MockResponse().setBody("""

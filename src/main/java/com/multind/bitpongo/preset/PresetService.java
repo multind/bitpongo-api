@@ -1,6 +1,7 @@
 package com.multind.bitpongo.preset;
 
 import com.multind.bitpongo.common.api.BusinessException;
+import com.multind.bitpongo.market.PriceCache;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.sql.Timestamp;
@@ -36,10 +37,12 @@ public class PresetService {
 
     private final JdbcTemplate jdbc;
     private final Clock clock;
+    private final PriceCache prices;
 
-    public PresetService(JdbcTemplate jdbc, ObjectProvider<Clock> clock) {
+    public PresetService(JdbcTemplate jdbc, ObjectProvider<Clock> clock, PriceCache prices) {
         this.jdbc = jdbc;
         this.clock = clock.getIfAvailable(Clock::systemUTC);
+        this.prices = prices;
     }
 
     @Transactional(readOnly = true)
@@ -120,7 +123,7 @@ public class PresetService {
             Map<String, Mark> marks,
             List<PresetDtos.Preset> items) {
         jdbc.query("""
-                select p.id as plan_id,p.total_revenue,p.total_ratio,p.created_at,
+                select p.id as plan_id,p.total_funds,p.created_at,
                        s.name as strategy_name,s.instalment,s.frequency,s.cron,s.condition,s.schedule_timezone,
                        e.exchange,u.name as user_name,u.email as user_email,ua.image as author_avatar
                 from plan p
@@ -146,6 +149,8 @@ public class PresetService {
             params.put("scheduleTimezone", rs.getString("schedule_timezone"));
             params.put("coins", coins);
             Mark mark = marks.getOrDefault("DCA:" + planId, Mark.NONE);
+            var positions = jdbc.query("select symbol,total_amount from coin where plan_id=?", (row, index) -> new DcaPerformance.Position(row.getString("symbol"), row.getBigDecimal("total_amount")), planId);
+            var result = DcaPerformance.calculate(prices, exchange, positions, rs.getBigDecimal("total_funds"), clock.instant());
             items.add(new PresetDtos.Preset(
                     key, "DCA",
                     strategyName == null || strategyName.isBlank() ? "DCA Strategy" : strategyName,
@@ -153,7 +158,7 @@ public class PresetService {
                     avatar(rs.getBytes("author_avatar")),
                     mark.official(), mark.recommended(),
                     followers.getOrDefault(key, 0L), favorites.contains(key),
-                    decimal(rs.getObject("total_revenue")), decimal(rs.getObject("total_ratio")),
+                    result == null ? null : decimal(result.revenue()), result == null ? null : decimal(result.ratio()),
                     exchange, symbols, runtimeDays(rs.getObject("created_at")), sparkline(planId), params));
         });
     }
@@ -347,7 +352,7 @@ public class PresetService {
     private static Comparator<PresetDtos.Preset> comparator(String sort) {
         Comparator<PresetDtos.Preset> byFollowers = Comparator.comparingLong(PresetDtos.Preset::followers).reversed();
         Comparator<PresetDtos.Preset> byReturn = Comparator.comparing(
-                PresetDtos.Preset::totalRatio, Comparator.nullsLast(Comparator.reverseOrder()));
+                item -> item.totalRatio() == null ? null : new BigDecimal(item.totalRatio()), Comparator.nullsLast(Comparator.reverseOrder()));
         Comparator<PresetDtos.Preset> byName = Comparator.comparing(PresetDtos.Preset::name);
         if ("followers".equals(sort)) return byFollowers.thenComparing(byReturn).thenComparing(byName);
         if ("return".equals(sort)) return byReturn.thenComparing(byFollowers).thenComparing(byName);

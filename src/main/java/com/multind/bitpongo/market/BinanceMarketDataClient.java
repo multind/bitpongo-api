@@ -30,7 +30,15 @@ public class BinanceMarketDataClient implements MarketDataClient {
         var result = new ArrayList<MarketDtos.Symbol>();
         for (JsonNode s : get("/api/v3/exchangeInfo").path("symbols")) {
             if ("TRADING".equals(s.path("status").asText()) && s.path("isSpotTradingAllowed").asBoolean()) {
-                result.add(new MarketDtos.Symbol(s.path("symbol").asText(), s.path("baseAsset").asText(), s.path("quoteAsset").asText()));
+                String tickSize = null;
+                for (JsonNode filter : s.path("filters")) {
+                    if ("PRICE_FILTER".equals(filter.path("filterType").asText())) {
+                        String candidate = filter.path("tickSize").asText();
+                        try { if (new BigDecimal(candidate).signum() > 0) tickSize = candidate; } catch (NumberFormatException ignored) { }
+                        break;
+                    }
+                }
+                result.add(new MarketDtos.Symbol(s.path("symbol").asText(), s.path("baseAsset").asText(), s.path("quoteAsset").asText(), tickSize));
             }
         }
         return List.copyOf(result);
