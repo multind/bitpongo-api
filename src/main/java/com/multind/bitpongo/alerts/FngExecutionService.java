@@ -27,7 +27,7 @@ import org.springframework.stereotype.Service;
  * Testnet-first USDT-M futures execution for F&amp;G strategies.
  *
  * <p>A signal is persisted as PENDING_ENTRY before any exchange call. The worker then opens a
- * market position, monitors profit against the target/drawdown/cycle rules, and closes it with a
+ * market position, monitors profit against the stop-loss/target/drawdown/cycle rules, and closes it with a
  * reduce-only market order. Notifications are sent only after an entry or exit is filled.</p>
  */
 @Service
@@ -40,7 +40,7 @@ public class FngExecutionService {
                    p.entry_client_order_id,p.exit_client_order_id,p.margin,p.quantity,p.entry_price,p.leverage,
                    p.peak_profit_percent,p.close_reason,p.opened_at,p.updated_at,
                    s.name strategy_name,s.enabled,s.direction,s.profit_target_percent,
-                   s.profit_drawdown_percent,s.profit_target_type,s.bureau_period,s.max_orders,s.max_positions,
+                   s.profit_drawdown_percent,s.stop_loss_percent,s.profit_target_type,s.bureau_period,s.max_orders,s.max_positions,
                    e.exchange
             from fng_position p
             join fng_strategy s on s.id=p.strategy_id
@@ -188,6 +188,7 @@ public class FngExecutionService {
     }
 
     private String exitReason(Row row, BigDecimal pnl, BigDecimal pnlPercent, BigDecimal peak) {
+        if (hitsStopLoss(row.stopLoss(), pnlPercent)) return "STOP_LOSS";
         if ("USDT".equalsIgnoreCase(row.targetType())) {
             if (pnl.compareTo(row.target()) >= 0) return "TARGET";
         } else if (pnlPercent.compareTo(row.target()) >= 0) {
@@ -202,6 +203,12 @@ public class FngExecutionService {
             return "CYCLE";
         }
         return null;
+    }
+
+    /** Stop loss is a percentage of margin; null or zero means none (strategies created before V40). */
+    static boolean hitsStopLoss(BigDecimal stopLossPercent, BigDecimal pnlPercent) {
+        return stopLossPercent != null && stopLossPercent.signum() > 0
+                && pnlPercent.compareTo(stopLossPercent.negate()) <= 0;
     }
 
     private void close(Row row, ExchangeContext context, BigDecimal mark, String reason) {
@@ -351,6 +358,7 @@ public class FngExecutionService {
                 PriceAlertService.instant(rs.getObject("opened_at")), PriceAlertService.instant(rs.getObject("updated_at")),
                 rs.getString("strategy_name"), rs.getBoolean("enabled"), rs.getString("direction"),
                 rs.getBigDecimal("profit_target_percent"), rs.getBigDecimal("profit_drawdown_percent"),
+                rs.getBigDecimal("stop_loss_percent"),
                 rs.getString("profit_target_type"), rs.getInt("bureau_period"), rs.getInt("max_orders"),
                 rs.getInt("max_positions"), rs.getString("exchange"));
     }
@@ -410,6 +418,6 @@ public class FngExecutionService {
             String status, String entryClientOrderId, String exitClientOrderId, BigDecimal margin,
             BigDecimal quantity, BigDecimal entryPrice, int leverage, BigDecimal peak, String closeReason,
             Instant openedAt, Instant updatedAt, String strategyName, boolean enabled, String direction,
-            BigDecimal target, BigDecimal drawdown, String targetType, int cycleDays, int maxOrders,
+            BigDecimal target, BigDecimal drawdown, BigDecimal stopLoss, String targetType, int cycleDays, int maxOrders,
             int maxPositions, String exchange) {}
 }

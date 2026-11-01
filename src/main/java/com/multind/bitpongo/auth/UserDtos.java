@@ -20,8 +20,8 @@ public final class UserDtos {
             @NotBlank(message = "邮箱不能为空") @Email(message = "邮箱格式错误") String email,
             @NotBlank(message = "密码不能为空")
             @Pattern(
-                    regexp = "^(?=.*[A-Za-z])(?=.*\\d).{8,}$",
-                    message = "密码至少8位，且必须同时包含字母和数字")
+                    regexp = "^(?=.*[A-Za-z])(?=.*\\d).{8,128}$",
+                    message = "密码须为 8 至 128 个字符，且同时包含字母和数字")
             String password) {
         public UserCreateRequest {
             if (email != null) {

@@ -25,9 +25,14 @@ public final class ExchangeDtos {
             @JsonProperty("secret_key") String secretKey,
             String password) {}
 
+    /**
+     * {@code proportions} (symbol -> target percentage) is optional; when given, the minimum is the
+     * smallest whole-USDT instalment for which every coin's share still meets its exchange minimum.
+     */
     public record MinimumAmountRequest(
             @JsonProperty("exchange_id") long exchangeId,
-            List<String> coins) {}
+            List<String> coins,
+            java.util.Map<String, java.math.BigDecimal> proportions) {}
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
     public record ExchangeView(

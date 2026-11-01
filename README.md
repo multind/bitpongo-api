@@ -103,6 +103,7 @@ The complete template is available in [`.env.example`](.env.example).
 | `BINANCE_LIVE_TRADING` | Enables production order submission | `false` |
 | `MARKET_STREAM_ENABLED` | Enables the Binance market stream | `false` |
 | `BARK_CREDENTIAL_ENCRYPTION_KEY` | 32-byte Base64 key for user Bark credentials | Required |
+| `EXCHANGE_CREDENTIAL_ENCRYPTION_KEY` | 32-byte Base64 key for exchange API secrets; never change it after secrets are stored | Falls back to the Bark key |
 | `BARK_ADMIN_PUSH_URL` | Optional administrator Bark endpoint | Empty |
 | `BARK_ALLOWED_HOSTS` | Bark destination allowlist | `api.day.app` |
 | `APP_PUBLIC_URL` | Public link appended to notifications | Empty |

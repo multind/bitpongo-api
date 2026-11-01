@@ -142,7 +142,7 @@ class UserControllerContractTest {
                                     + password + "\"}"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.message")
-                            .value("密码至少8位，且必须同时包含字母和数字"));
+                            .value("密码须为 8 至 128 个字符，且同时包含字母和数字"));
         }
     }
 

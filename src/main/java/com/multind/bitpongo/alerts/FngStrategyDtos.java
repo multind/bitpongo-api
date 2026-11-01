@@ -29,6 +29,8 @@ public final class FngStrategyDtos {
             BigDecimal profitTargetPercent,
             // Trailing stop relative to peak profit: peak 20% with 5% drawdown exits at 19%.
             BigDecimal profitDrawdownPercent,
+            // Stop loss: exit when the loss reaches this percentage of the position margin.
+            BigDecimal stopLossPercent,
             String profitTargetType,
             // Maximum number of open orders (not total historical orders).
             Integer maxOrders,
@@ -54,6 +56,7 @@ public final class FngStrategyDtos {
             String direction,
             String profitTargetPercent,
             String profitDrawdownPercent,
+            String stopLossPercent,
             String profitTargetType,
             int maxOrders,
             int maxPositions,

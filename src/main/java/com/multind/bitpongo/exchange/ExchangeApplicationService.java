@@ -100,11 +100,35 @@ public class ExchangeApplicationService {
     public BigDecimal minimumAmount(long userId, MinimumAmountRequest request) {
         ExchangeEntity entity = owned(userId, request.exchangeId());
         ExchangeGateway gateway = gateways.require(entity.getExchange());
-        return request.coins() == null ? BigDecimal.ZERO : request.coins().stream()
-                .map(ExchangeApplicationService::symbol)
-                .map(gateway::getMarketRules)
-                .map(MarketRules::minimumNotional)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        if (request.coins() == null || request.coins().isEmpty()) return BigDecimal.ZERO;
+        java.util.Map<String, BigDecimal> notionals = new java.util.LinkedHashMap<>();
+        for (String coin : request.coins()) {
+            notionals.put(coin, gateway.getMarketRules(symbol(coin)).minimumNotional());
+        }
+        return minimumInstalment(notionals, request.proportions());
+    }
+
+    /**
+     * Each coin receives instalment x proportion / 100, so the instalment must be at least
+     * minimumNotional x 100 / proportion for every coin. Without proportions, falls back to the sum
+     * of minimums. Rounded up to whole USDT because instalments are integers.
+     */
+    static BigDecimal minimumInstalment(
+            java.util.Map<String, BigDecimal> minimumNotionals, java.util.Map<String, BigDecimal> proportions) {
+        BigDecimal required = BigDecimal.ZERO;
+        boolean proportional = proportions != null && minimumNotionals.keySet().stream()
+                .allMatch(coin -> proportions.get(coin) != null && proportions.get(coin).signum() > 0);
+        for (var entry : minimumNotionals.entrySet()) {
+            BigDecimal notional = entry.getValue() == null ? BigDecimal.ZERO : entry.getValue();
+            if (proportional) {
+                BigDecimal needed = notional.multiply(BigDecimal.valueOf(100))
+                        .divide(proportions.get(entry.getKey()), 8, java.math.RoundingMode.UP);
+                required = required.max(needed);
+            } else {
+                required = required.add(notional);
+            }
+        }
+        return required.setScale(0, java.math.RoundingMode.CEILING);
     }
 
     private ExchangeEntity owned(long userId, long exchangeId) {

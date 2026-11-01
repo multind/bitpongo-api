@@ -7,6 +7,8 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -40,6 +42,23 @@ public class PresetController {
             @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable String key) {
         return ApiResponse.success(presets.detail(user.id(), key));
+    }
+
+    @GetMapping("/visibility/{type}/{strategyId}")
+    public ApiResponse<PresetDtos.Visibility> visibility(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable String type,
+            @PathVariable long strategyId) {
+        return ApiResponse.success(presets.visibility(user.id(), type, strategyId));
+    }
+
+    @PutMapping("/visibility/{type}/{strategyId}")
+    public ApiResponse<PresetDtos.Visibility> updateVisibility(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @PathVariable String type,
+            @PathVariable long strategyId,
+            @RequestBody PresetDtos.VisibilityRequest request) {
+        return ApiResponse.success(presets.updateVisibility(user.id(), type, strategyId, request.visible()));
     }
 
     @PostMapping("/{key}/favorite")

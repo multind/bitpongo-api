@@ -248,14 +248,21 @@ public final class NotificationMessageRenderer {
         }
 
         private String resultText(Object status) {
-            if (!"PRICE_NOT_BELOW_AVERAGE".equals(status)) {
-                return status == null ? null : String.valueOf(status);
+            if ("PRICE_NOT_BELOW_AVERAGE".equals(status)) {
+                return switch (this) {
+                    case ZH_CN -> "当前价格未低于持仓均价，本轮未买入";
+                    case ZH_TW -> "目前價格未低於持倉均價，本輪未買入";
+                    case EN_US -> "Current price is not below the average holding price; no purchase was made";
+                };
             }
-            return switch (this) {
-                case ZH_CN -> "当前价格未低于持仓均价，本轮未买入";
-                case ZH_TW -> "目前價格未低於持倉均價，本輪未買入";
-                case EN_US -> "Current price is not below the average holding price; no purchase was made";
-            };
+            if ("PRICE_OUT_OF_RANGE".equals(status)) {
+                return switch (this) {
+                    case ZH_CN -> "当前价格不在买入价格区间内，本轮未买入";
+                    case ZH_TW -> "目前價格不在買入價格區間內，本輪未買入";
+                    case EN_US -> "Current price is outside the buy price range; no purchase was made";
+                };
+            }
+            return status == null ? null : String.valueOf(status);
         }
     }
 }
