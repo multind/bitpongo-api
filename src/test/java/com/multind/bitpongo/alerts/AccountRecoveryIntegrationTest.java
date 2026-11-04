@@ -31,6 +31,22 @@ class AccountRecoveryIntegrationTest extends PriceAlertIntegrationTest {
     }
     void prepare() { jdbc.update("update user set password=? where id=?",passwords.hash("OriginalPass!1"),user); }
     String email() { return jdbc.queryForObject("select email from user where id=?",String.class,user); }
+    @Test void reminderEmailVerificationPreservesLoginAndSupportsReturningToDefault() throws Exception {
+        String original=email(), token=tokens.issue(user), authorization="Bearer "+token;
+        String target=java.util.UUID.randomUUID()+"@example.com";
+        String path="/api/users/security/reminder-email";
+        String id=challenge("REMINDER_EMAIL",target,token);
+        mvc.perform(get(path).header("Authorization",authorization))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.accountEmail").value(original));
+        mvc.perform(post(path).header("Authorization",authorization).contentType(MediaType.APPLICATION_JSON)
+            .content("{\"challengeId\":\""+id+"\",\"code\":\""+sentCode+"\"}")).andExpect(status().isOk());
+        assertThat(email()).isEqualTo(original);
+        mvc.perform(get(path).header("Authorization",authorization))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.customEmail").value(target));
+        mvc.perform(delete(path).header("Authorization",authorization)).andExpect(status().isOk());
+        mvc.perform(get(path).header("Authorization",authorization))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.customEmail").doesNotExist());
+    }
     void reset(String id,String code,int status) throws Exception {
         mvc.perform(post("/api/users/security/reset").contentType(MediaType.APPLICATION_JSON)
             .content("{\"challengeId\":\""+id+"\",\"code\":\""+code+"\",\"newPassword\":\"RecoveredPass!2\"}"))

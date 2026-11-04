@@ -35,21 +35,54 @@ public class AccountRecoveryService {
         transaction=new TransactionTemplate(manager); key=secret.getBytes(StandardCharsets.UTF_8);
     }
     public boolean available() { return mail.available(); }
+    private static final String REMINDER_EMAIL = "REMINDER_EMAIL";
+    @tools.jackson.databind.annotation.JsonNaming(tools.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
+    public record ReminderEmail(String accountEmail, String customEmail, boolean available) {}
+
+    public ReminderEmail reminderEmail(long userId) {
+        var rows=jdbc.queryForList("""
+            select u.email,c.reminder_email from user u
+            left join user_notification_channel c on c.user_id=u.id
+            where u.id=? and u.status='active'
+            """,userId);
+        if(rows.isEmpty()) throw new BusinessException(401,"请先登录");
+        var row=rows.getFirst();
+        return new ReminderEmail((String)row.get("email"),(String)row.get("reminder_email"),available());
+    }
+
+    public void useDefaultReminderEmail(long userId) {
+        transaction.executeWithoutResult(s->{
+            if(active(userId)==null) throw invalid();
+            jdbc.update("update user_notification_channel set reminder_email=null where user_id=?",userId);
+            invalidateReminderChallenges(userId);
+        });
+    }
+
+    private void invalidateReminderChallenges(long userId) {
+        jdbc.update("update account_email_challenge set consumed=true where user_id=? and purpose=?",userId,REMINDER_EMAIL);
+    }
     private record Delivery(String id,String email,String code,String purpose,boolean send) {}
     public String request(String purpose,String email,String oldPassword,Long userId,String remoteAddress) {
         if(!available()) throw new BusinessException(503,"邮件验证码服务暂不可用");
-        if(!"RESET".equals(purpose) && !"EMAIL".equals(purpose)) throw new BusinessException(400,"验证码用途无效");
+        boolean reminder=REMINDER_EMAIL.equals(purpose);
+        if(!"RESET".equals(purpose) && !"EMAIL".equals(purpose) && !reminder) throw new BusinessException(400,"验证码用途无效");
         String target=email.trim().toLowerCase(Locale.ROOT);
-        if("EMAIL".equals(purpose) && userId==null) throw new BusinessException(401,"请先登录");
+        if(("EMAIL".equals(purpose) || reminder) && userId==null) throw new BusinessException(401,"请先登录");
         // Persist rate counters separately, including failed ownership/password checks.
         transaction.executeWithoutResult(s->{
             if("EMAIL".equals(purpose)) rate("password:"+userId,10,false);
+            if(reminder) rate("reminder:"+userId,10,false);
             rate("ip:"+remoteAddress,20,false);
             rate("email:"+target,5,true);
         });
         Delivery delivery=transaction.execute(s->{
             Map<String,Object> account;
-            if("EMAIL".equals(purpose)) {
+            if(reminder) {
+                account=active(userId);
+                if(account==null || !(account.get("email") instanceof String current) || current.isBlank())
+                    throw new BusinessException(400,"请先绑定账号邮箱");
+                invalidateReminderChallenges(userId);
+            } else if("EMAIL".equals(purpose)) {
                 account=active(userId);
                 if(account==null || !passwords.matches(oldPassword,(String)account.get("password"))) throw new BusinessException(400,"当前密码错误");
                 if(target.equals(account.get("email"))) throw new BusinessException(400,"新邮箱不能与当前邮箱相同");
@@ -73,6 +106,7 @@ public class AccountRecoveryService {
                 // Same public response as an unknown reset account; never expose provider errors.
                 transaction.executeWithoutResult(s->jdbc.update("update account_email_challenge set consumed=true where id=?",delivery.id()));
                 org.slf4j.LoggerFactory.getLogger(getClass()).warn("account verification email delivery failed");
+                if(reminder) throw new BusinessException(503,"验证码发送失败，请稍后重试");
             }
         }
         return delivery.id();
@@ -82,6 +116,7 @@ public class AccountRecoveryService {
         finish(id,code,"RESET",null,null,password);
     }
     public void email(long userId,String id,String code,String oldPassword) { finish(id,code,"EMAIL",userId,oldPassword,null); }
+    public void verifyReminderEmail(long userId,String id,String code) { finish(id,code,REMINDER_EMAIL,userId,null,null); }
     public void passwordAttempt(long userId) {
         transaction.executeWithoutResult(s->rate("password:"+userId,10,false));
     }
@@ -103,7 +138,16 @@ public class AccountRecoveryService {
                     ((Number)row.get("security_version")).longValue()!=((Number)account.get("security_version")).longValue()) return "invalid";
                 jdbc.update("update account_email_challenge set attempts=attempts+1 where id=?",id);
                 if(!MessageDigest.isEqual(digest("code:"+id+":"+code).getBytes(StandardCharsets.US_ASCII),((String)row.get("code_hash")).getBytes(StandardCharsets.US_ASCII))) return "invalid";
-                if("EMAIL".equals(purpose)) {
+                if(REMINDER_EMAIL.equals(purpose)) {
+                    if(!(account.get("email") instanceof String current) || current.isBlank()) return "invalid";
+                    jdbc.update("""
+                        insert into user_notification_channel(user_id,reminder_email,updated_at)
+                        values(?,?,UTC_TIMESTAMP(6))
+                        on duplicate key update reminder_email=?,updated_at=UTC_TIMESTAMP(6)
+                        """,owner,row.get("email"),row.get("email"));
+                    invalidateReminderChallenges(owner);
+                    return null;
+                } else if("EMAIL".equals(purpose)) {
                     if(!passwords.matches(oldPassword,(String)account.get("password"))) return "invalid";
                     jdbc.update("update user set email=? where id=?",row.get("email"),owner);
                 } else {
@@ -147,5 +191,8 @@ public class AccountRecoveryService {
             jdbc.update("delete from account_security_rate where last_sent_at<? limit 1000",UtcDateTimes.toDatabase(Instant.now().minusSeconds(86400)));
         });
     }
-    public void deleteForUser(long userId) { jdbc.update("delete from account_email_challenge where user_id=?",userId); }
+    public void deleteForUser(long userId) {
+        jdbc.update("delete from account_email_challenge where user_id=?",userId);
+        jdbc.update("update user_notification_channel set reminder_email=null where user_id=?",userId);
+    }
 }

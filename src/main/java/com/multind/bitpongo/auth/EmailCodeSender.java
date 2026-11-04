@@ -33,7 +33,7 @@ public class EmailCodeSender {
         if(!available()) throw new IllegalStateException("邮件服务未配置");
         var message=new SimpleMailMessage();
         message.setFrom(from); message.setTo(email); message.setSubject("Bitpongo verification code");
-        message.setText("Your Bitpongo verification code is: "+code+"\n\nPurpose: "+("EMAIL".equals(purpose)?"change email":"reset password")+
+        message.setText("Your Bitpongo verification code is: "+code+"\n\nPurpose: "+("REMINDER_EMAIL".equals(purpose)?"verify reminder email":"EMAIL".equals(purpose)?"change email":"reset password")+
             "\nThis code expires in 10 minutes. Never share it. If you did not request it, ignore this message.");
         sender.send(message);
     }

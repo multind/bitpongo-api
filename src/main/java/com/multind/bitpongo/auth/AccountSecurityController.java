@@ -26,6 +26,23 @@ public class AccountSecurityController {
     @tools.jackson.databind.annotation.JsonNaming(tools.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record EmailChange(@NotBlank @Size(max=36) String challengeId,@NotBlank @jakarta.validation.constraints.Pattern(regexp="[0-9]{8}") String code,@NotBlank @Size(max=128) String oldPassword) {}
     @GetMapping("/status") public ApiResponse<Status> status() { return ApiResponse.success(new Status(recovery.available())); }
+    @tools.jackson.databind.annotation.JsonNaming(tools.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
+    public record ReminderVerification(@NotBlank @Size(max=36) String challengeId,
+        @NotBlank @jakarta.validation.constraints.Pattern(regexp="[0-9]{8}") String code) {}
+    @GetMapping("/reminder-email")
+    public ApiResponse<AccountRecoveryService.ReminderEmail> reminderEmail(@AuthenticationPrincipal AuthenticatedUser user) {
+        return ApiResponse.success(recovery.reminderEmail(user.id()));
+    }
+    @PostMapping("/reminder-email")
+    public ApiResponse<AccountRecoveryService.ReminderEmail> verifyReminderEmail(@AuthenticationPrincipal AuthenticatedUser user,@Valid @RequestBody ReminderVerification request) {
+        recovery.verifyReminderEmail(user.id(),request.challengeId(),request.code());
+        return reminderEmail(user);
+    }
+    @DeleteMapping("/reminder-email")
+    public ApiResponse<AccountRecoveryService.ReminderEmail> defaultReminderEmail(@AuthenticationPrincipal AuthenticatedUser user) {
+        recovery.useDefaultReminderEmail(user.id());
+        return reminderEmail(user);
+    }
     @PostMapping("/code") public ApiResponse<Challenge> code(@AuthenticationPrincipal AuthenticatedUser user,@Valid @RequestBody CodeRequest request,jakarta.servlet.http.HttpServletRequest http) {
         return ApiResponse.success(new Challenge(recovery.request(request.purpose(),request.email(),request.oldPassword(),user==null?null:user.id(),http.getRemoteAddr())));
     }

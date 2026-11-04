@@ -200,7 +200,7 @@ public class NotificationEscalationService {
     private Delivery load(Due due) {
         List<Map<String, Object>> rows = jdbc.queryForList("""
                 select e.title,e.body,e.confirmed_at,e.inbox_deleted,
-                       u.email,
+                       case when nullif(trim(u.email),'') is not null then coalesce(c.reminder_email,u.email) end as email,
                        coalesce(c.confirmation_enabled,false) confirmation_enabled,
                        coalesce(c.email_enabled,false) email_enabled
                   from notification_escalation n
