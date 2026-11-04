@@ -146,7 +146,7 @@ public class PriceAlertService {
                 || !r.symbol().trim().toUpperCase(Locale.ROOT).replace("/", "").matches("[A-Z0-9]{1,20}USDT")
                 || !CONDITIONS.contains(r.condition() == null ? "" : r.condition()) || !FREQUENCIES.contains(r.frequency() == null ? "" : r.frequency())
                 || !INTERVALS.contains(r.interval() == null ? "" : r.interval()) || (r.expiresAt() != null && !r.expiresAt().isAfter(Instant.now()))) throw invalid("提醒参数无效");
-        if (r.channels() != null && (r.channels().stream().anyMatch(c -> c == null || !Set.of("bitpongo", "email").contains(c)) || r.channels().size() != new java.util.HashSet<>(r.channels()).size())) throw invalid("通知方式无效");
+        if (r.channels() != null && (r.channels().stream().anyMatch(c -> c == null || !Set.of("bitpongo", "email", "telegram").contains(c)) || r.channels().size() != new java.util.HashSet<>(r.channels()).size())) throw invalid("通知方式无效");
         if (r.condition().equals("CHANNEL_OUTSIDE")) {
             if (!price(r.lower()) || !price(r.upper()) || r.lower().compareTo(r.upper()) >= 0) throw invalid("价格区间无效");
         } else if (!price(r.target())) throw invalid("目标价格必须大于零");

@@ -193,6 +193,7 @@ public class AccountRecoveryService {
     }
     public void deleteForUser(long userId) {
         jdbc.update("delete from account_email_challenge where user_id=?",userId);
-        jdbc.update("update user_notification_channel set reminder_email=null where user_id=?",userId);
+        jdbc.update("update user_notification_channel set reminder_email=null,telegram_chat_id=null,telegram_enabled=false where user_id=?",userId);
+        jdbc.update("delete from telegram_binding_challenge where user_id=?",userId);
     }
 }

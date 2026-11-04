@@ -60,6 +60,8 @@ public class NotificationChannelService {
     private final NativePushClient push;
     private final EmailCodeSender email;
     private final Clock clock;
+    @org.springframework.beans.factory.annotation.Autowired
+    private TelegramClient telegramClient;
     private static final List<String> DEFAULT_ORDER = List.of("call", "message", "dingding", "feishu", "telegram", "bitpongo", "email");
 
     @Transactional
@@ -102,7 +104,7 @@ public class NotificationChannelService {
                 new Channel(bool(row, "call_enabled"), false, STRONG, position(userId,"call")),
                 new Channel(bool(row, "dingding_enabled"), false, MODERATE, position(userId,"dingding")),
                 new Channel(bool(row, "feishu_enabled"), false, MODERATE, position(userId,"feishu")),
-                new Channel(bool(row, "telegram_enabled"), false, MODERATE, position(userId,"telegram")),
+                new Channel(bool(row, "telegram_enabled"), telegramClient.available() && row.get("telegram_chat_id") != null, MODERATE, position(userId,"telegram")),
                 bool(row, "confirmation_enabled"));
     }
 
