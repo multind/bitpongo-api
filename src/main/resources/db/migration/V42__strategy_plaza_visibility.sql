@@ -1,5 +1,5 @@
 -- Strategy plaza is opt-in: a strategy is listed only when its owner turns this on
--- (or an administrator marks it official in strategy_mark). Absence of a row means private.
+-- Official strategies are visible only by default; an explicit owner choice takes precedence.
 CREATE TABLE strategy_visibility (
     strategy_type VARCHAR(8) NOT NULL,
     strategy_id INT NOT NULL,

@@ -47,9 +47,20 @@ class DatabaseMigrationIntegrationTest {
                     """);
         }
 
+        // Upgrade through the same Flyway version already applied in production.
+        flywayAt(MigrationVersion.fromVersion("40")).migrate();
+        try (Connection connection = connection()) {
+            assertThat(queryString(connection, "SELECT description FROM flyway_schema_history WHERE version='39'"))
+                    .isEqualTo("reminder email");
+            assertThat(queryString(connection, "SELECT description FROM flyway_schema_history WHERE version='40'"))
+                    .isEqualTo("telegram binding");
+            assertThat(columns(connection, "strategy_visibility")).isEmpty();
+        }
         flywayAt(null).migrate();
 
         try (Connection connection = connection()) {
+            assertThat(columns(connection, "strategy_visibility")).contains("is_public");
+            assertThat(columns(connection, "fng_strategy")).contains("stop_loss_percent");
             assertThat(columns(connection, "strategy"))
                     .contains("schedule_timezone");
             assertThat(columns(connection, "user"))

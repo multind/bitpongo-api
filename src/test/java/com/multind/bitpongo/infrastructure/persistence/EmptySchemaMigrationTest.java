@@ -1,5 +1,8 @@
 package com.multind.bitpongo.infrastructure.persistence;
 
+import com.multind.bitpongo.common.api.BusinessException;
+import com.multind.bitpongo.preset.PresetDtos;
+import com.multind.bitpongo.preset.PresetService;
 import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -7,11 +10,13 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.annotation.DirtiesContext;
+import org.springframework.transaction.annotation.Transactional;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @Testcontainers
 @SpringBootTest(properties = {
@@ -31,6 +36,47 @@ class EmptySchemaMigrationTest {
 
     @Autowired
     private JdbcTemplate jdbc;
+
+    @Autowired
+    private PresetService presets;
+
+    @Test
+    @Transactional
+    void withdrawnStrategiesArePrivateEvenWhenOfficial() {
+        jdbc.update("insert into user (id,name,email,password) values (501,'Owner','plaza@example.com','test')");
+        jdbc.update("insert into user (id,name,email,password) values (502,'Viewer','viewer@example.com','test')");
+        jdbc.update("insert into exchange (id,name,exchange,user_id) values (501,'Spot','binance',501)");
+        jdbc.update("insert into strategy (id,name,`condition`,user_id) values (501,'Private DCA','none',501)");
+        jdbc.update("insert into plan (id,status,user_id,strategy_id,exchange_id) values (501,'active',501,501,501)");
+        jdbc.update("""
+                insert into fng_strategy (
+                  id,user_id,name,exchange,symbol,upper_limit_value,upper_limit_interval,lower_limit_value,lower_limit_interval,
+                  basic_amount,increase_ratio,leverage,bureau_period,direction,profit_target_percent,profit_drawdown_percent,
+                  profit_target_type,max_orders,max_positions,valid_from,created_at,updated_at)
+                values (501,501,'Private FNG','binance','BTCUSDT',80,1,20,1,10,1,1,1,'LONG',10,5,'FIXED',1,1,now(),now(),now())
+                """);
+
+        for (String type : List.of("DCA", "FNG")) {
+            String key = type.toLowerCase(java.util.Locale.ROOT) + ":501";
+            assertThat(plazaKeys()).doesNotContain(key);
+            assertThat(presets.visibility(501, type, 501).visible()).isFalse();
+            jdbc.update("insert into strategy_mark (strategy_type,strategy_id,official,updated_at) values (?,501,true,now())", type);
+            assertThat(plazaKeys()).contains(key);
+            assertThat(presets.visibility(501, type, 501).visible()).isTrue();
+            presets.updateVisibility(501, type, 501, false);
+            assertThat(plazaKeys()).doesNotContain(key);
+            assertThatThrownBy(() -> presets.detail(502, key)).isInstanceOf(BusinessException.class);
+            assertThatThrownBy(() -> presets.favorite(502, key)).isInstanceOf(BusinessException.class);
+            presets.updateVisibility(501, type, 501, true);
+            assertThat(plazaKeys()).contains(key);
+            assertThat(presets.detail(502, key).key()).isEqualTo(key);
+        }
+    }
+
+    private List<String> plazaKeys() {
+        return presets.list(502, null, null, null, null, null, null, 0, 50)
+                .items().stream().map(PresetDtos.Preset::key).toList();
+    }
 
     @Test
     void createsBusinessQuartzAndIdempotencySchema() {

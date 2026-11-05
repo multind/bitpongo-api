@@ -134,7 +134,7 @@ public class PresetService {
                 left join strategy_visibility v on v.strategy_type='DCA' and v.strategy_id=p.id
                 left join strategy_mark m on m.strategy_type='DCA' and m.strategy_id=p.id
                 where p.status='active' and u.status='active'
-                  and (v.is_public=true or m.official=true)
+                  and coalesce(v.is_public,m.official,false)=true
                 order by p.id desc
                 """, rs -> {
             long planId = rs.getLong("plan_id");
@@ -184,7 +184,7 @@ public class PresetService {
                 left join strategy_visibility v on v.strategy_type='FNG' and v.strategy_id=f.id
                 left join strategy_mark m on m.strategy_type='FNG' and m.strategy_id=f.id
                 where f.enabled=true and u.status='active'
-                  and (v.is_public=true or m.official=true)
+                  and coalesce(v.is_public,m.official,false)=true
                 order by f.id desc
                 """, rs -> {
             long strategyId = rs.getLong("id");
@@ -230,10 +230,13 @@ public class PresetService {
     public PresetDtos.Visibility visibility(long userId, String type, long strategyId) {
         String normalized = visibilityType(type);
         requireOwner(userId, normalized, strategyId);
-        List<Boolean> rows = jdbc.queryForList(
-                "select is_public from strategy_visibility where strategy_type=? and strategy_id=?",
-                Boolean.class, normalized, strategyId);
-        return new PresetDtos.Visibility(!rows.isEmpty() && Boolean.TRUE.equals(rows.getFirst()));
+        Boolean visible = jdbc.queryForObject("""
+                select coalesce(
+                    (select is_public from strategy_visibility where strategy_type=? and strategy_id=?),
+                    (select official from strategy_mark where strategy_type=? and strategy_id=?),
+                    false)
+                """, Boolean.class, normalized, strategyId, normalized, strategyId);
+        return new PresetDtos.Visibility(Boolean.TRUE.equals(visible));
     }
 
     @Transactional
@@ -347,7 +350,10 @@ public class PresetService {
         if ("fng".equals(type)) {
             Integer count = jdbc.queryForObject("""
                     select count(*) from fng_strategy f join user u on u.id=f.user_id
+                    left join strategy_visibility v on v.strategy_type='FNG' and v.strategy_id=f.id
+                    left join strategy_mark m on m.strategy_type='FNG' and m.strategy_id=f.id
                     where f.id=? and f.enabled=true and u.status='active'
+                      and coalesce(v.is_public,m.official,false)=true
                     """, Integer.class, id);
             if (count == null || count == 0) throw new BusinessException(404, "策略不存在");
             return;
@@ -355,7 +361,10 @@ public class PresetService {
         if (!"dca".equals(type)) throw new BusinessException(404, "策略不存在");
         Integer count = jdbc.queryForObject("""
                 select count(*) from plan p join user u on u.id=p.user_id
+                left join strategy_visibility v on v.strategy_type='DCA' and v.strategy_id=p.id
+                left join strategy_mark m on m.strategy_type='DCA' and m.strategy_id=p.id
                 where p.id=? and p.status='active' and u.status='active'
+                  and coalesce(v.is_public,m.official,false)=true
                 """, Integer.class, id);
         if (count == null || count == 0) throw new BusinessException(404, "策略不存在");
     }
