@@ -131,7 +131,10 @@ public class PresetService {
                 join exchange e on e.id=p.exchange_id
                 join user u on u.id=p.user_id
                 left join user_avatar ua on ua.user_id=u.id
+                left join strategy_visibility v on v.strategy_type='DCA' and v.strategy_id=p.id
+                left join strategy_mark m on m.strategy_type='DCA' and m.strategy_id=p.id
                 where p.status='active' and u.status='active'
+                  and (v.is_public=true or m.official=true)
                 order by p.id desc
                 """, rs -> {
             long planId = rs.getLong("plan_id");
@@ -173,12 +176,15 @@ public class PresetService {
                 select f.id,f.name,f.symbol,f.exchange,f.upper_limit_value,f.upper_limit_interval,
                        f.lower_limit_value,f.lower_limit_interval,f.basic_amount,f.increase_ratio,
                        f.leverage,f.bureau_period,f.direction,f.profit_target_percent,
-                       f.profit_drawdown_percent,f.profit_target_type,f.max_orders,f.max_positions,
+                       f.profit_drawdown_percent,f.stop_loss_percent,f.profit_target_type,f.max_orders,f.max_positions,
                        f.created_at,u.name as user_name,u.email as user_email,ua.image as author_avatar
                 from fng_strategy f
                 join user u on u.id=f.user_id
                 left join user_avatar ua on ua.user_id=u.id
+                left join strategy_visibility v on v.strategy_type='FNG' and v.strategy_id=f.id
+                left join strategy_mark m on m.strategy_type='FNG' and m.strategy_id=f.id
                 where f.enabled=true and u.status='active'
+                  and (v.is_public=true or m.official=true)
                 order by f.id desc
                 """, rs -> {
             long strategyId = rs.getLong("id");
@@ -203,6 +209,8 @@ public class PresetService {
             params.put("direction", rs.getString("direction"));
             params.put("profitTargetPercent", decimal(rs.getObject("profit_target_percent")));
             params.put("profitDrawdownPercent", decimal(rs.getObject("profit_drawdown_percent")));
+            params.put("stopLossPercent", rs.getObject("stop_loss_percent") == null
+                    ? null : decimal(rs.getObject("stop_loss_percent")));
             params.put("profitTargetType", rs.getString("profit_target_type"));
             params.put("maxOrders", rs.getInt("max_orders"));
             params.put("maxPositions", rs.getInt("max_positions"));
@@ -216,6 +224,45 @@ public class PresetService {
                     rs.getString("exchange"), symbol == null ? List.of() : List.of(base),
                     runtimeDays(rs.getObject("created_at")), fngSparkline(strategyId), params));
         });
+    }
+
+    @Transactional(readOnly = true)
+    public PresetDtos.Visibility visibility(long userId, String type, long strategyId) {
+        String normalized = visibilityType(type);
+        requireOwner(userId, normalized, strategyId);
+        List<Boolean> rows = jdbc.queryForList(
+                "select is_public from strategy_visibility where strategy_type=? and strategy_id=?",
+                Boolean.class, normalized, strategyId);
+        return new PresetDtos.Visibility(!rows.isEmpty() && Boolean.TRUE.equals(rows.getFirst()));
+    }
+
+    @Transactional
+    public PresetDtos.Visibility updateVisibility(long userId, String type, long strategyId, boolean visible) {
+        String normalized = visibilityType(type);
+        requireOwner(userId, normalized, strategyId);
+        jdbc.update("""
+                insert into strategy_visibility(strategy_type,strategy_id,user_id,is_public,updated_at)
+                values(?,?,?,?,?)
+                on duplicate key update is_public=?,updated_at=?
+                """, normalized, strategyId, userId, visible, Timestamp.from(clock.instant()),
+                visible, Timestamp.from(clock.instant()));
+        return new PresetDtos.Visibility(visible);
+    }
+
+    private static String visibilityType(String type) {
+        String normalized = type == null ? "" : type.trim().toUpperCase(Locale.ROOT);
+        if (!"DCA".equals(normalized) && !"FNG".equals(normalized)) {
+            throw new BusinessException(400, "策略类型无效");
+        }
+        return normalized;
+    }
+
+    private void requireOwner(long userId, String type, long strategyId) {
+        String sql = "DCA".equals(type)
+                ? "select count(*) from plan where id=? and user_id=?"
+                : "select count(*) from fng_strategy where id=? and user_id=?";
+        Integer owned = jdbc.queryForObject(sql, Integer.class, strategyId, userId);
+        if (owned == null || owned == 0) throw new BusinessException(404, "策略不存在");
     }
 
     private Map<String, Mark> marks() {

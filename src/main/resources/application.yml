@@ -63,6 +63,9 @@ zhitoubao:
       dispatch-enabled: ${BARK_DISPATCH_ENABLED:true}
       notify-on-startup: ${BARK_NOTIFY_ON_STARTUP:false}
       app-public-url: ${APP_PUBLIC_URL:}
+  exchange:
+    # Falls back to BARK_CREDENTIAL_ENCRYPTION_KEY when empty.
+    credential-encryption-key: ${EXCHANGE_CREDENTIAL_ENCRYPTION_KEY:}
   cors:
     allowed-origins: ${BACKEND_CORS_ORIGINS:*}
   jwt:

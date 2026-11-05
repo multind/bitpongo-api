@@ -58,7 +58,7 @@ class FngStrategyControllerContractTest {
 
         when(service.list(7)).thenReturn(List.of(new FngStrategyDtos.View(
                 11, "F&G alert", "binance", 1L, "BTCUSDT", 75, 5, 25, 5, "100", "10", 1, 7,
-                "LONG", "10", "5", "PERCENT", 10, 5, true, Instant.parse("2026-10-25T00:00:00Z"))));
+                "LONG", "10", "5", "30", "PERCENT", 10, 5, true, Instant.parse("2026-10-25T00:00:00Z"))));
         mvc.perform(get("/api/fng-strategies")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].upperLimitValue").value(75))
                 .andExpect(jsonPath("$.data[0].basicAmount").value("100"))

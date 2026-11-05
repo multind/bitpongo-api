@@ -16,8 +16,8 @@ public final class StrategyDtos {
     public record CoinRequest(
             @NotNull @Positive BigDecimal proportion,
             String icon,
-            @NotNull BigDecimal min,
-            @NotNull BigDecimal max,
+            BigDecimal min,
+            BigDecimal max,
             @JsonProperty("average_down") boolean averageDown,
             @NotBlank String symbol,
             boolean checked) {}

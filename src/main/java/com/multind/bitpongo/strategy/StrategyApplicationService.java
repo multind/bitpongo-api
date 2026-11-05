@@ -93,6 +93,13 @@ public class StrategyApplicationService {
         if (total.compareTo(new BigDecimal("100")) != 0) {
             throw new BusinessException(400, "币种比例合计必须为100");
         }
+        for (StrategyDtos.CoinRequest coin : request.coins()) {
+            BigDecimal min = priceBound(coin.min());
+            BigDecimal max = priceBound(coin.max());
+            if (min.signum() > 0 && max.signum() > 0 && min.compareTo(max) > 0) {
+                throw new BusinessException(400, "最低价不能高于最高价");
+            }
+        }
         String condition = request.condition() == null ? "" : request.condition().trim();
         boolean averageDownEnabled = request.coins().stream()
                 .anyMatch(StrategyDtos.CoinRequest::averageDown);
@@ -146,8 +153,8 @@ public class StrategyApplicationService {
             coin.setProportion(requestCoin.proportion().stripTrailingZeros().toPlainString());
             String icon = requestCoin.icon() == null ? "" : requestCoin.icon();
             coin.setIcon(icon.substring(0, Math.min(icon.length(), 255)));
-            coin.setMin(requestCoin.min());
-            coin.setMax(requestCoin.max());
+            coin.setMin(priceBound(requestCoin.min()));
+            coin.setMax(priceBound(requestCoin.max()));
             coin.setAverageDown(requestCoin.averageDown());
             coin.setSymbol(requestCoin.symbol().trim().toUpperCase());
             coin.setAverage(BigDecimal.ZERO);
@@ -177,6 +184,13 @@ public class StrategyApplicationService {
         } else {
             action.run();
         }
+    }
+
+    /** Empty or non-positive bounds are stored as 0, which the scheduler treats as "no limit". */
+    static BigDecimal priceBound(BigDecimal value) {
+        if (value == null) return BigDecimal.ZERO;
+        if (value.signum() < 0) throw new BusinessException(400, "价格区间不能为负数");
+        return value;
     }
 
     public static String normalizeCron(String cron) {
