@@ -29,8 +29,11 @@ public class AccountSecurityService {
         jdbc.update("update login_session set revoked_at=coalesce(revoked_at,UTC_TIMESTAMP(6)) where user_id=?",userId);
         jdbc.update("update account_email_challenge set consumed=true where user_id=?",userId);
     }
+    /** Same rule as registration (UserDtos.UserCreateRequest): 8-128 characters with a letter and a digit. */
+    static final String PASSWORD_PATTERN = "^(?=.*[A-Za-z])(?=.*\\d).{8,128}$";
+
     static void validatePassword(String password) {
-        if(password==null || password.length()<12 || password.length()>128 || password.isBlank())
-            throw new BusinessException(400,"新密码须为 12 至 128 个字符");
+        if(password==null || !password.matches(PASSWORD_PATTERN))
+            throw new BusinessException(400,"密码须为 8 至 128 个字符，且同时包含字母和数字");
     }
 }

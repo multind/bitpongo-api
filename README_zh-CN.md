@@ -103,6 +103,7 @@ set +a
 | `BINANCE_LIVE_TRADING` | 开启生产环境下单 | `false` |
 | `MARKET_STREAM_ENABLED` | 开启 Binance 行情流 | `false` |
 | `BARK_CREDENTIAL_ENCRYPTION_KEY` | 加密用户 Bark 凭据的 32-byte Base64 密钥 | 必填 |
+| `EXCHANGE_CREDENTIAL_ENCRYPTION_KEY` | 加密交易所 API Secret 的 32-byte Base64 密钥；保存过凭据后不要更换 | 留空时复用 Bark 密钥 |
 | `BARK_ADMIN_PUSH_URL` | 可选的管理员 Bark 地址 | 空 |
 | `BARK_ALLOWED_HOSTS` | Bark 目标主机白名单 | `api.day.app` |
 | `APP_PUBLIC_URL` | 通知中附带的公开链接 | 空 |

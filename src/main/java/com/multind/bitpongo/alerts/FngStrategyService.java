@@ -23,6 +23,8 @@ public class FngStrategyService {
     // bureauPeriod is the maximum number of days allowed for that cycle.
     private static final int CYCLE_MIN_DAYS = 1;
     private static final int CYCLE_MAX_DAYS = 25;
+    // Matches the strategy plaza rule "contract leverage <= 20".
+    static final int MAX_LEVERAGE = 20;
 
     private final JdbcTemplate jdbc;
     private final FngExecutionService execution;
@@ -42,14 +44,14 @@ public class FngStrategyService {
             PreparedStatement statement = connection.prepareStatement("""
                     insert into fng_strategy(user_id,name,exchange,exchange_id,symbol,upper_limit_value,upper_limit_interval,
                         lower_limit_value,lower_limit_interval,basic_amount,increase_ratio,leverage,bureau_period,
-                        direction,profit_target_percent,profit_drawdown_percent,profit_target_type,
+                        direction,profit_target_percent,profit_drawdown_percent,stop_loss_percent,profit_target_type,
                         max_orders,max_positions,enabled,valid_from,created_at,updated_at)
-                    values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,true,?,?,?)
+                    values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,true,?,?,?)
                     """, java.sql.Statement.RETURN_GENERATED_KEYS);
             Object[] values = { userId, value.name(), value.exchange(), value.exchangeId(), value.symbol(), value.upperValue(),
                     value.upperInterval(), value.lowerValue(), value.lowerInterval(), value.basicAmount(),
                     value.increaseRatio(), value.leverage(), value.bureauPeriod(), value.direction(),
-                    value.profitTargetPercent(), value.profitDrawdownPercent(),
+                    value.profitTargetPercent(), value.profitDrawdownPercent(), value.stopLossPercent(),
                     value.profitTargetType(), value.maxOrders(), value.maxPositions(),
                     PriceAlertService.utc(now), PriceAlertService.utc(now), PriceAlertService.utc(now) };
             for (int index = 0; index < values.length; index++) statement.setObject(index + 1, values[index]);
@@ -91,13 +93,14 @@ public class FngStrategyService {
         int updated = jdbc.update("""
                 update fng_strategy set name=?,exchange=?,exchange_id=?,symbol=?,upper_limit_value=?,upper_limit_interval=?,
                     lower_limit_value=?,lower_limit_interval=?,basic_amount=?,increase_ratio=?,leverage=?,bureau_period=?,
-                    direction=?,profit_target_percent=?,profit_drawdown_percent=?,profit_target_type=?,
+                    direction=?,profit_target_percent=?,profit_drawdown_percent=?,stop_loss_percent=?,profit_target_type=?,
                     max_orders=?,max_positions=?,valid_from=?,last_observed_at=null,last_zone=null,updated_at=?
                 where user_id=? and id=?
                 """, value.name(), value.exchange(), value.exchangeId(), value.symbol(), value.upperValue(), value.upperInterval(),
                 value.lowerValue(), value.lowerInterval(), value.basicAmount(), value.increaseRatio(), value.leverage(),
                 value.bureauPeriod(), value.direction(), value.profitTargetPercent(),
-                value.profitDrawdownPercent(), value.profitTargetType(), value.maxOrders(), value.maxPositions(),
+                value.profitDrawdownPercent(), value.stopLossPercent(), value.profitTargetType(),
+                value.maxOrders(), value.maxPositions(),
                 PriceAlertService.utc(now), PriceAlertService.utc(now), userId, id);
         if (updated == 0) throw new BusinessException(404, "F&G 策略不存在");
     }
@@ -195,6 +198,7 @@ public class FngStrategyService {
                 rs.getString("direction"),
                 decimal(rs.getBigDecimal("profit_target_percent")),
                 decimal(rs.getBigDecimal("profit_drawdown_percent")),
+                rs.getBigDecimal("stop_loss_percent") == null ? null : decimal(rs.getBigDecimal("stop_loss_percent")),
                 rs.getString("profit_target_type"),
                 rs.getInt("max_orders"),
                 rs.getInt("max_positions"),
@@ -217,7 +221,7 @@ public class FngStrategyService {
         BigDecimal basicAmount = decimal(request.basicAmount(), "基础下单金额", false);
         BigDecimal increaseRatio = decimal(request.increaseRatio(), "加仓比例", true);
         if (increaseRatio.signum() < 0) throw invalid("加仓比例无效");
-        int leverage = range(request.leverage(), 1, 125, "杠杆倍数");
+        int leverage = range(request.leverage(), 1, MAX_LEVERAGE, "杠杆倍数");
         // One cycle = entry -> take-profit exit; this is the maximum cycle length in days.
         int bureauPeriod = range(request.bureauPeriod(), CYCLE_MIN_DAYS, CYCLE_MAX_DAYS, "交易周期");
         String direction = choice(request.direction(), DIRECTIONS, "策略方向");
@@ -227,19 +231,23 @@ public class FngStrategyService {
         // Trailing stop relative to peak profit: peak 20% with 5% drawdown exits at 19%.
         BigDecimal profitDrawdown = decimal(request.profitDrawdownPercent(), "回撤比例", false);
         if (profitDrawdown.compareTo(BigDecimal.valueOf(100)) > 0) throw invalid("回撤比例不能超过100");
+        // Stop loss as a percentage of margin; required so leveraged positions cannot run unbounded losses.
+        BigDecimal stopLoss = decimal(request.stopLossPercent(), "止损比例", false);
+        if (stopLoss.compareTo(BigDecimal.valueOf(100)) > 0) throw invalid("止损比例不能超过100");
         String targetType = choice(request.profitTargetType(), TARGET_TYPES, "止盈类型");
         // Execution limits stored for the future trading integration; F&G alerts do not place orders.
         int maxOrders = range(request.maxOrders(), 1, 10000, "最大订单数");
         int maxPositions = range(request.maxPositions(), 1, 10000, "最大持仓数");
         return new Validated(name, exchange, exchangeId, symbol, upperValue, upperInterval, lowerValue, lowerInterval,
                 basicAmount, increaseRatio, leverage, bureauPeriod, direction,
-                profitTarget, profitDrawdown, targetType, maxOrders, maxPositions);
+                profitTarget, profitDrawdown, stopLoss, targetType, maxOrders, maxPositions);
     }
 
     private record Validated(String name, String exchange, long exchangeId, String symbol, int upperValue, int upperInterval,
             int lowerValue, int lowerInterval, BigDecimal basicAmount, BigDecimal increaseRatio, int leverage,
             int bureauPeriod, String direction, BigDecimal profitTargetPercent,
-            BigDecimal profitDrawdownPercent, String profitTargetType, int maxOrders, int maxPositions) {}
+            BigDecimal profitDrawdownPercent, BigDecimal stopLossPercent, String profitTargetType,
+            int maxOrders, int maxPositions) {}
 
     private long requireExchangeId(long userId, Long exchangeId) {
         if (exchangeId == null) throw invalid("请选择合约交易所");

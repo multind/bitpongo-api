@@ -1,5 +1,7 @@
 package com.multind.bitpongo.preset;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
+
 import java.util.List;
 import java.util.Map;
 import tools.jackson.databind.PropertyNamingStrategies;
@@ -31,4 +33,6 @@ public final class PresetDtos {
     public record Page(List<Preset> items, int page, int size, long total, boolean hasMore) {}
 
     public record Favorite(boolean favorite, long followers) {}
+    public record Visibility(@JsonProperty("public") boolean visible) {}
+    public record VisibilityRequest(@JsonProperty("public") boolean visible) {}
 }

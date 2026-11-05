@@ -2,6 +2,7 @@ package com.multind.bitpongo.exchange;
 
 import com.fasterxml.jackson.annotation.JsonIgnore;
 import jakarta.persistence.Column;
+import jakarta.persistence.Convert;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
@@ -20,8 +21,10 @@ public class ExchangeEntity {
     @Column(length = 64) private String name;
     @Column(length = 64) private String exchange;
     @Column(name = "access_key", length = 64) private String accessKey;
-    @Column(name = "secret_key", length = 64) private String secretKey;
-    @Column(length = 64) private String password;
+    @Convert(converter = ExchangeSecretConverter.class)
+    @Column(name = "secret_key", length = 512) private String secretKey;
+    @Convert(converter = ExchangeSecretConverter.class)
+    @Column(length = 512) private String password;
     @Column(length = 32) private String status;
     @Column(name = "user_id", columnDefinition = "INT") private Long userId;
     @Column(name = "created_at") private LocalDateTime createdAt;

@@ -87,6 +87,7 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
         List<String> pendingSymbols = new ArrayList<>();
         List<String> skippedSymbols = new ArrayList<>();
         List<String> averageDownSkippedSymbols = new ArrayList<>();
+        List<String> outOfRangeSymbols = new ArrayList<>();
         if (!persistence.beginTrigger(planId, scheduledFireTime)) return;
         for (CoinEntity coin : coins.findByPlanIdAndUserId(planId, plan.getUserId())) {
             String marketSymbol = coin.getSymbol().toUpperCase() + "USDT";
@@ -102,6 +103,10 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
                     skippedSymbols.add(marketSymbol);
                     continue;
                 }
+            }
+            if (!withinPriceRange(coin, price)) {
+                outOfRangeSymbols.add(marketSymbol);
+                continue;
             }
             if (shouldSkipAverageDown(planId, strategy, coin, internalSymbol, price)) {
                 averageDownSkippedSymbols.add(marketSymbol);
@@ -150,12 +155,17 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
                 occurredAt,
                 "plan-average-down-skipped:", "PRICE_NOT_BELOW_AVERAGE",
                 averageDownSkippedSymbols);
+        publishOutcome(NotificationEventType.PLAN_EXECUTION_SKIPPED, plan, scheduledFireTime,
+                occurredAt,
+                "plan-price-range-skipped:", "PRICE_OUT_OF_RANGE",
+                outOfRangeSymbols);
         ExecutionOutcome executionOutcome = summarizeExecution(
                 succeededSymbols,
                 failedSymbols,
                 pendingSymbols,
                 skippedSymbols,
-                averageDownSkippedSymbols);
+                averageDownSkippedSymbols,
+                outOfRangeSymbols);
         persistence.completeTrigger(
                 planId,
                 scheduledFireTime,
@@ -181,13 +191,15 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
             List<String> failedSymbols,
             List<String> pendingSymbols,
             List<String> unavailableSymbols,
-            List<String> averageDownSkippedSymbols) {
+            List<String> averageDownSkippedSymbols,
+            List<String> outOfRangeSymbols) {
         List<List<String>> nonEmptyGroups = List.of(
                         succeededSymbols,
                         failedSymbols,
                         pendingSymbols,
                         unavailableSymbols,
-                        averageDownSkippedSymbols)
+                        averageDownSkippedSymbols,
+                        outOfRangeSymbols)
                 .stream()
                 .filter(group -> !group.isEmpty())
                 .toList();
@@ -205,6 +217,9 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
         if (!unavailableSymbols.isEmpty()) return new ExecutionOutcome("SKIPPED", "PRICE_UNAVAILABLE", symbols);
         if (!averageDownSkippedSymbols.isEmpty()) {
             return new ExecutionOutcome("SKIPPED", "PRICE_NOT_BELOW_AVERAGE", symbols);
+        }
+        if (!outOfRangeSymbols.isEmpty()) {
+            return new ExecutionOutcome("SKIPPED", "PRICE_OUT_OF_RANGE", symbols);
         }
         return new ExecutionOutcome("SKIPPED", "NO_ACTION", List.of());
     }
@@ -265,6 +280,15 @@ public class ScheduledPurchaseService implements ScheduledPurchaseUseCase {
             log.warn("计划延迟通知发布失败 planId={} errorType={}",
                     plan.getId(), failure.getClass().getSimpleName());
         }
+    }
+
+    /** A bound of zero or less means "not set"; both bounds are inclusive. */
+    static boolean withinPriceRange(CoinEntity coin, BigDecimal price) {
+        BigDecimal min = coin.getMin();
+        BigDecimal max = coin.getMax();
+        if (min != null && min.signum() > 0 && price.compareTo(min) < 0) return false;
+        if (max != null && max.signum() > 0 && price.compareTo(max) > 0) return false;
+        return true;
     }
 
     private boolean shouldSkipAverageDown(
