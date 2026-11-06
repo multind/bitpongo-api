@@ -4,6 +4,7 @@ import com.fasterxml.jackson.annotation.JsonAnySetter;
 import com.multind.bitpongo.auth.AuthenticatedUser;
 import com.multind.bitpongo.common.api.ApiResponse;
 import com.multind.bitpongo.common.api.BusinessException;
+import java.math.BigDecimal;
 import java.util.List;
 import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -16,6 +17,8 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import tools.jackson.databind.PropertyNamingStrategies;
+import tools.jackson.databind.annotation.JsonNaming;
 
 @Profile("!test")
 @RestController
@@ -116,6 +119,16 @@ public class FngStrategyController {
             @AuthenticationPrincipal AuthenticatedUser user,
             @PathVariable long id) {
         service.delete(user.id(), id);
+        return ApiResponse.success(null);
+    }
+
+    @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)
+    public record RoundLimit(BigDecimal maxTradeRounds) {}
+
+    @PutMapping("/{id}/round-limit")
+    public ApiResponse<Void> roundLimit(@AuthenticationPrincipal AuthenticatedUser user, @PathVariable long id,
+            @RequestBody RoundLimit request) {
+        service.roundLimit(user.id(), id, FngStrategyService.parseRoundLimit(request.maxTradeRounds()));
         return ApiResponse.success(null);
     }
 }

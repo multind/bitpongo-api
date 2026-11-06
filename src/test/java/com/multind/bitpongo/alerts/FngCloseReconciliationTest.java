@@ -60,9 +60,10 @@ class FngCloseReconciliationTest {
         exchange.setAccessKey("fake-key");
         exchange.setSecretKey("fake-secret");
         when(repository.findByIdAndUserId(901L, 901L)).thenReturn(Optional.of(exchange));
-        execution = new FngExecutionService(jdbc, repository, new FuturesGatewayRegistry(gateway), notifications, true);
+        execution = new FngExecutionService(jdbc, repository, new FuturesGatewayRegistry(gateway), notifications,
+                new DataSourceTransactionManager(jdbc.getDataSource()), true);
         strategyId = new FngStrategyService(jdbc, execution).create(901, new FngStrategyDtos.Create(
-                "Audit", null, 901L, "BTCUSDT", 75, 5, 25, 5, d("100"), d("10"), 2, 7,
+                "Audit", null, 901L, "BTCUSDT", 75, 5, 25, 5, d("100"), d("10"), 2, d("7"),
                 "LONG", d("10"), d("5"), d("20"), "PERCENT", 2, 25));
         jdbc.update("""
                 insert into fng_position(strategy_id,user_id,exchange_id,symbol,side,status,entry_client_order_id,
@@ -346,6 +347,79 @@ class FngCloseReconciliationTest {
 
     private void delete(FngStrategyService service) {
         transactions.executeWithoutResult(status -> service.delete(901, strategyId));
+    }
+
+    @Test
+    void reachingRoundLimitDisablesEntriesButKeepsManagingExistingExposure() {
+        var service = new FngStrategyService(jdbc, execution);
+        service.roundLimit(901, strategyId, 1);
+        jdbc.update("""
+                insert into fng_position(strategy_id,user_id,exchange_id,symbol,side,status,
+                    entry_client_order_id,margin,quantity,entry_price,leverage,opened_at,updated_at)
+                values(?,901,901,'ETHUSDT','LONG','OPEN','existing',100,1,100,2,utc_timestamp(),utc_timestamp())
+                """, strategyId);
+        when(gateway.markPrice("ETHUSDT")).thenReturn(d("100"));
+        report("exit", "PARTIALLY_FILLED", "0.4", "100");
+        tick();
+        assertThat(service.detail(901, strategyId).enabled()).isTrue();
+        assertThat(service.detail(901, strategyId).completedTradeRounds()).isZero();
+        execution.signal(strategyId, 901, 901, "BTCUSDT", "LONG", d("100"), 2, 7, 25, true);
+        when(gateway.markPrice("ETHUSDT")).thenReturn(d("75"));
+        report("exit", "FILLED", "1", "102");
+        tick();
+        tick();
+        assertThat(service.detail(901, strategyId).enabled()).isFalse();
+        assertThat(service.detail(901, strategyId).completedTradeRounds()).isEqualTo(1);
+        execution.signal(strategyId, 901, 901, "BTCUSDT", "LONG", d("100"), 2, 7, 25, true);
+        assertThat(jdbc.queryForObject("""
+                select count(*) from fng_position where strategy_id=? and status='PENDING_ENTRY'
+                """, Integer.class, strategyId)).isZero();
+        assertThat(jdbc.queryForObject("select status from fng_position where entry_client_order_id='existing'", String.class))
+                .isEqualTo("CLOSING");
+        verify(gateway, never()).marketOrder(any(), any(), any(), any(), any(), eq(false));
+        assertThatThrownBy(() -> service.enabled(901, strategyId, true)).isInstanceOf(BusinessException.class);
+        verify(notifications, times(1)).strategy(eq(901L), anyString(), anyString(), any());
+    }
+
+    @Test
+    void legacyDaysAreNotInterpretedAsRoundsAndRaisingTheLimitPreservesProgress() {
+        jdbc.update("update fng_strategy set max_trade_rounds=null,bureau_period=7,enabled=false where id=?", strategyId);
+        var service = new FngStrategyService(jdbc, execution);
+        assertThat(service.detail(901, strategyId).maxTradeRounds()).isNull();
+        assertThatThrownBy(() -> service.enabled(901, strategyId, true)).isInstanceOf(BusinessException.class);
+        report("exit", "FILLED", "1", "102");
+        tick();
+        service.roundLimit(901, strategyId, 3);
+        assertThat(service.detail(901, strategyId).completedTradeRounds()).isEqualTo(1);
+        assertThat(service.detail(901, strategyId).enabled()).isFalse();
+        service.enabled(901, strategyId, true);
+        assertThat(service.detail(901, strategyId).enabled()).isTrue();
+    }
+
+    @Test
+    void holdingPastOldDayLimitDoesNotTriggerAnExit() {
+        jdbc.update("""
+                update fng_position set status='OPEN',exit_client_order_id=null,close_reason=null,
+                    opened_at=utc_timestamp()-interval 30 day
+                where strategy_id=?
+                """, strategyId);
+        when(gateway.markPrice("BTCUSDT")).thenReturn(d("100"));
+        tick();
+        assertThat(field("status")).isEqualTo("OPEN");
+        verify(gateway, never()).marketOrder(any(), any(), any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    void oldTimedExitIsReconciledButDoesNotSubmitAnotherOrderOrCountAsARound() {
+        jdbc.update("update fng_position set close_reason='CYCLE' where strategy_id=?", strategyId);
+        report("exit", "EXPIRED", "0.4", "100");
+        residual("0.6", "0.1");
+        tick();
+        tick();
+        assertThat(field("status")).isEqualTo("CLOSE_REVIEW");
+        assertThat(number("exit_filled_qty")).isEqualByComparingTo("0.4");
+        assertThat(new FngStrategyService(jdbc, execution).detail(901, strategyId).completedTradeRounds()).isZero();
+        verify(gateway, never()).marketOrder(any(), any(), any(), any(), any(), anyBoolean());
     }
 
     private void report(String id, String status, String qty, String price) {

@@ -25,6 +25,12 @@ The index describes Bitcoin sentiment, not a buy/sell recommendation. It does no
 
 Futures strategies are separate from signal-only subscriptions. An unresolved entry keeps its original client order ID and is reconciled without resubmission. Open positions are checked in oldest-checked order, including when an individual lookup fails.
 
+The maximum trade rounds setting counts fully confirmed take-profit, stop-loss, and trailing-stop exits once per position, not holding days. Reaching the limit stops new entries without abandoning existing positions. Existing positions can finish and raise the count above the limit. Raising the limit does not reset the count or automatically resume the strategy.
+
+V46 preserves legacy day settings only as historical data and pauses those strategies for new entries. Existing positions continue to use the risk rules. An old timed exit already submitted is reconciled, but an unfilled remainder needs review instead of placing another timed exit order. Owners must set a round limit and resume explicitly. Historical exits are not backfilled; qualifying exits confirmed from V46 onward count toward the limit.
+
+Stop all pre-V46 F&G workers before applying V46 so they cannot run the old time-based exit rule. The entry claim (`PENDING_ENTRY` to `OPENING`) is the durable in-flight boundary: once the cap is reached, no further claims are allowed, but an already claimed order can still complete.
+
 Deleting a strategy with unresolved orders or exposure returns a conflict. A strategy with completed trades is archived rather than erased; it no longer runs or appears in the public square. Owners can list archives at `GET /api/fng-strategies/archive?page=0&size=10` and read their history through the existing detail, positions and executions endpoints. Strategies without fills or unresolved orders can be deleted.
 
 Before enabling live execution, reconcile any legacy position history against the exchange. A legacy `CLOSED` status alone does not establish that the old entry and exit quantities matched.

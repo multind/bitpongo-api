@@ -47,7 +47,7 @@ class FngStrategyControllerContractTest {
         var body = """
                 {"name":"F&G alert","exchange":"binance","exchangeId":1,"symbol":"BTCUSDT","upperLimitValue":75,
                  "upperLimitInterval":5,"lowerLimitValue":25,"lowerLimitInterval":5,"basicAmount":"100",
-                 "increaseRatio":"10","leverage":1,"bureauPeriod":7,"direction":"LONG",
+                 "increaseRatio":"10","leverage":1,"maxTradeRounds":7,"direction":"LONG",
                  "profitTargetPercent":"10","profitDrawdownPercent":"5","profitTargetType":"PERCENT",
                  "maxOrders":10,"maxPositions":5}
                 """;
@@ -58,10 +58,12 @@ class FngStrategyControllerContractTest {
 
         when(service.list(7)).thenReturn(List.of(new FngStrategyDtos.View(
                 11, "F&G alert", "binance", 1L, "BTCUSDT", 75, 5, 25, 5, "100", "10", 1, 7,
-                "LONG", "10", "5", "30", "PERCENT", 10, 5, true, Instant.parse("2026-10-25T00:00:00Z"))));
+                "LONG", "10", "5", "30", "PERCENT", 10, 5, true, 2, Instant.parse("2026-10-25T00:00:00Z"))));
         mvc.perform(get("/api/fng-strategies")).andExpect(status().isOk())
                 .andExpect(jsonPath("$.data[0].upperLimitValue").value(75))
                 .andExpect(jsonPath("$.data[0].basicAmount").value("100"))
+                .andExpect(jsonPath("$.data[0].maxTradeRounds").value(7))
+                .andExpect(jsonPath("$.data[0].completedTradeRounds").value(2))
                 .andExpect(jsonPath("$.data[0].enabled").value(true));
     }
 
@@ -72,6 +74,20 @@ class FngStrategyControllerContractTest {
         verify(service).enabled(7, 11, false);
         mvc.perform(delete("/api/fng-strategies/11")).andExpect(status().isOk());
         verify(service).delete(7, 11);
+    }
+
+    @Test void updatesRoundLimitUsingCamelCaseWithTheApplicationMapper() throws Exception {
+        mvc.perform(put("/api/fng-strategies/11/round-limit").contentType("application/json")
+                        .content("{\"maxTradeRounds\":4}"))
+                .andExpect(status().isOk());
+        verify(service).roundLimit(7, 11, 4);
+    }
+
+    @Test void rejectsFractionalRoundLimitsWithoutTruncating() throws Exception {
+        mvc.perform(put("/api/fng-strategies/11/round-limit").contentType("application/json")
+                        .content("{\"maxTradeRounds\":1.9}"))
+                .andExpect(jsonPath("$.code").value(400));
+        verifyNoInteractions(service);
     }
 
     @Test void exposesDetailAndPerformanceEndpoints() throws Exception {

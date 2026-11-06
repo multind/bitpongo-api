@@ -22,8 +22,7 @@ public final class FngStrategyDtos {
             BigDecimal basicAmount,
             BigDecimal increaseRatio,
             Integer leverage,
-            // One cycle = entry -> take-profit exit. bureauPeriod is the maximum cycle length in days.
-            Integer bureauPeriod,
+            BigDecimal maxTradeRounds,
             String direction,
             // Exit when unrealized profit reaches this percentage.
             BigDecimal profitTargetPercent,
@@ -51,8 +50,7 @@ public final class FngStrategyDtos {
             String basicAmount,
             String increaseRatio,
             int leverage,
-            // Maximum days for one cycle, counted from entry until the take-profit exit.
-            int bureauPeriod,
+            Integer maxTradeRounds,
             String direction,
             String profitTargetPercent,
             String profitDrawdownPercent,
@@ -61,6 +59,7 @@ public final class FngStrategyDtos {
             int maxOrders,
             int maxPositions,
             boolean enabled,
+            long completedTradeRounds,
             Instant createdAt) {}
 
     @JsonNaming(PropertyNamingStrategies.LowerCamelCaseStrategy.class)

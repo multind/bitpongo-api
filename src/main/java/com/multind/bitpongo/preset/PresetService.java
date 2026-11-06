@@ -175,7 +175,7 @@ public class PresetService {
         jdbc.query("""
                 select f.id,f.name,f.symbol,f.exchange,f.upper_limit_value,f.upper_limit_interval,
                        f.lower_limit_value,f.lower_limit_interval,f.basic_amount,f.increase_ratio,
-                       f.leverage,f.bureau_period,f.direction,f.profit_target_percent,
+                       f.leverage,f.max_trade_rounds,f.direction,f.profit_target_percent,
                        f.profit_drawdown_percent,f.stop_loss_percent,f.profit_target_type,f.max_orders,f.max_positions,
                        f.created_at,u.name as user_name,u.email as user_email,ua.image as author_avatar
                 from fng_strategy f
@@ -205,7 +205,7 @@ public class PresetService {
             params.put("basicAmount", decimal(rs.getObject("basic_amount")));
             params.put("increaseRatio", decimal(rs.getObject("increase_ratio")));
             params.put("leverage", rs.getInt("leverage"));
-            params.put("bureauPeriod", rs.getInt("bureau_period"));
+            params.put("maxTradeRounds", rs.getObject("max_trade_rounds", Integer.class));
             params.put("direction", rs.getString("direction"));
             params.put("profitTargetPercent", decimal(rs.getObject("profit_target_percent")));
             params.put("profitDrawdownPercent", decimal(rs.getObject("profit_drawdown_percent")));

@@ -19,10 +19,7 @@ import org.springframework.transaction.annotation.Transactional;
 public class FngStrategyService {
     private static final Set<String> DIRECTIONS = Set.of("LONG", "SHORT");
     private static final Set<String> TARGET_TYPES = Set.of("PERCENT", "USDT");
-    // A cycle starts when a position is opened and ends at the take-profit exit.
-    // bureauPeriod is the maximum number of days allowed for that cycle.
-    private static final int CYCLE_MIN_DAYS = 1;
-    private static final int CYCLE_MAX_DAYS = 25;
+    private static final int MAX_TRADE_ROUNDS = 10_000;
     // Matches the strategy plaza rule "contract leverage <= 20".
     static final int MAX_LEVERAGE = 20;
 
@@ -43,14 +40,14 @@ public class FngStrategyService {
         jdbc.update(connection -> {
             PreparedStatement statement = connection.prepareStatement("""
                     insert into fng_strategy(user_id,name,exchange,exchange_id,symbol,upper_limit_value,upper_limit_interval,
-                        lower_limit_value,lower_limit_interval,basic_amount,increase_ratio,leverage,bureau_period,
+                        lower_limit_value,lower_limit_interval,basic_amount,increase_ratio,leverage,max_trade_rounds,
                         direction,profit_target_percent,profit_drawdown_percent,stop_loss_percent,profit_target_type,
                         max_orders,max_positions,enabled,valid_from,created_at,updated_at)
                     values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,true,?,?,?)
                     """, java.sql.Statement.RETURN_GENERATED_KEYS);
             Object[] values = { userId, value.name(), value.exchange(), value.exchangeId(), value.symbol(), value.upperValue(),
                     value.upperInterval(), value.lowerValue(), value.lowerInterval(), value.basicAmount(),
-                    value.increaseRatio(), value.leverage(), value.bureauPeriod(), value.direction(),
+                    value.increaseRatio(), value.leverage(), value.maxTradeRounds(), value.direction(),
                     value.profitTargetPercent(), value.profitDrawdownPercent(), value.stopLossPercent(),
                     value.profitTargetType(), value.maxOrders(), value.maxPositions(),
                     PriceAlertService.utc(now), PriceAlertService.utc(now), PriceAlertService.utc(now) };
@@ -105,15 +102,16 @@ public class FngStrategyService {
         Instant now = Instant.now();
         int updated = jdbc.update("""
                 update fng_strategy set name=?,exchange=?,exchange_id=?,symbol=?,upper_limit_value=?,upper_limit_interval=?,
-                    lower_limit_value=?,lower_limit_interval=?,basic_amount=?,increase_ratio=?,leverage=?,bureau_period=?,
+                    lower_limit_value=?,lower_limit_interval=?,basic_amount=?,increase_ratio=?,leverage=?,max_trade_rounds=?,
                     direction=?,profit_target_percent=?,profit_drawdown_percent=?,stop_loss_percent=?,profit_target_type=?,
-                    max_orders=?,max_positions=?,valid_from=?,last_observed_at=null,last_zone=null,updated_at=?
+                    max_orders=?,max_positions=?,enabled=enabled and completed_trade_rounds<?,
+                    valid_from=?,last_observed_at=null,last_zone=null,updated_at=?
                 where user_id=? and id=? and archived_at is null
                 """, value.name(), value.exchange(), value.exchangeId(), value.symbol(), value.upperValue(), value.upperInterval(),
                 value.lowerValue(), value.lowerInterval(), value.basicAmount(), value.increaseRatio(), value.leverage(),
-                value.bureauPeriod(), value.direction(), value.profitTargetPercent(),
+                value.maxTradeRounds(), value.direction(), value.profitTargetPercent(),
                 value.profitDrawdownPercent(), value.stopLossPercent(), value.profitTargetType(),
-                value.maxOrders(), value.maxPositions(),
+                value.maxOrders(), value.maxPositions(), value.maxTradeRounds(),
                 PriceAlertService.utc(now), PriceAlertService.utc(now), userId, id);
         if (updated == 0) throw new BusinessException(404, "F&G 策略不存在");
     }
@@ -121,12 +119,36 @@ public class FngStrategyService {
     @Transactional
     public void enabled(long userId, long id, boolean enabled) {
         activeUser(userId);
+        if (enabled) {
+            var limits = jdbc.queryForList("""
+                    select max_trade_rounds,completed_trade_rounds from fng_strategy
+                    where user_id=? and id=? and archived_at is null for update
+                    """, userId, id);
+            if (limits.isEmpty()) throw new BusinessException(404, "F&G 策略不存在");
+            var limitsRow = limits.getFirst();
+            if (!(limitsRow.get("max_trade_rounds") instanceof Number maximum)
+                    || ((Number) limitsRow.get("completed_trade_rounds")).longValue() >= maximum.longValue()) {
+                throw new BusinessException(409, "请先设置高于已完成轮数的交易轮数上限");
+            }
+        }
         Instant now = Instant.now();
         int updated = jdbc.update("""
                 update fng_strategy set enabled=?,valid_from=?,last_observed_at=null,last_zone=null,updated_at=?
                 where user_id=? and id=? and archived_at is null
                 """, enabled, PriceAlertService.utc(now), PriceAlertService.utc(now), userId, id);
         if (updated == 0) throw new BusinessException(404, "F&G 策略不存在");
+    }
+
+    @Transactional
+    public void roundLimit(long userId, long id, Integer requested) {
+        activeUser(userId);
+        int limit = range(requested, 1, MAX_TRADE_ROUNDS, "最多交易轮数");
+        if (jdbc.update("""
+                update fng_strategy set max_trade_rounds=?,enabled=enabled and completed_trade_rounds<?,updated_at=?
+                where user_id=? and id=? and archived_at is null
+                """, limit, limit, PriceAlertService.utc(Instant.now()), userId, id) == 0) {
+            throw new BusinessException(404, "F&G 策略不存在");
+        }
     }
 
     @Transactional
@@ -161,7 +183,7 @@ public class FngStrategyService {
     public List<Active> activeStrategies() {
         return jdbc.query("""
                 select s.id,s.user_id from fng_strategy s join user u on u.id=s.user_id
-                where s.enabled=true and s.archived_at is null and u.status='active'
+                where s.enabled=true and s.archived_at is null and s.completed_trade_rounds<s.max_trade_rounds and u.status='active'
                 """, (rs, index) -> new Active(rs.getLong("id"), rs.getLong("user_id")));
     }
 
@@ -172,7 +194,10 @@ public class FngStrategyService {
                 || point.observedAt().isAfter(Instant.now().plusSeconds(300))) return;
         if (jdbc.queryForList("select id from user where id=? and status='active' for update", userId).isEmpty()) return;
         List<java.util.Map<String, Object>> rows = jdbc.queryForList(
-                "select * from fng_strategy where id=? and user_id=? and enabled=true and archived_at is null for update",
+                """
+                select * from fng_strategy where id=? and user_id=? and enabled=true and archived_at is null
+                    and completed_trade_rounds<max_trade_rounds for update
+                """,
                 id, userId);
         if (rows.isEmpty()) return;
         var row = rows.getFirst();
@@ -229,7 +254,7 @@ public class FngStrategyService {
                 decimal(rs.getBigDecimal("basic_amount")),
                 decimal(rs.getBigDecimal("increase_ratio")),
                 rs.getInt("leverage"),
-                rs.getInt("bureau_period"),
+                rs.getObject("max_trade_rounds", Integer.class),
                 rs.getString("direction"),
                 decimal(rs.getBigDecimal("profit_target_percent")),
                 decimal(rs.getBigDecimal("profit_drawdown_percent")),
@@ -238,6 +263,7 @@ public class FngStrategyService {
                 rs.getInt("max_orders"),
                 rs.getInt("max_positions"),
                 rs.getBoolean("enabled"),
+                rs.getLong("completed_trade_rounds"),
                 PriceAlertService.instant(rs.getObject("created_at")));
     }
 
@@ -257,8 +283,7 @@ public class FngStrategyService {
         BigDecimal increaseRatio = decimal(request.increaseRatio(), "加仓比例", true);
         if (increaseRatio.signum() < 0) throw invalid("加仓比例无效");
         int leverage = range(request.leverage(), 1, MAX_LEVERAGE, "杠杆倍数");
-        // One cycle = entry -> take-profit exit; this is the maximum cycle length in days.
-        int bureauPeriod = range(request.bureauPeriod(), CYCLE_MIN_DAYS, CYCLE_MAX_DAYS, "交易周期");
+        int maxTradeRounds = parseRoundLimit(request.maxTradeRounds());
         String direction = choice(request.direction(), DIRECTIONS, "策略方向");
         // Take profit when unrealized profit reaches this percentage.
         BigDecimal profitTarget = decimal(request.profitTargetPercent(), "止盈比例", false);
@@ -274,13 +299,13 @@ public class FngStrategyService {
         int maxOrders = range(request.maxOrders(), 1, 10000, "最大订单数");
         int maxPositions = range(request.maxPositions(), 1, 10000, "最大持仓数");
         return new Validated(name, exchange, exchangeId, symbol, upperValue, upperInterval, lowerValue, lowerInterval,
-                basicAmount, increaseRatio, leverage, bureauPeriod, direction,
+                basicAmount, increaseRatio, leverage, maxTradeRounds, direction,
                 profitTarget, profitDrawdown, stopLoss, targetType, maxOrders, maxPositions);
     }
 
     private record Validated(String name, String exchange, long exchangeId, String symbol, int upperValue, int upperInterval,
             int lowerValue, int lowerInterval, BigDecimal basicAmount, BigDecimal increaseRatio, int leverage,
-            int bureauPeriod, String direction, BigDecimal profitTargetPercent,
+            int maxTradeRounds, String direction, BigDecimal profitTargetPercent,
             BigDecimal profitDrawdownPercent, BigDecimal stopLossPercent, String profitTargetType,
             int maxOrders, int maxPositions) {}
 
@@ -304,6 +329,15 @@ public class FngStrategyService {
         String trimmed = value.trim();
         if (trimmed.length() > max) throw invalid(field + "过长");
         return trimmed;
+    }
+
+    static int parseRoundLimit(BigDecimal value) {
+        if (value == null) throw invalid("请设置最多交易轮数");
+        try {
+            return range(value.intValueExact(), 1, MAX_TRADE_ROUNDS, "最多交易轮数");
+        } catch (ArithmeticException exception) {
+            throw invalid("最多交易轮数必须为 1–10000 的整数");
+        }
     }
 
     private static int range(Integer value, int min, int max, String field) {

@@ -10,25 +10,27 @@ import com.multind.bitpongo.exchange.ReduceOnlyOrderRejectedException;
 import com.multind.bitpongo.notification.AlertNotificationBridge;
 import java.math.BigDecimal;
 import java.math.RoundingMode;
-import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
+import java.util.function.IntSupplier;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 
 /**
  * Testnet-first USDT-M futures execution for F&amp;G strategies.
  *
  * <p>A signal is persisted as PENDING_ENTRY before any exchange call. The worker then opens a
- * market position, monitors profit against the stop-loss/target/drawdown/cycle rules, and closes it with a
+ * market position, monitors profit against the stop-loss/target/drawdown rules, and closes it with a
  * reduce-only market order. Notifications are sent only after an entry or exit is filled.</p>
  */
 @Service
@@ -42,7 +44,7 @@ public class FngExecutionService {
                    p.peak_profit_percent,p.close_reason,p.opened_at,p.updated_at,
                    p.exit_filled_qty,p.exit_filled_quote,p.exit_order_filled_qty,p.exit_order_filled_quote,
                    s.name strategy_name,s.enabled,s.direction,s.profit_target_percent,
-                   s.profit_drawdown_percent,s.stop_loss_percent,s.profit_target_type,s.bureau_period,s.max_orders,s.max_positions
+                   s.profit_drawdown_percent,s.stop_loss_percent,s.profit_target_type,s.max_orders,s.max_positions
             from fng_position p
             join fng_strategy s on s.id=p.strategy_id
             """;
@@ -51,6 +53,7 @@ public class FngExecutionService {
     private final ExchangeRepository exchanges;
     private final FuturesGatewayRegistry gateways;
     private final AlertNotificationBridge notifications;
+    private final TransactionTemplate transactions;
     private final boolean enabled;
 
     public FngExecutionService(
@@ -58,18 +61,20 @@ public class FngExecutionService {
             ExchangeRepository exchanges,
             FuturesGatewayRegistry gateways,
             AlertNotificationBridge notifications,
+            PlatformTransactionManager transactionManager,
             @Value("${zhitoubao.fng.execution-enabled:false}") boolean enabled) {
         this.jdbc = jdbc;
         this.exchanges = exchanges;
         this.gateways = gateways;
         this.notifications = notifications;
+        this.transactions = new TransactionTemplate(transactionManager);
         this.enabled = enabled;
     }
 
     public void process() {
         if (!enabled) return;
-        List<Runnable> steps = List.of(this::retryCloseRemainders, this::openPending, this::reconcileOpening,
-                this::monitorOpen, this::reconcileClosing);
+        List<Runnable> steps = List.of(this::reconcileClosing, this::retryCloseRemainders, this::openPending,
+                this::reconcileOpening, this::monitorOpen);
         for (Runnable step : steps) {
             try {
                 step.run();
@@ -95,9 +100,11 @@ public class FngExecutionService {
         jdbc.update("""
                 insert into fng_position(strategy_id,user_id,exchange_id,symbol,side,status,entry_client_order_id,
                     margin,quantity,leverage,peak_profit_percent,opened_at,updated_at)
-                values(?,?,?,?,?,?,?,?,?,?,?,?,?)
+                select ?,?,?,?,?,?,?,?,?,?,?,?,?
+                from fng_strategy where id=? and user_id=? and enabled=true and archived_at is null
+                    and completed_trade_rounds<max_trade_rounds
                 """, strategyId, userId, exchangeId, symbol, side, "PENDING_ENTRY", clientOrderId,
-                margin, BigDecimal.ZERO, leverage, BigDecimal.ZERO, now, now);
+                margin, BigDecimal.ZERO, leverage, BigDecimal.ZERO, now, now, strategyId, userId);
     }
 
     private void openPending() {
@@ -122,10 +129,20 @@ public class FngExecutionService {
                 }
                 BigDecimal quantity = quantity(row.margin(), row.leverage(), mark, rules);
                 gateway.setLeverage(context.credentials(), row.symbol(), row.leverage());
-                int claimed = jdbc.update("""
-                        update fng_position set status='OPENING',quantity=?,last_error=null,updated_at=?
-                        where id=? and status='PENDING_ENTRY'
-                        """, quantity, now(), row.id());
+                int claimed = transactions.execute(ignored -> {
+                    // Same lock order as final close and deletion: strategy first, then position.
+                    if (jdbc.queryForList("""
+                            select id from fng_strategy where id=? and enabled=true and archived_at is null
+                                and completed_trade_rounds<max_trade_rounds for update
+                            """, Long.class, row.strategyId()).isEmpty()) {
+                        entryFailed(row, "PENDING_ENTRY", "STRATEGY_DISABLED");
+                        return 0;
+                    }
+                    return jdbc.update("""
+                            update fng_position set status='OPENING',quantity=?,last_error=null,updated_at=?
+                            where id=? and status='PENDING_ENTRY'
+                            """, quantity, now(), row.id());
+                });
                 if (claimed == 0) continue;
                 submitted = true;
                 String side = "LONG".equals(row.side()) ? "BUY" : "SELL";
@@ -200,9 +217,6 @@ public class FngExecutionService {
                     row.drawdown().divide(HUNDRED, 8, RoundingMode.HALF_UP)));
             if (pnlPercent.compareTo(floor) <= 0) return "DRAWDOWN";
         }
-        if (row.cycleDays() > 0 && !Instant.now().isBefore(row.openedAt().plus(Duration.ofDays(row.cycleDays())))) {
-            return "CYCLE";
-        }
         return null;
     }
 
@@ -235,6 +249,11 @@ public class FngExecutionService {
     private void retryCloseRemainders() {
         for (Row row : rowsWhere("CLOSE_PENDING", "p.updated_at<=?", now().minusSeconds(2), 20)) {
             try {
+                if ("CYCLE".equals(row.closeReason())) {
+                    updateCloseStatus(row.id(), "CLOSE_PENDING", row.exitClientOrderId(),
+                            "CLOSE_REVIEW", "LEGACY_TIMED_EXIT_REMAINDER");
+                    continue;
+                }
                 ExchangeContext context = context(row);
                 BigDecimal remaining = row.quantity().subtract(row.exitFilledQty());
                 // Re-query the prior terminal order with the exact credentials used for the retry.
@@ -362,6 +381,9 @@ public class FngExecutionService {
                 status = "CLOSED";
                 exitPrice = quote.divide(qty, 18, RoundingMode.HALF_UP);
                 closedAt = now();
+            } else if (executed.signum() > 0 && canRetryRemainder(order.status()) && "CYCLE".equals(row.closeReason())) {
+                status = "CLOSE_REVIEW";
+                error = "LEGACY_TIMED_EXIT_REMAINDER";
             } else if (executed.signum() > 0 && canRetryRemainder(order.status())) {
                 status = "CLOSE_PENDING";
             } else {
@@ -369,14 +391,41 @@ public class FngExecutionService {
                 error = executed.signum() == 0 ? "CLOSE_ORDER_NO_FILL" : "CLOSE_FILL_UNVERIFIED";
             }
         }
-        int updated = jdbc.update("""
+        String nextStatus = status;
+        String failure = error;
+        BigDecimal finalPrice = exitPrice;
+        LocalDateTime finishedAt = closedAt;
+        IntSupplier persistExit = () -> jdbc.update("""
                 update fng_position set status=?,exit_price=?,closed_at=?,last_error=?,updated_at=?,
                     exit_filled_qty=?,exit_filled_quote=?,exit_order_filled_qty=?,exit_order_filled_quote=?
                 where id=? and status='CLOSING' and exit_client_order_id=?
                     and exit_order_filled_qty=? and exit_order_filled_quote=?
-                """, status, exitPrice, closedAt, error, now(), qty, quote, executed, orderQuote,
+                """, nextStatus, finalPrice, finishedAt, failure, now(), qty, quote, executed, orderQuote,
                 row.id(), row.exitClientOrderId(), row.exitOrderFilledQty(), row.exitOrderFilledQuote());
+        int updated;
+        if (closedAt != null && countsAsRound(row.closeReason())) {
+            updated = transactions.execute(ignored -> {
+                if (jdbc.queryForList("select id from fng_strategy where id=? for update",
+                        Long.class, row.strategyId()).isEmpty()) return 0;
+                int changed = persistExit.getAsInt();
+                if (changed > 0) {
+                    jdbc.update("""
+                            update fng_strategy set
+                                enabled=enabled and coalesce(completed_trade_rounds+1<max_trade_rounds,false),
+                                completed_trade_rounds=completed_trade_rounds+1,updated_at=?
+                            where id=?
+                            """, now(), row.strategyId());
+                }
+                return changed;
+            });
+        } else {
+            updated = persistExit.getAsInt();
+        }
         if (updated > 0 && closedAt != null) notifyExit(row, exitPrice, row.closeReason());
+    }
+
+    private static boolean countsAsRound(String reason) {
+        return "TARGET".equals(reason) || "STOP_LOSS".equals(reason) || "DRAWDOWN".equals(reason);
     }
 
     private static BigDecimal cumulativeQuote(FuturesGateway.Order order) {
@@ -452,7 +501,7 @@ public class FngExecutionService {
                 rs.getString("strategy_name"), rs.getBoolean("enabled"), rs.getString("direction"),
                 rs.getBigDecimal("profit_target_percent"), rs.getBigDecimal("profit_drawdown_percent"),
                 rs.getBigDecimal("stop_loss_percent"),
-                rs.getString("profit_target_type"), rs.getInt("bureau_period"), rs.getInt("max_orders"),
+                rs.getString("profit_target_type"), rs.getInt("max_orders"),
                 rs.getInt("max_positions"), rs.getBigDecimal("entry_observed_qty"), rs.getBigDecimal("exit_filled_qty"),
                 rs.getBigDecimal("exit_filled_quote"), rs.getBigDecimal("exit_order_filled_qty"),
                 rs.getBigDecimal("exit_order_filled_quote"));
@@ -529,7 +578,7 @@ public class FngExecutionService {
             String status, String entryClientOrderId, String exitClientOrderId, BigDecimal margin,
             BigDecimal quantity, BigDecimal entryPrice, int leverage, BigDecimal peak, String closeReason,
             Instant openedAt, Instant updatedAt, String strategyName, boolean enabled, String direction,
-            BigDecimal target, BigDecimal drawdown, BigDecimal stopLoss, String targetType, int cycleDays, int maxOrders,
+            BigDecimal target, BigDecimal drawdown, BigDecimal stopLoss, String targetType, int maxOrders,
             int maxPositions, BigDecimal entryObservedQty, BigDecimal exitFilledQty, BigDecimal exitFilledQuote,
             BigDecimal exitOrderFilledQty, BigDecimal exitOrderFilledQuote) {}
 }
