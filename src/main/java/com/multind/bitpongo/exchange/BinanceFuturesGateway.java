@@ -70,6 +70,14 @@ public class BinanceFuturesGateway implements FuturesGateway {
         try {
             return client.marketOrder(credentials, normalizeSymbol(symbol), side, quantity, clientOrderId, reduceOnly);
         } catch (BinanceClientException exception) {
+            if (reduceOnly && !exception.timeout()
+                    && (exception.httpStatus() == 400 || exception.httpStatus() == 401 || exception.httpStatus() == 403)
+                    && switch (exception.errorCode()) {
+                        case -1111, -1121, -2014, -2015, -2022, -2024, -4004, -4005, -4023, -4061, -4118, -4164 -> true;
+                        default -> false;
+                    }) {
+                throw new ReduceOnlyOrderRejectedException(exception.errorCode());
+            }
             throw map(exception, true);
         }
     }

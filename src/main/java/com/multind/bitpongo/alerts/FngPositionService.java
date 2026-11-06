@@ -19,7 +19,7 @@ public class FngPositionService {
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private static final String POSITION_SELECT = """
             select id,symbol,side,status,quantity,margin,entry_price,exit_price,leverage,
-                   close_reason,opened_at,closed_at,updated_at,last_error
+                   close_reason,opened_at,closed_at,updated_at,last_error,exit_filled_qty
             from fng_position where strategy_id=? and user_id=?
             """;
 
@@ -110,7 +110,9 @@ public class FngPositionService {
         String pnlPercent = pnl == null || row.margin().signum() == 0 ? null
                 : plain(pnl.multiply(HUNDRED).divide(row.margin(), 8, RoundingMode.HALF_UP));
         return new FngStrategyDtos.Position(row.id(), row.symbol(), row.side(), row.status(),
-                plain(row.quantity()), plain(row.margin()), plain(row.entryPrice()), plain(row.exitPrice()),
+                plain(row.quantity()), row.status().equals("CLOSING") || row.status().startsWith("CLOSE_")
+                        ? plain(row.quantity().subtract(rs.getBigDecimal("exit_filled_qty"))) : null,
+                plain(row.margin()), plain(row.entryPrice()), plain(row.exitPrice()),
                 plain(pnl), pnlPercent, row.leverage(), row.closeReason(),
                 row.openedAt(), row.closedAt());
     }
@@ -134,7 +136,8 @@ public class FngPositionService {
 
     private static boolean isOpen(String status) {
         return "PENDING_ENTRY".equals(status) || "OPENING".equals(status)
-                || "OPEN".equals(status) || "CLOSING".equals(status);
+                || "OPEN".equals(status) || "CLOSING".equals(status)
+                || "CLOSE_PENDING".equals(status) || "CLOSE_REVIEW".equals(status);
     }
 
     private void owned(long userId, long strategyId) {

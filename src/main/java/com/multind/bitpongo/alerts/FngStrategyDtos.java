@@ -70,6 +70,7 @@ public final class FngStrategyDtos {
             String side,
             String status,
             String quantity,
+            String remainingQuantity,
             String margin,
             String entryPrice,
             String exitPrice,

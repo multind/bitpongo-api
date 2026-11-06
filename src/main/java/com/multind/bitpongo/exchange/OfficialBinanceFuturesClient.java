@@ -66,7 +66,7 @@ public class OfficialBinanceFuturesClient implements BinanceFuturesClient {
                 String type = filter.getFilterType();
                 if ("MIN_NOTIONAL".equalsIgnoreCase(type)) {
                     minNotional = decimal(filter.getNotional());
-                } else if ("LOT_SIZE".equalsIgnoreCase(type)) {
+                } else if ("MARKET_LOT_SIZE".equalsIgnoreCase(type)) {
                     stepSize = decimal(filter.getStepSize());
                     minQty = decimal(filter.getMinQty());
                     maxQty = decimal(filter.getMaxQty());
@@ -147,7 +147,8 @@ public class OfficialBinanceFuturesClient implements BinanceFuturesClient {
             QueryOrderResponse response = authenticatedApi(credentials)
                     .queryOrder(symbol, null, clientOrderId, null).getData();
             return Optional.of(new FuturesGateway.Order(response.getClientOrderId(), response.getOrderId(),
-                    response.getStatus(), decimal(response.getExecutedQty()), decimal(response.getAvgPrice())));
+                    response.getStatus(), decimal(response.getExecutedQty()), decimal(response.getAvgPrice()),
+                    response.getCumQuote() == null ? null : decimal(response.getCumQuote())));
         } catch (ApiException exception) {
             BinanceClientException translated = translate(exception);
             if (translated.errorCode() == -2013 || translated.httpStatus() == 404) return Optional.empty();

@@ -38,7 +38,12 @@ public interface FuturesGateway {
             int pricePrecision,
             int quantityPrecision) {}
 
-    record Order(String clientOrderId, long orderId, String status, BigDecimal executedQty, BigDecimal avgPrice) {}
+    record Order(String clientOrderId, long orderId, String status, BigDecimal executedQty, BigDecimal avgPrice,
+            BigDecimal cumulativeQuote) {
+        public Order(String clientOrderId, long orderId, String status, BigDecimal executedQty, BigDecimal avgPrice) {
+            this(clientOrderId, orderId, status, executedQty, avgPrice, null);
+        }
+    }
 
     record Position(String symbol, BigDecimal amount, BigDecimal entryPrice, BigDecimal markPrice,
             BigDecimal unrealizedProfit) {}
