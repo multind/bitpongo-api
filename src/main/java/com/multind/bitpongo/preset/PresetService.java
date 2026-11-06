@@ -183,7 +183,7 @@ public class PresetService {
                 left join user_avatar ua on ua.user_id=u.id
                 left join strategy_visibility v on v.strategy_type='FNG' and v.strategy_id=f.id
                 left join strategy_mark m on m.strategy_type='FNG' and m.strategy_id=f.id
-                where f.enabled=true and u.status='active'
+                where f.enabled=true and f.archived_at is null and u.status='active'
                   and coalesce(v.is_public,m.official,false)=true
                 order by f.id desc
                 """, rs -> {
@@ -243,6 +243,11 @@ public class PresetService {
     public PresetDtos.Visibility updateVisibility(long userId, String type, long strategyId, boolean visible) {
         String normalized = visibilityType(type);
         requireOwner(userId, normalized, strategyId);
+        if ("FNG".equals(normalized) && jdbc.queryForList("""
+                select id from fng_strategy where id=? and user_id=? and archived_at is null for update
+                """, Long.class, strategyId, userId).isEmpty()) {
+            throw new BusinessException(409, "已归档的策略不能修改展示设置");
+        }
         jdbc.update("""
                 insert into strategy_visibility(strategy_type,strategy_id,user_id,is_public,updated_at)
                 values(?,?,?,?,?)
@@ -352,7 +357,7 @@ public class PresetService {
                     select count(*) from fng_strategy f join user u on u.id=f.user_id
                     left join strategy_visibility v on v.strategy_type='FNG' and v.strategy_id=f.id
                     left join strategy_mark m on m.strategy_type='FNG' and m.strategy_id=f.id
-                    where f.id=? and f.enabled=true and u.status='active'
+                    where f.id=? and f.enabled=true and f.archived_at is null and u.status='active'
                       and coalesce(v.is_public,m.official,false)=true
                     """, Integer.class, id);
             if (count == null || count == 0) throw new BusinessException(404, "策略不存在");

@@ -70,18 +70,31 @@ public class FngStrategyService {
     @Transactional(readOnly = true)
     public List<FngStrategyDtos.View> list(long userId) {
         activeUser(userId);
-        return jdbc.query("select * from fng_strategy where user_id=? order by id desc", FngStrategyService::view, userId);
+        return jdbc.query("select * from fng_strategy where user_id=? and archived_at is null order by id desc",
+                FngStrategyService::view, userId);
     }
     @tools.jackson.databind.annotation.JsonNaming(tools.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record StrategyPage(List<FngStrategyDtos.View> items, int page, int size, long total, long activeTotal, boolean hasMore) {}
     @Transactional(readOnly = true)
     public StrategyPage page(long userId, int page, int size) {
+        return page(userId, page, size, false);
+    }
+
+    @Transactional(readOnly = true)
+    public StrategyPage archive(long userId, int page, int size) {
+        return page(userId, page, size, true);
+    }
+
+    private StrategyPage page(long userId, int page, int size, boolean archived) {
         activeUser(userId);
-        if(page<0 || size<1 || size>50) throw new com.multind.bitpongo.common.api.BusinessException(400,"分页参数无效");
-        long total=jdbc.queryForObject("select count(*) from fng_strategy where user_id=?",Long.class,userId);
-        long active=jdbc.queryForObject("select count(*) from fng_strategy where user_id=? and enabled=true",Long.class,userId);
-        var items=jdbc.query("select * from fng_strategy where user_id=? order by id desc limit ? offset ?",FngStrategyService::view,userId,size,(long)page*size);
-        return new StrategyPage(items,page,size,total,active,((long)page+1)*size<total);
+        if (page < 0 || size < 1 || size > 50) throw new BusinessException(400, "分页参数无效");
+        String scope = " from fng_strategy where user_id=? and archived_at is " + (archived ? "not null" : "null");
+        long total = jdbc.queryForObject("select count(*)" + scope, Long.class, userId);
+        long active = archived ? 0 : jdbc.queryForObject("select count(*)" + scope + " and enabled=true",
+                Long.class, userId);
+        var items = jdbc.query("select *" + scope + " order by id desc limit ? offset ?",
+                FngStrategyService::view, userId, size, (long) page * size);
+        return new StrategyPage(items, page, size, total, active, ((long) page + 1) * size < total);
     }
 
     @Transactional
@@ -95,7 +108,7 @@ public class FngStrategyService {
                     lower_limit_value=?,lower_limit_interval=?,basic_amount=?,increase_ratio=?,leverage=?,bureau_period=?,
                     direction=?,profit_target_percent=?,profit_drawdown_percent=?,stop_loss_percent=?,profit_target_type=?,
                     max_orders=?,max_positions=?,valid_from=?,last_observed_at=null,last_zone=null,updated_at=?
-                where user_id=? and id=?
+                where user_id=? and id=? and archived_at is null
                 """, value.name(), value.exchange(), value.exchangeId(), value.symbol(), value.upperValue(), value.upperInterval(),
                 value.lowerValue(), value.lowerInterval(), value.basicAmount(), value.increaseRatio(), value.leverage(),
                 value.bureauPeriod(), value.direction(), value.profitTargetPercent(),
@@ -111,7 +124,7 @@ public class FngStrategyService {
         Instant now = Instant.now();
         int updated = jdbc.update("""
                 update fng_strategy set enabled=?,valid_from=?,last_observed_at=null,last_zone=null,updated_at=?
-                where user_id=? and id=?
+                where user_id=? and id=? and archived_at is null
                 """, enabled, PriceAlertService.utc(now), PriceAlertService.utc(now), userId, id);
         if (updated == 0) throw new BusinessException(404, "F&G 策略不存在");
     }
@@ -119,15 +132,36 @@ public class FngStrategyService {
     @Transactional
     public void delete(long userId, long id) {
         activeUser(userId);
-        if (jdbc.update("delete from fng_strategy where user_id=? and id=?", userId, id) == 0) {
+        // The sampler locks this parent row before it can enqueue a new position.
+        if (jdbc.queryForList("select id from fng_strategy where user_id=? and id=? for update", Long.class, userId, id)
+                .isEmpty()) {
             throw new BusinessException(404, "F&G 策略不存在");
+        }
+        if (!jdbc.queryForList("""
+                select id from fng_position where strategy_id=? and (
+                    status not in ('CLOSED','FAILED')
+                    or (status='FAILED' and (quantity>0 or entry_price is not null))
+                ) limit 1 for update
+                """, Long.class, id).isEmpty()) {
+            throw new BusinessException(409, "策略仍有未结束或待核对的仓位，暂不能删除");
+        }
+        if (!jdbc.queryForList("""
+                select id from fng_position where strategy_id=? and status='CLOSED' limit 1 for update
+                """, Long.class, id).isEmpty()) {
+            var now = PriceAlertService.utc(Instant.now());
+            jdbc.update("""
+                    update fng_strategy set archived_at=?,enabled=false,updated_at=?
+                    where user_id=? and id=? and archived_at is null
+                    """, now, now, userId, id);
+        } else {
+            jdbc.update("delete from fng_strategy where user_id=? and id=?", userId, id);
         }
     }
 
     public List<Active> activeStrategies() {
         return jdbc.query("""
                 select s.id,s.user_id from fng_strategy s join user u on u.id=s.user_id
-                where s.enabled=true and u.status='active'
+                where s.enabled=true and s.archived_at is null and u.status='active'
                 """, (rs, index) -> new Active(rs.getLong("id"), rs.getLong("user_id")));
     }
 
@@ -138,7 +172,8 @@ public class FngStrategyService {
                 || point.observedAt().isAfter(Instant.now().plusSeconds(300))) return;
         if (jdbc.queryForList("select id from user where id=? and status='active' for update", userId).isEmpty()) return;
         List<java.util.Map<String, Object>> rows = jdbc.queryForList(
-                "select * from fng_strategy where id=? and user_id=? and enabled=true for update", id, userId);
+                "select * from fng_strategy where id=? and user_id=? and enabled=true and archived_at is null for update",
+                id, userId);
         if (rows.isEmpty()) return;
         var row = rows.getFirst();
         Instant validFrom = PriceAlertService.instant(row.get("valid_from"));

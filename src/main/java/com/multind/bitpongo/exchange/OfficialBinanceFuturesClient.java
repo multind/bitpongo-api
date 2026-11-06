@@ -147,7 +147,7 @@ public class OfficialBinanceFuturesClient implements BinanceFuturesClient {
             QueryOrderResponse response = authenticatedApi(credentials)
                     .queryOrder(symbol, null, clientOrderId, null).getData();
             return Optional.of(new FuturesGateway.Order(response.getClientOrderId(), response.getOrderId(),
-                    response.getStatus(), decimal(response.getExecutedQty()), decimal(response.getAvgPrice()),
+                    response.getStatus(), nullableDecimal(response.getExecutedQty()), decimal(response.getAvgPrice()),
                     response.getCumQuote() == null ? null : decimal(response.getCumQuote())));
         } catch (ApiException exception) {
             BinanceClientException translated = translate(exception);
@@ -222,5 +222,9 @@ public class OfficialBinanceFuturesClient implements BinanceFuturesClient {
 
     private static BigDecimal decimal(String value) {
         return value == null || value.isBlank() ? BigDecimal.ZERO : new BigDecimal(value);
+    }
+
+    private static BigDecimal nullableDecimal(String value) {
+        return value == null || value.isBlank() ? null : new BigDecimal(value);
     }
 }

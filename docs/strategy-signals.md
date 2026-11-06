@@ -21,6 +21,14 @@ Processing locks the user and subscription, records the event and enqueues notif
 
 The index describes Bitcoin sentiment, not a buy/sell recommendation. It does not represent sentiment for every cryptocurrency.
 
+## F&G futures execution
+
+Futures strategies are separate from signal-only subscriptions. An unresolved entry keeps its original client order ID and is reconciled without resubmission. Open positions are checked in oldest-checked order, including when an individual lookup fails.
+
+Deleting a strategy with unresolved orders or exposure returns a conflict. A strategy with completed trades is archived rather than erased; it no longer runs or appears in the public square. Owners can list archives at `GET /api/fng-strategies/archive?page=0&size=10` and read their history through the existing detail, positions and executions endpoints. Strategies without fills or unresolved orders can be deleted.
+
+Before enabling live execution, reconcile any legacy position history against the exchange. A legacy `CLOSED` status alone does not establish that the old entry and exit quantities matched.
+
 ## Mobile compatibility
 
 Native shells must accept `PRICE_ALERT_TRIGGERED`, `WEBHOOK_TRIGGERED` and `STRATEGY_SIGNAL` in their notification-event allowlist. The H5 bridge routes those notifications to `/alerts/events` after checking the logged-in account. The current mobile checkout has not yet been changed in this migration; its old allowlist rejects these events, so native notification click-through is not verified or release-ready.

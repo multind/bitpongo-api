@@ -60,6 +60,14 @@ public class FngStrategyController {
         return ApiResponse.success(service.detail(user.id(), id));
     }
 
+    @GetMapping("/archive")
+    public ApiResponse<FngStrategyService.StrategyPage> archive(
+            @AuthenticationPrincipal AuthenticatedUser user,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) {
+        return ApiResponse.success(service.archive(user.id(), page, size));
+    }
+
     @GetMapping("/{id}/positions")
     public ApiResponse<FngStrategyDtos.PositionPage> positions(
             @AuthenticationPrincipal AuthenticatedUser user,

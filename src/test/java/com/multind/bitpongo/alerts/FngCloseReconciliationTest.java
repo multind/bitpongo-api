@@ -1,10 +1,12 @@
 package com.multind.bitpongo.alerts;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.Mockito.*;
 
 import com.multind.bitpongo.exchange.ExchangeEntity;
+import com.multind.bitpongo.common.api.BusinessException;
 import com.multind.bitpongo.exchange.AmbiguousOrderException;
 import com.multind.bitpongo.exchange.ExchangeRepository;
 import com.multind.bitpongo.exchange.FuturesGateway;
@@ -18,7 +20,9 @@ import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.datasource.DataSourceTransactionManager;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
@@ -28,6 +32,7 @@ class FngCloseReconciliationTest {
     @Container static final MySQLContainer mysql = new MySQLContainer(
             System.getProperty("test.mysql.image", "mysql:9.7.0"));
     private static JdbcTemplate jdbc;
+    private static TransactionTemplate transactions;
     private FuturesGateway gateway;
     private AlertNotificationBridge notifications;
     private FngExecutionService execution;
@@ -38,6 +43,7 @@ class FngCloseReconciliationTest {
         var datasource = new DriverManagerDataSource(mysql.getJdbcUrl(), mysql.getUsername(), mysql.getPassword());
         Flyway.configure().dataSource(datasource).load().migrate();
         jdbc = new JdbcTemplate(datasource);
+        transactions = new TransactionTemplate(new DataSourceTransactionManager(datasource));
         jdbc.update("insert into user (id,name,email,password) values (901,'Audit','audit@example.test','test')");
         jdbc.update("insert into exchange (id,name,exchange,user_id) values (901,'Fake','binance',901)");
     }
@@ -209,6 +215,137 @@ class FngCloseReconciliationTest {
     private void tick() {
         jdbc.update("update fng_position set updated_at=utc_timestamp()-interval 5 minute where strategy_id=?", strategyId);
         execution.process();
+    }
+
+    @Test
+    void openingSurvivesAnOldNewReportAndUsesLaterActualFill() {
+        jdbc.update("update fng_position set status='OPENING', entry_price=null where strategy_id=?", strategyId);
+        when(gateway.findOrder(any(), eq("BTCUSDT"), eq("entry")))
+                .thenReturn(Optional.of(new FuturesGateway.Order("entry", 1, "NEW", d("0"), d("0"))))
+                .thenReturn(Optional.of(new FuturesGateway.Order("entry", 1, "FILLED", d("1"), d("103"))));
+        tick();
+        assertThat(field("status")).isEqualTo("OPENING");
+        tick();
+        assertThat(field("status")).isEqualTo("OPEN");
+        assertThat(number("entry_price")).isEqualByComparingTo("103");
+        verify(notifications, times(1)).strategy(eq(901L), anyString(), anyString(), any());
+    }
+
+    @Test
+    void expiredEntryWithRealPartialFillIsAnOpenPosition() {
+        jdbc.update("update fng_position set status='OPENING', entry_price=null where strategy_id=?", strategyId);
+        report("entry", "EXPIRED", "0.4", "101");
+        tick();
+        assertThat(field("status")).isEqualTo("OPEN");
+        assertThat(number("quantity")).isEqualByComparingTo("0.4");
+    }
+
+    @Test
+    void missingEntryOrderIsNotDiscardedOrSubmittedAgain() {
+        jdbc.update("update fng_position set status='OPENING', entry_price=null where strategy_id=?", strategyId);
+        tick();
+        tick();
+        assertThat(field("status")).isEqualTo("OPENING");
+        verify(gateway, never()).marketOrder(any(), any(), any(), any(), any(), anyBoolean());
+    }
+
+    @Test
+    void oldestTwentyBrokenLookupsCannotStarveTheNextPosition() {
+        jdbc.update("update fng_position set status='OPEN', symbol='ETHUSDT' where strategy_id=?", strategyId);
+        for (int i = 1; i <= 20; i++) {
+            jdbc.update("""
+                    insert into fng_position(strategy_id,user_id,exchange_id,symbol,side,status,
+                      entry_client_order_id,margin,quantity,entry_price,leverage,opened_at,updated_at)
+                    values(?,901,901,'BTCUSDT','LONG','OPEN',?,100,1,100,2,
+                      utc_timestamp()-interval 1 hour,utc_timestamp()-interval 1 day)
+                    """, strategyId, "broken-" + i);
+        }
+        // Place the healthy row last in both primary-key and last-check order.
+        jdbc.update("update fng_position set id=id+1000 where strategy_id=? and symbol='ETHUSDT'", strategyId);
+        when(gateway.markPrice("BTCUSDT")).thenThrow(new IllegalStateException("unavailable"));
+        when(gateway.markPrice("ETHUSDT")).thenReturn(d("75"));
+        execution.process();
+        execution.process();
+        assertThat(jdbc.queryForObject("select status from fng_position where entry_client_order_id='entry'", String.class))
+                .isEqualTo("CLOSING");
+    }
+
+    @Test
+    void deletionRejectsUnresolvedPositionAndKeepsItsRecord() {
+        var service = new FngStrategyService(jdbc, execution);
+        assertThatThrownBy(() -> delete(service)).isInstanceOf(BusinessException.class);
+        assertThat(field("status")).isEqualTo("CLOSING");
+    }
+
+    @Test
+    void deletionArchivesClosedStrategyAndPreservesHistory() {
+        jdbc.update("update fng_position set status='CLOSED',closed_at=utc_timestamp(),exit_price=102 where strategy_id=?",
+                strategyId);
+        var service = new FngStrategyService(jdbc, execution);
+        delete(service);
+        assertThat(service.list(901)).isEmpty();
+        assertThat(service.page(901, 0, 20).total()).isZero();
+        assertThat(service.archive(901, 0, 20).items()).extracting(FngStrategyDtos.View::id).containsExactly(strategyId);
+        assertThat(service.detail(901, strategyId).enabled()).isFalse();
+        assertThat(new FngPositionService(jdbc).positions(901, strategyId, 0, 20).total()).isEqualTo(1);
+        assertThatThrownBy(() -> service.enabled(901, strategyId, true)).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void deletionBlocksLegacyFailedRowsWithUnverifiedExposure() {
+        jdbc.update("update fng_position set status='FAILED',last_error='ORDER_TIMEOUT' where strategy_id=?", strategyId);
+        var service = new FngStrategyService(jdbc, execution);
+        assertThatThrownBy(() -> delete(service)).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void terminalZeroFillAllowsDeletionWithoutCreatingHistory() {
+        jdbc.update("update fng_position set status='OPENING', entry_price=null where strategy_id=?", strategyId);
+        report("entry", "CANCELED", "0", "0");
+        tick();
+        assertThat(field("status")).isEqualTo("FAILED");
+        assertThat(number("quantity")).isEqualByComparingTo("0");
+        var service = new FngStrategyService(jdbc, execution);
+        delete(service);
+        assertThat(service.archive(901, 0, 20).total()).isZero();
+        assertThatThrownBy(() -> service.detail(901, strategyId)).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void aLivePartialEntryKeepsItsOriginalOrderUntilFinalQuantityIsKnown() {
+        jdbc.update("update fng_position set status='OPENING', entry_price=null where strategy_id=?", strategyId);
+        report("entry", "PARTIALLY_FILLED", "0.4", "101");
+        tick();
+        assertThat(field("status")).isEqualTo("OPENING");
+        verifyNoInteractions(notifications);
+        report("entry", "FILLED", "1", "104");
+        tick();
+        assertThat(field("status")).isEqualTo("OPEN");
+        assertThat(number("quantity")).isEqualByComparingTo("1");
+    }
+
+    @Test
+    void terminalZeroCannotOverridePreviouslyObservedPartialEntry() {
+        jdbc.update("update fng_position set status='OPENING', entry_price=null where strategy_id=?", strategyId);
+        report("entry", "PARTIALLY_FILLED", "0.4", "101");
+        tick();
+        report("entry", "CANCELED", "0", "0");
+        tick();
+        assertThat(field("status")).isEqualTo("OPENING");
+        assertThatThrownBy(() -> delete(new FngStrategyService(jdbc, execution))).isInstanceOf(BusinessException.class);
+    }
+
+    @Test
+    void positiveQuoteWithZeroExecutedQuantityIsNotDefinitive() {
+        jdbc.update("update fng_position set status='OPENING', entry_price=null where strategy_id=?", strategyId);
+        when(gateway.findOrder(any(), eq("BTCUSDT"), eq("entry"))).thenReturn(Optional.of(
+                new FuturesGateway.Order("entry", 1, "EXPIRED", BigDecimal.ZERO, BigDecimal.ZERO, d("40.4"))));
+        tick();
+        assertThat(field("status")).isEqualTo("OPENING");
+    }
+
+    private void delete(FngStrategyService service) {
+        transactions.executeWithoutResult(status -> service.delete(901, strategyId));
     }
 
     private void report(String id, String status, String qty, String price) {

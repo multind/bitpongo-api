@@ -38,15 +38,13 @@ public class FngExecutionService {
     private static final BigDecimal HUNDRED = BigDecimal.valueOf(100);
     private static final String BASE_SELECT = """
             select p.id,p.strategy_id,p.user_id,p.exchange_id,p.symbol,p.side,p.status,
-                   p.entry_client_order_id,p.exit_client_order_id,p.margin,p.quantity,p.entry_price,p.leverage,
+                   p.entry_client_order_id,p.entry_observed_qty,p.exit_client_order_id,p.margin,p.quantity,p.entry_price,p.leverage,
                    p.peak_profit_percent,p.close_reason,p.opened_at,p.updated_at,
                    p.exit_filled_qty,p.exit_filled_quote,p.exit_order_filled_qty,p.exit_order_filled_quote,
                    s.name strategy_name,s.enabled,s.direction,s.profit_target_percent,
-                   s.profit_drawdown_percent,s.stop_loss_percent,s.profit_target_type,s.bureau_period,s.max_orders,s.max_positions,
-                   e.exchange
+                   s.profit_drawdown_percent,s.stop_loss_percent,s.profit_target_type,s.bureau_period,s.max_orders,s.max_positions
             from fng_position p
             join fng_strategy s on s.id=p.strategy_id
-            join exchange e on e.id=p.exchange_id
             """;
 
     private final JdbcTemplate jdbc;
@@ -106,7 +104,7 @@ public class FngExecutionService {
         for (Row row : rows("PENDING_ENTRY", 5)) {
             boolean submitted = false;
             if (!row.enabled()) {
-                failed(row.id(), "STRATEGY_DISABLED");
+                entryFailed(row, "PENDING_ENTRY", "STRATEGY_DISABLED");
                 continue;
             }
             try {
@@ -131,14 +129,12 @@ public class FngExecutionService {
                 if (claimed == 0) continue;
                 submitted = true;
                 String side = "LONG".equals(row.side()) ? "BUY" : "SELL";
-                FuturesGateway.Order placed = gateway.marketOrder(context.credentials(), row.symbol(), side,
-                        quantity, row.entryClientOrderId(), false);
-                applyEntry(row, gateway, context.credentials(), mark, placed);
+                gateway.marketOrder(context.credentials(), row.symbol(), side, quantity, row.entryClientOrderId(), false);
             } catch (RuntimeException exception) {
                 if (submitted) {
-                    updateError(row.id(), sanitized(exception));
+                    entryPending(row, "ENTRY_SUBMISSION_UNCONFIRMED");
                 } else {
-                    failed(row.id(), sanitized(exception));
+                    entryFailed(row, "PENDING_ENTRY", sanitized(exception));
                 }
             }
         }
@@ -152,25 +148,25 @@ public class FngExecutionService {
                 Optional<FuturesGateway.Order> order = context.gateway().findOrder(
                         context.credentials(), row.symbol(), row.entryClientOrderId());
                 if (order.isEmpty()) {
-                    if (row.updatedAt().isBefore(Instant.now().minusSeconds(120))) {
-                        failed(row.id(), "ORDER_NOT_FOUND");
-                    }
+                    entryPending(row, "ENTRY_ORDER_NOT_FOUND");
                     continue;
                 }
-                applyEntry(row, context.gateway(), context.credentials(), row.entryPrice(), order.get());
-                if (!filled(order.get()) && !terminal(order.get().status())
-                        && row.updatedAt().isBefore(Instant.now().minusSeconds(120))) {
-                    failed(row.id(), "ORDER_TIMEOUT");
-                }
+                applyEntry(row, order.get());
             } catch (RuntimeException exception) {
+                entryPending(row, "ENTRY_LOOKUP_FAILED");
                 log.warn("F&G 开仓核对失败 positionId={} errorType={}", row.id(), exception.getClass().getSimpleName());
             }
         }
     }
 
     private void monitorOpen() {
-        for (Row row : rows("OPEN", 20)) {
+        for (Row row : rowsWhere("OPEN", "p.updated_at<=?", now(), 20)) {
             try {
+                // Even a failed remote lookup must yield its turn to other positions.
+                int checked = jdbc.update("""
+                        update fng_position set updated_at=? where id=? and status='OPEN' and updated_at=?
+                        """, now(), row.id(), LocalDateTime.ofInstant(row.updatedAt(), ZoneOffset.UTC));
+                if (checked == 0) continue;
                 ExchangeContext context = context(row);
                 BigDecimal mark = context.gateway().markPrice(row.symbol());
                 if (mark.signum() <= 0 || row.entryPrice() == null || row.entryPrice().signum() <= 0
@@ -180,8 +176,10 @@ public class FngExecutionService {
                         : row.entryPrice().subtract(mark).multiply(row.quantity());
                 BigDecimal pnlPercent = pnl.divide(row.margin(), 8, RoundingMode.HALF_UP).multiply(HUNDRED);
                 BigDecimal peak = row.peak().max(pnlPercent);
-                jdbc.update("update fng_position set peak_profit_percent=?,updated_at=? where id=?",
-                        peak, now(), row.id());
+                jdbc.update("""
+                        update fng_position set peak_profit_percent=greatest(peak_profit_percent,?)
+                        where id=? and status='OPEN'
+                        """, peak, row.id());
                 String reason = exitReason(row, pnl, pnlPercent, peak);
                 if (reason != null) close(row, context, row.quantity(), reason);
             } catch (RuntimeException exception) {
@@ -304,20 +302,38 @@ public class FngExecutionService {
         }
     }
 
-    private void applyEntry(Row row, FuturesGateway gateway, ExchangeCredentials credentials, BigDecimal mark,
-            FuturesGateway.Order order) {
-        FuturesGateway.Order latest = gateway.findOrder(credentials, row.symbol(), row.entryClientOrderId()).orElse(order);
-        if (filled(latest)) {
-            BigDecimal quantity = latest.executedQty().signum() > 0 ? latest.executedQty() : row.quantity();
-            BigDecimal price = latest.avgPrice().signum() > 0 ? latest.avgPrice() : (mark == null ? row.entryPrice() : mark);
-            jdbc.update("""
-                    update fng_position set status='OPEN',quantity=?,entry_price=?,opened_at=?,updated_at=?
-                    where id=? and status in ('OPENING','PENDING_ENTRY')
-                    """, quantity, price, now(), now(), row.id());
-            notifyEntry(row, price, quantity);
-        } else if (terminal(latest.status())) {
-            failed(row.id(), latest.status());
+    private void applyEntry(Row row, FuturesGateway.Order order) {
+        BigDecimal quantity = order.executedQty();
+        if (!row.entryClientOrderId().equals(order.clientOrderId()) || quantity == null
+                || quantity.compareTo(row.entryObservedQty()) < 0 || quantity.compareTo(row.quantity()) > 0
+                || (quantity.signum() == 0 && order.cumulativeQuote() != null && order.cumulativeQuote().signum() != 0)) {
+            entryPending(row, "ENTRY_FILL_UNVERIFIED");
+            return;
         }
+        if (!closeOrderTerminal(order.status())) {
+            observeEntry(row, quantity, null);
+            return;
+        }
+        if (quantity.signum() == 0) {
+            if (terminal(order.status()) || "EXPIRED_IN_MATCH".equalsIgnoreCase(order.status())) {
+                entryFailed(row, "OPENING", order.status());
+            } else {
+                entryPending(row, "ENTRY_FILL_UNVERIFIED");
+            }
+            return;
+        }
+        BigDecimal quote = cumulativeQuote(order);
+        if (quote == null || "REJECTED".equalsIgnoreCase(order.status())) {
+            observeEntry(row, quantity, "ENTRY_FILL_UNVERIFIED");
+            return;
+        }
+        BigDecimal price = quote.divide(quantity, 18, RoundingMode.HALF_UP);
+        int updated = jdbc.update("""
+                update fng_position set status='OPEN',quantity=?,entry_observed_qty=?,entry_price=?,
+                    last_error=null,opened_at=?,updated_at=?
+                where id=? and status='OPENING' and entry_client_order_id=? and entry_observed_qty<=?
+                """, quantity, quantity, price, now(), now(), row.id(), row.entryClientOrderId(), quantity);
+        if (updated > 0) notifyEntry(row, price, quantity);
     }
 
     private void applyExit(Row row, FuturesGateway.Order order) {
@@ -437,14 +453,9 @@ public class FngExecutionService {
                 rs.getBigDecimal("profit_target_percent"), rs.getBigDecimal("profit_drawdown_percent"),
                 rs.getBigDecimal("stop_loss_percent"),
                 rs.getString("profit_target_type"), rs.getInt("bureau_period"), rs.getInt("max_orders"),
-                rs.getInt("max_positions"), rs.getString("exchange"), rs.getBigDecimal("exit_filled_qty"),
+                rs.getInt("max_positions"), rs.getBigDecimal("entry_observed_qty"), rs.getBigDecimal("exit_filled_qty"),
                 rs.getBigDecimal("exit_filled_quote"), rs.getBigDecimal("exit_order_filled_qty"),
                 rs.getBigDecimal("exit_order_filled_quote"));
-    }
-
-    private static boolean filled(FuturesGateway.Order order) {
-        return order.executedQty().signum() > 0
-                && ("FILLED".equalsIgnoreCase(order.status()) || "PARTIALLY_FILLED".equalsIgnoreCase(order.status()));
     }
 
     private static boolean terminal(String status) {
@@ -466,9 +477,11 @@ public class FngExecutionService {
         return value == null ? 0 : value;
     }
 
-    private void failed(long id, String error) {
-        jdbc.update("update fng_position set status='FAILED',last_error=?,updated_at=? where id=?",
-                truncate(error), now(), id);
+    private void entryFailed(Row row, String expectedStatus, String error) {
+        jdbc.update("""
+                update fng_position set status='FAILED',quantity=0,last_error=?,updated_at=?
+                where id=? and status=? and entry_client_order_id=? and entry_observed_qty=0
+                """, truncate(error), now(), row.id(), expectedStatus, row.entryClientOrderId());
     }
 
     private void updateCloseStatus(long id, String expected, String orderId, String status, String error) {
@@ -478,8 +491,18 @@ public class FngExecutionService {
                 """, status, error, now(), id, expected, orderId);
     }
 
-    private void updateError(long id, String error) {
-        jdbc.update("update fng_position set last_error=?,updated_at=? where id=?", truncate(error), now(), id);
+    private void entryPending(Row row, String error) {
+        jdbc.update("""
+                update fng_position set last_error=?,updated_at=?
+                where id=? and status='OPENING' and entry_client_order_id=?
+                """, error, now(), row.id(), row.entryClientOrderId());
+    }
+
+    private void observeEntry(Row row, BigDecimal quantity, String error) {
+        jdbc.update("""
+                update fng_position set entry_observed_qty=greatest(entry_observed_qty,?),last_error=?,updated_at=?
+                where id=? and status='OPENING' and entry_client_order_id=?
+                """, quantity, error, now(), row.id(), row.entryClientOrderId());
     }
 
     private static String sanitized(RuntimeException exception) {
@@ -507,6 +530,6 @@ public class FngExecutionService {
             BigDecimal quantity, BigDecimal entryPrice, int leverage, BigDecimal peak, String closeReason,
             Instant openedAt, Instant updatedAt, String strategyName, boolean enabled, String direction,
             BigDecimal target, BigDecimal drawdown, BigDecimal stopLoss, String targetType, int cycleDays, int maxOrders,
-            int maxPositions, String exchange, BigDecimal exitFilledQty, BigDecimal exitFilledQuote,
+            int maxPositions, BigDecimal entryObservedQty, BigDecimal exitFilledQty, BigDecimal exitFilledQuote,
             BigDecimal exitOrderFilledQty, BigDecimal exitOrderFilledQuote) {}
 }
