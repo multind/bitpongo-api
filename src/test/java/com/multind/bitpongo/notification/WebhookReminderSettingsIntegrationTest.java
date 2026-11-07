@@ -21,6 +21,7 @@ import static org.mockito.Mockito.*;
         "zhitoubao.notifications.bark.dispatch-enabled=false",
         "zhitoubao.market.stream-enabled=false",
         "spring.quartz.auto-startup=false",
+        "OUTBOUND_WEBHOOK_DISPATCH_INITIAL_DELAY=24h",
         "zhitoubao.notifications.outbound-webhook.enabled=true",
         "zhitoubao.notifications.outbound-webhook.encryption-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 })
@@ -32,6 +33,8 @@ class WebhookReminderSettingsIntegrationTest {
 
     @Autowired JdbcTemplate jdbc;
     @Autowired WebhookReminderService service;
+    @Autowired WebhookReminderOutbox outbox;
+    @Autowired WebhookReminderDispatcher dispatcher;
     @MockitoBean WebhookReminderClient client;
 
     @Test void settingsDoNotExposeCredentialsAndOnlyTheOwnerCanManageThem() {
@@ -82,6 +85,36 @@ class WebhookReminderSettingsIntegrationTest {
                     assertThat(error).hasMessage("Webhook test notification could not be delivered");
                 });
         verifyNoInteractions(client);
+    }
+
+    @Test void durableFanoutIsExplicitOwnerScopedDeduplicatedAndIndependent() {
+        long owner = account(), other = account();
+        long a = create(owner), b = create(owner), c = create(other);
+        service.update(owner, a, patch(true, null));
+        service.update(owner, b, patch(true, null));
+        service.update(other, c, patch(true, null));
+        var price = event(owner, NotificationEventType.PRICE_ALERT_TRIGGERED);
+        outbox.enqueue(price);
+        outbox.enqueue(event(owner, NotificationEventType.SERVICE_STARTED));
+        assertThat(jdbc.queryForObject("select count(*) from outbound_webhook_delivery", Integer.class)).isZero();
+        outbox.enqueuePrice(price);
+        outbox.enqueuePrice(price);
+        assertThat(jdbc.queryForList("select destination_id from outbound_webhook_delivery order by destination_id", Long.class))
+                .containsExactly(a, b);
+        when(client.send(eq(WebhookReminderProvider.DINGTALK), eq(URL), eq(SECRET), anyString()))
+                .thenReturn(WebhookReminderClient.Result.RETRY, WebhookReminderClient.Result.SENT);
+        dispatcher.dispatch();
+        assertThat(jdbc.queryForList("select status from outbound_webhook_delivery order by destination_id", String.class))
+                .containsExactly("RETRY", "SENT");
+        service.update(owner, a, patch(false, null));
+        assertThat(jdbc.queryForObject("select status from outbound_webhook_delivery where destination_id=?", String.class, a))
+                .isEqualTo("SKIPPED");
+        verify(client, times(2)).send(eq(WebhookReminderProvider.DINGTALK), eq(URL), eq(SECRET), anyString());
+    }
+
+    private NotificationEvent event(long owner, NotificationEventType type) {
+        return new NotificationEvent(type, owner, null, null, java.time.Instant.now(),
+                UUID.randomUUID().toString(), java.util.Map.of("symbol", "BTCUSDT", "status", "secret_key=do-not-send"));
     }
 
     private long account() {

@@ -3,10 +3,12 @@ package com.multind.bitpongo.notification;
 import com.multind.bitpongo.auth.AuthenticatedUser;
 import com.multind.bitpongo.common.api.ApiResponse;
 import java.util.Map;
+import org.springframework.context.annotation.Profile;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
+@Profile("!test")
 @RequestMapping("/api/users/notifications/webhook-destinations")
 class WebhookReminderController {
     private final WebhookReminderService service;

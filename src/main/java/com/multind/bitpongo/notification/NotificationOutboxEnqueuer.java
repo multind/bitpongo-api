@@ -30,6 +30,10 @@ class NotificationOutboxEnqueuer {
     private final NotificationDedupeWindowStore windows;
     private final Clock clock;
     private NativePushOutbox nativePush;
+    private WebhookReminderOutbox outboundWebhook;
+
+    @Autowired
+    void outboundWebhook(WebhookReminderOutbox outboundWebhook) { this.outboundWebhook = outboundWebhook; }
 
     @Autowired
     void nativePush(NativePushOutbox nativePush) { this.nativePush = nativePush; }
@@ -72,6 +76,7 @@ class NotificationOutboxEnqueuer {
         Instant instant = clock.instant();
         LocalDateTime now = LocalDateTime.ofInstant(instant, ZoneOffset.UTC);
         if (nativePush != null) nativePush.enqueue(event, now);
+        if (outboundWebhook != null) outboundWebhook.enqueue(event);
         for (NotificationAudienceResolver.Audience audience : audiences.resolve(event)) {
             String dedupeKey;
             if (event.dedupeWindow() == null) {

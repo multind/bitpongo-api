@@ -12,11 +12,13 @@ public class AlertNotificationBridge {
     private final NotificationOutboxEnqueuer enqueuer;
     private final NotificationEscalationService escalations;
     private final org.springframework.context.ApplicationEventPublisher events;
+    private final WebhookReminderOutbox outboundWebhook;
     public AlertNotificationBridge(NotificationOutboxEnqueuer enqueuer, NotificationEscalationService escalations,
-            org.springframework.context.ApplicationEventPublisher events) {
+            org.springframework.context.ApplicationEventPublisher events, WebhookReminderOutbox outboundWebhook) {
         this.enqueuer = enqueuer;
         this.escalations = escalations;
         this.events = events;
+        this.outboundWebhook = outboundWebhook;
     }
     @Transactional public void priceAlert(long userId, String eventKey, String symbol, String summary, Instant at) {
         priceAlert(userId, eventKey, symbol, summary, at, null);
@@ -25,8 +27,10 @@ public class AlertNotificationBridge {
         if (channels == null || channels.contains("telegram"))
             events.publishEvent(new TelegramReminderService.Delivery(userId, "Bitpongo · " + symbol + "\n" + summary));
         if (channels == null || channels.contains("email")) escalations.schedule(userId, eventKey, at);
-        if (channels == null || channels.contains("bitpongo")) enqueuer.enqueueInCurrentTransaction(new NotificationEvent(NotificationEventType.PRICE_ALERT_TRIGGERED, userId,
-                null, null, at, eventKey, Map.of("symbol", symbol, "status", summary)));
+        var event = new NotificationEvent(NotificationEventType.PRICE_ALERT_TRIGGERED, userId,
+                null, null, at, eventKey, Map.of("symbol", symbol, "status", summary));
+        if (channels == null || channels.contains("bitpongo")) enqueuer.enqueueInCurrentTransaction(event);
+        if (channels != null && channels.contains("webhook")) outboundWebhook.enqueuePrice(event);
     }
     @Transactional public void webhook(long userId,String eventKey,String summary,Instant at) {
         escalations.schedule(userId, eventKey, at);

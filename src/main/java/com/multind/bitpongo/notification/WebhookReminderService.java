@@ -6,6 +6,7 @@ import java.sql.Statement;
 import java.util.List;
 import java.util.Locale;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.RowMapper;
 import org.springframework.jdbc.support.GeneratedKeyHolder;
@@ -13,6 +14,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
+@Profile("!test")
 class WebhookReminderService {
     private static final String TEST_MESSAGE = "Bitpongo: Webhook test notification";
     private static final String DESTINATION = """
@@ -95,6 +97,12 @@ class WebhookReminderService {
                 draft.url() == null ? old.urlCiphertext() : encryptUrl(old.provider(), draft.url()),
                 draft.signingSecret() == null ? old.secretCiphertext() : encryptSecret(old.provider(), draft.signingSecret()),
                 userId, id);
+        if (Boolean.FALSE.equals(draft.enabled()) || draft.url() != null) {
+            jdbc.update("""
+                    UPDATE outbound_webhook_delivery SET status='SKIPPED',updated_at=UTC_TIMESTAMP(6),
+                    lease_token=NULL,lease_until=NULL WHERE destination_id=? AND status IN ('PENDING','RETRY','SENDING')
+                    """, id);
+        }
     }
 
     void delete(long userId, long id) {
@@ -120,6 +128,11 @@ class WebhookReminderService {
         if (send(destination, TEST_MESSAGE) != WebhookReminderClient.Result.SENT) {
             throw new BusinessException(502, "Webhook test notification could not be delivered");
         }
+    }
+
+    WebhookReminderClient.Result sendEnabled(long userId, long id, String message) {
+        Destination destination = find(userId, id, true);
+        return destination.enabled() ? send(destination, message) : WebhookReminderClient.Result.REJECTED;
     }
 
     private WebhookReminderClient.Result send(Destination destination, String message) {
