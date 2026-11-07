@@ -13,6 +13,7 @@ import java.util.Objects;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Profile;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
@@ -30,10 +31,10 @@ class NotificationOutboxEnqueuer {
     private final NotificationDedupeWindowStore windows;
     private final Clock clock;
     private NativePushOutbox nativePush;
-    private WebhookReminderOutbox outboundWebhook;
+    private ApplicationEventPublisher webhookEvents;
 
     @Autowired
-    void outboundWebhook(WebhookReminderOutbox outboundWebhook) { this.outboundWebhook = outboundWebhook; }
+    void webhookEvents(ApplicationEventPublisher events) { this.webhookEvents = events; }
 
     @Autowired
     void nativePush(NativePushOutbox nativePush) { this.nativePush = nativePush; }
@@ -76,7 +77,9 @@ class NotificationOutboxEnqueuer {
         Instant instant = clock.instant();
         LocalDateTime now = LocalDateTime.ofInstant(instant, ZoneOffset.UTC);
         if (nativePush != null) nativePush.enqueue(event, now);
-        if (outboundWebhook != null) outboundWebhook.enqueue(event);
+        if (webhookEvents != null && WebhookReminderOutbox.handles(event.type())) {
+            webhookEvents.publishEvent(new WebhookReminderEventListener.Candidate(event, false));
+        }
         for (NotificationAudienceResolver.Audience audience : audiences.resolve(event)) {
             String dedupeKey;
             if (event.dedupeWindow() == null) {

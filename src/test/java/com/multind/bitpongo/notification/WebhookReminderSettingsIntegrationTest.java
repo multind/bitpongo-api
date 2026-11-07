@@ -7,7 +7,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.testcontainers.service.connection.ServiceConnection;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.transaction.PlatformTransactionManager;
+import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import org.springframework.test.context.bean.override.mockito.MockitoSpyBean;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
 import org.testcontainers.mysql.MySQLContainer;
@@ -33,8 +37,10 @@ class WebhookReminderSettingsIntegrationTest {
 
     @Autowired JdbcTemplate jdbc;
     @Autowired WebhookReminderService service;
-    @Autowired WebhookReminderOutbox outbox;
+    @MockitoSpyBean WebhookReminderOutbox outbox;
     @Autowired WebhookReminderDispatcher dispatcher;
+    @Autowired ApplicationEventPublisher events;
+    @Autowired PlatformTransactionManager transactionManager;
     @MockitoBean WebhookReminderClient client;
 
     @Test void settingsDoNotExposeCredentialsAndOnlyTheOwnerCanManageThem() {
@@ -110,6 +116,26 @@ class WebhookReminderSettingsIntegrationTest {
         assertThat(jdbc.queryForObject("select status from outbound_webhook_delivery where destination_id=?", String.class, a))
                 .isEqualTo("SKIPPED");
         verify(client, times(2)).send(eq(WebhookReminderProvider.DINGTALK), eq(URL), eq(SECRET), anyString());
+    }
+
+    @Test void webhookFanoutRunsOnlyAfterCommitAndCannotUndoTheOriginatingWrite() {
+        long owner = account();
+        var event = event(owner, NotificationEventType.PRICE_ALERT_TRIGGERED);
+        var candidate = new WebhookReminderEventListener.Candidate(event, true);
+        var tx = new TransactionTemplate(transactionManager);
+        tx.executeWithoutResult(status -> {
+            events.publishEvent(candidate);
+            status.setRollbackOnly();
+        });
+        verify(outbox, never()).enqueuePrice(event);
+        doThrow(new IllegalStateException("test fanout failure")).when(outbox).enqueuePrice(event);
+        tx.executeWithoutResult(status -> {
+            jdbc.update("update user set name='committed' where id=?", owner);
+            events.publishEvent(candidate);
+            verify(outbox, never()).enqueuePrice(event);
+        });
+        verify(outbox).enqueuePrice(event);
+        assertThat(jdbc.queryForObject("select name from user where id=?", String.class, owner)).isEqualTo("committed");
     }
 
     private NotificationEvent event(long owner, NotificationEventType type) {

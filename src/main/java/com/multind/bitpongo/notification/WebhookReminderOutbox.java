@@ -30,6 +30,13 @@ class WebhookReminderOutbox {
         }
     }
 
+    static boolean handles(NotificationEventType type) {
+        return type == NotificationEventType.STRATEGY_SIGNAL || type == NotificationEventType.TRADE_SUCCEEDED
+                || type == NotificationEventType.TRADE_FAILED;
+    }
+
+    boolean available() { return settings.available(); }
+
     void enqueuePrice(NotificationEvent event) {
         if (event.type() == NotificationEventType.PRICE_ALERT_TRIGGERED) insert(event, "Price alert triggered");
     }
