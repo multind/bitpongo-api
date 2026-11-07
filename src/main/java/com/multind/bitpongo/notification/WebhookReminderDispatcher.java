@@ -66,7 +66,7 @@ class WebhookReminderDispatcher {
                 WHERE id=? AND status='SENDING' AND lease_token=? AND lease_until>UTC_TIMESTAMP(6) FOR UPDATE
                 """, String.class, lease.id(), lease.token());
         if (jobs.isEmpty()) return;
-        if (destinations.isEmpty() || jdbc.queryForList("SELECT id FROM user WHERE id=? AND status='active'",
+        if (destinations.isEmpty() || !settings.enabled(destinations.getFirst()) || jdbc.queryForList("SELECT id FROM user WHERE id=? AND status='active'",
                 Long.class, destinations.getFirst()).isEmpty()) {
             finish(lease, "SKIPPED", 0);
         } else if (lease.attempt() > MAX_ATTEMPTS) {

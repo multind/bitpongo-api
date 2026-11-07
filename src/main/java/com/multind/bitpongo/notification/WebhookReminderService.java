@@ -29,7 +29,7 @@ class WebhookReminderService {
         @Override public String toString() { return "WebhookReminderDraft[redacted]"; }
     }
     record Item(long id, WebhookReminderProvider provider, String name, boolean enabled, String maskedUrl) {}
-    record Settings(boolean available, List<Item> items) {}
+    record Settings(boolean available, boolean enabled, List<Item> items) {}
     private record Destination(WebhookReminderProvider provider, String name, boolean enabled,
                                String urlCiphertext, String secretCiphertext) {}
 
@@ -51,8 +51,27 @@ class WebhookReminderService {
 
     boolean available() { return cipher != null; }
 
+    boolean enabled(long userId) {
+        return jdbc.queryForList("SELECT enabled FROM outbound_webhook_preference WHERE user_id=?", Boolean.class, userId)
+                .stream().findFirst().orElse(true);
+    }
+
+    @Transactional
+    public void setEnabled(long userId, boolean enabled) {
+        requireAvailable();
+        jdbc.update("""
+                INSERT INTO outbound_webhook_preference (user_id, enabled) VALUES (?,?)
+                ON DUPLICATE KEY UPDATE enabled=?
+                """, userId, enabled, enabled);
+        if (!enabled) jdbc.update("""
+                UPDATE outbound_webhook_delivery q JOIN outbound_webhook_destination d ON d.id=q.destination_id
+                SET q.status='SKIPPED',q.updated_at=UTC_TIMESTAMP(6),q.lease_token=NULL,q.lease_until=NULL
+                WHERE d.user_id=? AND q.status IN ('PENDING','RETRY','SENDING')
+                """, userId);
+    }
+
     Settings list(long userId) {
-        return new Settings(available(), jdbc.query("""
+        return new Settings(available(), enabled(userId), jdbc.query("""
                 SELECT id, provider, name, enabled FROM outbound_webhook_destination WHERE user_id=? ORDER BY id
                 """, (rs, row) -> {
             var provider = WebhookReminderProvider.valueOf(rs.getString("provider"));

@@ -15,6 +15,17 @@ class WebhookReminderController {
 
     WebhookReminderController(WebhookReminderService service) { this.service = service; }
 
+    record Preference(Boolean enabled) {}
+
+    @PutMapping("/preference")
+    ApiResponse<Void> setEnabled(@AuthenticationPrincipal AuthenticatedUser user, @RequestBody Preference preference) {
+        if (preference.enabled() == null) {
+            throw new com.multind.bitpongo.common.api.BusinessException(400, "Webhook enabled preference is required");
+        }
+        service.setEnabled(user.id(), preference.enabled());
+        return ApiResponse.success(null);
+    }
+
     @GetMapping
     ApiResponse<WebhookReminderService.Settings> list(@AuthenticationPrincipal AuthenticatedUser user) {
         return ApiResponse.success(service.list(user.id()));

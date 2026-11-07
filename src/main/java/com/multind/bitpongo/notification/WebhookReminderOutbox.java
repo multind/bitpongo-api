@@ -47,7 +47,9 @@ class WebhookReminderOutbox {
                 INSERT INTO outbound_webhook_delivery (destination_id,event_key,message,next_attempt_at,updated_at)
                 SELECT d.id,?,?,UTC_TIMESTAMP(6),UTC_TIMESTAMP(6)
                 FROM outbound_webhook_destination d JOIN user u ON u.id=d.user_id
+                LEFT JOIN outbound_webhook_preference p ON p.user_id=d.user_id
                 WHERE d.user_id=? AND d.enabled=true AND u.status='active'
+                    AND COALESCE(p.enabled,true)=true
                 ORDER BY d.id
                 ON DUPLICATE KEY UPDATE outbound_webhook_delivery.id=outbound_webhook_delivery.id
                 """, hash(event.type().name() + ":" + event.dedupeKey()), message(event, title), event.userId());

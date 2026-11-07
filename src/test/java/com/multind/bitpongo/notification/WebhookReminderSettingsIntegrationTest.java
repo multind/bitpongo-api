@@ -138,6 +138,26 @@ class WebhookReminderSettingsIntegrationTest {
         assertThat(jdbc.queryForObject("select name from user where id=?", String.class, owner)).isEqualTo("committed");
     }
 
+    @Test void accountSwitchCancelsPendingDeliveryWithoutChangingDestinations() {
+        long owner = account(), other = account(), id = create(owner);
+        service.update(owner, id, patch(true, null));
+        var first = event(owner, NotificationEventType.TRADE_SUCCEEDED);
+        outbox.enqueue(first);
+        service.setEnabled(owner, false);
+        assertThat(service.list(owner).enabled()).isFalse();
+        assertThat(service.list(other).enabled()).isTrue();
+        assertThat(service.list(owner).items().getFirst().enabled()).isTrue();
+        var second = event(owner, NotificationEventType.TRADE_SUCCEEDED);
+        outbox.enqueue(second);
+        assertThat(jdbc.queryForList("select status from outbound_webhook_delivery where destination_id=?", String.class, id))
+                .containsExactly("SKIPPED");
+        service.setEnabled(owner, true);
+        outbox.enqueue(second);
+        assertThat(jdbc.queryForList("select status from outbound_webhook_delivery where destination_id=? order by id", String.class, id))
+                .containsExactly("SKIPPED", "PENDING");
+        jdbc.update("delete from user where id=?", owner);
+    }
+
     private NotificationEvent event(long owner, NotificationEventType type) {
         return new NotificationEvent(type, owner, null, null, java.time.Instant.now(),
                 UUID.randomUUID().toString(), java.util.Map.of("symbol", "BTCUSDT", "status", "secret_key=do-not-send"));
