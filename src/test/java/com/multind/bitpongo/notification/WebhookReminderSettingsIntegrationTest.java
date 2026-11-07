@@ -41,6 +41,8 @@ class WebhookReminderSettingsIntegrationTest {
     @Autowired WebhookReminderDispatcher dispatcher;
     @Autowired ApplicationEventPublisher events;
     @Autowired PlatformTransactionManager transactionManager;
+    @Autowired NotificationPerceptionQueue perceptionQueue;
+    @Autowired com.multind.bitpongo.alerts.AlertEventService alertEvents;
     @MockitoBean WebhookReminderClient client;
 
     @Test void settingsDoNotExposeCredentialsAndOnlyTheOwnerCanManageThem() {
@@ -156,6 +158,38 @@ class WebhookReminderSettingsIntegrationTest {
         assertThat(jdbc.queryForList("select status from outbound_webhook_delivery where destination_id=? order by id", String.class, id))
                 .containsExactly("SKIPPED", "PENDING");
         jdbc.update("delete from user where id=?", owner);
+    }
+
+    @Test void perceptionQueueWaitsFiveMinutesBetweenTiersAndStopsAtConfirmation() {
+        long owner = account();
+        jdbc.update("""
+                insert into user_notification_channel(user_id,confirmation_enabled,updated_at)
+                values (?,true,UTC_TIMESTAMP(6))
+                """, owner);
+        String key = UUID.randomUUID().toString();
+        var now = java.time.LocalDateTime.of(2026, 11, 8, 10, 0);
+        jdbc.update("""
+                insert into alert_event(user_id,event_type,event_key,title,body,occurred_at)
+                values (?,'PRICE_ALERT_TRIGGERED',?,'Alert','BTC',?)
+                """, owner, key, now);
+        long id = jdbc.queryForObject("select id from alert_event where event_key=?", Long.class, key);
+        var tiers = java.util.List.of(java.util.List.of("email"), java.util.List.of("telegram", "webhook"), java.util.List.of("bitpongo"));
+        var sent = new java.util.ArrayList<java.util.List<String>>();
+        java.util.function.Consumer<NotificationPerceptionQueue.Wave> dispatch = wave -> sent.add(wave.channels());
+        perceptionQueue.schedule(owner, id, tiers, true, now);
+        perceptionQueue.schedule(owner, id, tiers, true, now);
+        assertThat(perceptionQueue.advance(now, dispatch)).isTrue();
+        assertThat(perceptionQueue.advance(now.plusSeconds(299), dispatch)).isFalse();
+        assertThat(sent).containsExactly(java.util.List.of("email"));
+        assertThat(perceptionQueue.advance(now.plusMinutes(5), dispatch)).isTrue();
+        assertThat(sent).containsExactly(java.util.List.of("email"), java.util.List.of("telegram", "webhook"));
+        assertThat(alertEvents.list(owner, false, 0, 10).items().getFirst().confirmationRequired()).isTrue();
+        alertEvents.confirm(owner, id);
+        assertThat(perceptionQueue.advance(now.plusMinutes(10), dispatch)).isFalse();
+        assertThat(jdbc.queryForObject("select state from notification_perception_wave where event_id=? and stage=2", String.class, id))
+                .isEqualTo("CANCELLED");
+        assertThat(sent).hasSize(2);
+        assertThat(perceptionQueue.advance(now.plusMinutes(15), dispatch)).isFalse();
     }
 
     private NotificationEvent event(long owner, NotificationEventType type) {

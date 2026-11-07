@@ -112,6 +112,11 @@ public class NotificationEscalationService {
                    set status='CONFIRMED', lease_token=null, lease_until=null, updated_at=?
                  where event_key=? and user_id=? and status<>'CONFIRMED'
                 """, now, eventKey, userId);
+        jdbc.update("""
+                update notification_perception_wave
+                   set state='CANCELLED',due_at=null
+                 where event_id=? and state in ('READY','WAITING')
+                """, eventId);
     }
 
     public void escalateDue() {

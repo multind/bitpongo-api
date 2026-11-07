@@ -26,8 +26,10 @@ public class AlertEventService {
         Long total = jdbc.queryForObject("select count(*) from alert_event e where " + filter, Long.class, userId);
         var items = jdbc.query("""
                 select e.*,
-                       exists(select 1 from notification_escalation n
-                               where n.event_key=e.event_key and n.user_id=e.user_id) confirmation_required
+                       (exists(select 1 from notification_escalation n
+                               where n.event_key=e.event_key and n.user_id=e.user_id)
+                        or exists(select 1 from notification_perception_wave w
+                                  where w.event_id=e.id and w.stage>0 and w.state<>'CANCELLED')) confirmation_required
                   from alert_event e where """ + " " + filter + " order by e.id desc limit ? offset ?", (rs, i) -> {
             long rule = rs.getLong("rule_id");
             Long ruleId = rs.wasNull() ? null : rule;
