@@ -19,6 +19,10 @@ enum WebhookReminderProvider {
         this.query = query == null ? null : Pattern.compile(query);
     }
 
+    String maskedUrl() {
+        return "https://" + host + "/…";
+    }
+
     URI validate(String raw) {
         if (raw == null || raw.length() > 2048) throw invalid();
         final URI url;

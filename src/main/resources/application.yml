@@ -54,6 +54,9 @@ management:
 zhitoubao:
   scheduling-zone: ${SCHEDULING_ZONE:Asia/Shanghai}
   notifications:
+    outbound-webhook:
+      enabled: ${OUTBOUND_WEBHOOK_ENABLED:false}
+      encryption-key: ${OUTBOUND_WEBHOOK_ENCRYPTION_KEY:}
     bark:
       user-notifications-enabled: ${BARK_USER_NOTIFICATIONS_ENABLED:true}
       admin-push-url: ${BARK_ADMIN_PUSH_URL:}
