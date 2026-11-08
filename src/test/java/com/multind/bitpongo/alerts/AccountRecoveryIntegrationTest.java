@@ -61,6 +61,15 @@ class AccountRecoveryIntegrationTest extends PriceAlertIntegrationTest {
         mvc.perform(get("/api/users/profile").header("Authorization","Bearer "+unused)).andExpect(status().isUnauthorized());
         assertThat(passwords.matches("RecoveredPass!2",jdbc.queryForObject("select password from user where id=?",String.class,user))).isTrue();
     }
+    @Test void resetAcceptsEightCharacterPasswordWithCorrectCode() throws Exception {
+        prepare();
+        String id=challenge("RESET",email(),null);
+        mvc.perform(post("/api/users/security/reset").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"challengeId\":\""+id+"\",\"code\":\""+sentCode+"\",\"newPassword\":\"Reset123\"}"))
+            .andExpect(status().isOk());
+        assertThat(passwords.matches("Reset123",jdbc.queryForObject("select password from user where id=?",String.class,user))).isTrue();
+        reset(id,sentCode,400);
+    }
     @Test void failedAttemptsPersistAndLockOutCorrectCodeAfterFiveTries() throws Exception {
         prepare(); String id=challenge("RESET",email(),null), code=sentCode;
         String wrong=code.equals("00000000")?"11111111":"00000000";

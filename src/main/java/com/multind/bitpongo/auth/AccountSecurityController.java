@@ -22,7 +22,7 @@ public class AccountSecurityController {
     @tools.jackson.databind.annotation.JsonNaming(tools.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record CodeRequest(@NotBlank @Size(max=16) String purpose, @NotBlank @jakarta.validation.constraints.Email @Size(max=100) String email, @Size(max=128) String oldPassword) {}
     @tools.jackson.databind.annotation.JsonNaming(tools.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
-    public record Reset(@NotBlank @Size(max=36) String challengeId,@NotBlank @jakarta.validation.constraints.Pattern(regexp="[0-9]{8}") String code,@NotBlank @Size(min=12,max=128) String newPassword) {}
+    public record Reset(@NotBlank @Size(max=36) String challengeId,@NotBlank @jakarta.validation.constraints.Pattern(regexp="[0-9]{8}") String code,@NotBlank @Size(max=128) String newPassword) {}
     @tools.jackson.databind.annotation.JsonNaming(tools.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record EmailChange(@NotBlank @Size(max=36) String challengeId,@NotBlank @jakarta.validation.constraints.Pattern(regexp="[0-9]{8}") String code,@NotBlank @Size(max=128) String oldPassword) {}
     @GetMapping("/status") public ApiResponse<Status> status() { return ApiResponse.success(new Status(recovery.available())); }
