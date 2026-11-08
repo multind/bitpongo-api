@@ -88,6 +88,11 @@ public class TelegramReminderService {
             """ + (enabled ? " and c.telegram_enabled=true" : ""), Long.class, user).stream().findFirst().orElse(null);
     }
 
+    boolean sendPerception(long userId, String text) {
+        Long chat = chat(userId, true);
+        return chat == null || (client.available() && client.send(chat, text));
+    }
+
     private static void logFailure() {
         org.slf4j.LoggerFactory.getLogger(TelegramReminderService.class).warn("Telegram reminder delivery failed");
     }

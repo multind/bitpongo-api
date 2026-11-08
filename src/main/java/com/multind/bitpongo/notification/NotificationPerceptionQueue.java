@@ -2,7 +2,7 @@ package com.multind.bitpongo.notification;
 
 import java.time.LocalDateTime;
 import java.util.List;
-import java.util.function.Consumer;
+import java.util.function.Predicate;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -44,7 +44,7 @@ class NotificationPerceptionQueue {
     }
 
     @Transactional
-    public boolean advance(LocalDateTime now, Consumer<Wave> dispatch) {
+    public boolean advance(LocalDateTime now, Predicate<Wave> dispatch) {
         var candidates = jdbc.queryForList("""
                 SELECT event_id FROM notification_perception_wave
                 WHERE state='READY' AND due_at<=? ORDER BY due_at,event_id LIMIT 16
@@ -77,13 +77,13 @@ class NotificationPerceptionQueue {
                         """, eventId);
                 return true;
             }
-            dispatch.accept(wave);
+            boolean delivered = dispatch.test(wave);
             jdbc.update("UPDATE notification_perception_wave SET state='DISPATCHED',due_at=NULL WHERE event_id=? AND stage=?",
                     eventId, wave.stage());
             jdbc.update("""
                     UPDATE notification_perception_wave SET state='READY',due_at=?
                     WHERE event_id=? AND stage=? AND state='WAITING'
-                    """, now.plusMinutes(5), eventId, wave.stage() + 1);
+                    """, delivered ? now.plusMinutes(5) : now, eventId, wave.stage() + 1);
             return true;
         }
         return false;

@@ -72,12 +72,20 @@ class NotificationOutboxEnqueuer {
     }
 
     void enqueueInCurrentTransaction(NotificationEvent event) {
+        enqueue(event, true);
+    }
+
+    void enqueueAppOnly(NotificationEvent event) {
+        enqueue(event, false);
+    }
+
+    private void enqueue(NotificationEvent event, boolean webhook) {
         Objects.requireNonNull(event, "event");
         String baseDedupeKey = Objects.requireNonNull(event.dedupeKey(), "dedupeKey");
         Instant instant = clock.instant();
         LocalDateTime now = LocalDateTime.ofInstant(instant, ZoneOffset.UTC);
         if (nativePush != null) nativePush.enqueue(event, now);
-        if (webhookEvents != null && WebhookReminderOutbox.handles(event.type())) {
+        if (webhook && webhookEvents != null && WebhookReminderOutbox.handles(event.type())) {
             webhookEvents.publishEvent(new WebhookReminderEventListener.Candidate(event, false));
         }
         for (NotificationAudienceResolver.Audience audience : audiences.resolve(event)) {

@@ -26,6 +26,7 @@ import static org.mockito.Mockito.*;
         "zhitoubao.market.stream-enabled=false",
         "spring.quartz.auto-startup=false",
         "OUTBOUND_WEBHOOK_DISPATCH_INITIAL_DELAY=24h",
+        "NOTIFICATION_PERCEPTION_INITIAL_DELAY=24h",
         "zhitoubao.notifications.outbound-webhook.enabled=true",
         "zhitoubao.notifications.outbound-webhook.encryption-key=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA="
 })
@@ -43,6 +44,10 @@ class WebhookReminderSettingsIntegrationTest {
     @Autowired PlatformTransactionManager transactionManager;
     @Autowired NotificationPerceptionQueue perceptionQueue;
     @Autowired com.multind.bitpongo.alerts.AlertEventService alertEvents;
+    @Autowired AlertNotificationBridge alertBridge;
+    @Autowired NotificationChannelService channelSettings;
+    @Autowired NotificationPerceptionDelivery perceptionDelivery;
+    @MockitoBean com.multind.bitpongo.auth.EmailCodeSender email;
     @MockitoBean WebhookReminderClient client;
 
     @Test void settingsDoNotExposeCredentialsAndOnlyTheOwnerCanManageThem() {
@@ -175,7 +180,7 @@ class WebhookReminderSettingsIntegrationTest {
         long id = jdbc.queryForObject("select id from alert_event where event_key=?", Long.class, key);
         var tiers = java.util.List.of(java.util.List.of("email"), java.util.List.of("telegram", "webhook"), java.util.List.of("bitpongo"));
         var sent = new java.util.ArrayList<java.util.List<String>>();
-        java.util.function.Consumer<NotificationPerceptionQueue.Wave> dispatch = wave -> sent.add(wave.channels());
+        java.util.function.Predicate<NotificationPerceptionQueue.Wave> dispatch = wave -> sent.add(wave.channels());
         perceptionQueue.schedule(owner, id, tiers, true, now);
         perceptionQueue.schedule(owner, id, tiers, true, now);
         assertThat(perceptionQueue.advance(now, dispatch)).isTrue();
@@ -190,6 +195,34 @@ class WebhookReminderSettingsIntegrationTest {
                 .isEqualTo("CANCELLED");
         assertThat(sent).hasSize(2);
         assertThat(perceptionQueue.advance(now.plusMinutes(15), dispatch)).isFalse();
+    }
+
+    @Test void priceBridgeSendsEmailFirstThenWebhookUsingSavedStrengths() {
+        long owner = account(), destination = create(owner);
+        service.update(owner, destination, patch(true, null));
+        channelSettings.update(owner, new NotificationChannelService.Update(true, false, false, false, false, false, true));
+        var strengths = java.util.Map.of("email", "WEAK", "webhook", "STRONG", "bitpongo", "MODERATE", "telegram", "MODERATE");
+        assertThat(channelSettings.updateStrengths(owner, strengths)).isEqualTo(strengths);
+        when(email.available()).thenReturn(true);
+        String key = UUID.randomUUID().toString();
+        var now = java.time.LocalDateTime.now(java.time.ZoneOffset.UTC);
+        jdbc.update("""
+                insert into alert_event(user_id,event_type,event_key,title,body,symbol,occurred_at)
+                values (?,'PRICE_ALERT_TRIGGERED',?,'Price reminder','Target reached','BTCUSDT',?)
+                """, owner, key, now);
+        try {
+            alertBridge.priceAlert(owner, key, "BTCUSDT", "Target reached", java.time.Instant.now(), java.util.List.of("email", "webhook"));
+            assertThat(perceptionQueue.advance(now.plusSeconds(1), perceptionDelivery::dispatchWave)).isTrue();
+            perceptionDelivery.deliverDue();
+            verify(email).sendNotification(anyString(), eq("Price reminder"), eq("Target reached"));
+            assertThat(jdbc.queryForList("select id from outbound_webhook_delivery where destination_id=?", Long.class, destination)).isEmpty();
+            assertThat(perceptionQueue.advance(now.plusMinutes(5), perceptionDelivery::dispatchWave)).isFalse();
+            assertThat(perceptionQueue.advance(now.plusMinutes(5).plusSeconds(1), perceptionDelivery::dispatchWave)).isTrue();
+            assertThat(jdbc.queryForList("select status from outbound_webhook_delivery where destination_id=?", String.class, destination))
+                    .containsExactly("PENDING");
+        } finally {
+            jdbc.update("delete from user where id=?", owner);
+        }
     }
 
     private NotificationEvent event(long owner, NotificationEventType type) {

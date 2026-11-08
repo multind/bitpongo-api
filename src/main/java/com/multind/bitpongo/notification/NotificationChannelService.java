@@ -63,6 +63,34 @@ public class NotificationChannelService {
     @org.springframework.beans.factory.annotation.Autowired
     private TelegramClient telegramClient;
     private static final List<String> DEFAULT_ORDER = List.of("call", "message", "dingding", "feishu", "telegram", "bitpongo", "email");
+    private static final Map<String, String> DEFAULT_STRENGTHS = Map.of(
+            "email", "WEAK", "bitpongo", "MODERATE_WEAK", "telegram", "MODERATE", "webhook", "MODERATE");
+
+    @Transactional(readOnly = true)
+    public Map<String, String> strengths(long userId) {
+        activeUser(userId);
+        var values = new java.util.HashMap<>(DEFAULT_STRENGTHS);
+        jdbc.query("SELECT channel_code,strength FROM notification_perception_strength WHERE user_id=?",
+                rs -> { if (DEFAULT_STRENGTHS.containsKey(rs.getString(1))) values.put(rs.getString(1), rs.getString(2)); }, userId);
+        return Map.copyOf(values);
+    }
+
+    @Transactional
+    public Map<String, String> updateStrengths(long userId, Map<String, String> values) {
+        activeUser(userId);
+        if (values == null || !values.keySet().equals(DEFAULT_STRENGTHS.keySet())
+                || values.values().stream().anyMatch(value -> value == null || java.util.Arrays.stream(NotificationPerceptionPlan.Strength.values())
+                    .noneMatch(strength -> strength.name().equals(value)))) {
+            throw new BusinessException(400, "通知感知强度无效");
+        }
+        for (String code : values.keySet().stream().sorted().toList()) {
+            jdbc.update("""
+                    INSERT INTO notification_perception_strength(user_id,channel_code,strength) VALUES (?,?,?)
+                    ON DUPLICATE KEY UPDATE strength=?
+                    """, userId, code, values.get(code), values.get(code));
+        }
+        return strengths(userId);
+    }
 
     @Transactional
     public Channels reorder(long userId, List<String> order) {

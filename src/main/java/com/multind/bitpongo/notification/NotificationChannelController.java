@@ -51,6 +51,17 @@ public class NotificationChannelController {
         return ApiResponse.success(service.get(user.id()));
     }
 
+    @GetMapping("/strengths")
+    public ApiResponse<java.util.Map<String, String>> strengths(@AuthenticationPrincipal AuthenticatedUser user) {
+        return ApiResponse.success(service.strengths(user.id()));
+    }
+
+    @PutMapping("/strengths")
+    public ApiResponse<java.util.Map<String, String>> strengths(@AuthenticationPrincipal AuthenticatedUser user,
+            @RequestBody java.util.Map<String, String> strengths) {
+        return ApiResponse.success(service.updateStrengths(user.id(), strengths));
+    }
+
     @PutMapping
     public ApiResponse<NotificationChannelService.Channels> update(
             @AuthenticationPrincipal AuthenticatedUser user,

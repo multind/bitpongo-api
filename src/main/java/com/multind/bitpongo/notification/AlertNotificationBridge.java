@@ -11,33 +11,24 @@ import org.springframework.transaction.annotation.Transactional;
 public class AlertNotificationBridge {
     private final NotificationOutboxEnqueuer enqueuer;
     private final NotificationEscalationService escalations;
-    private final org.springframework.context.ApplicationEventPublisher events;
+    private final NotificationPerceptionDelivery perception;
     public AlertNotificationBridge(NotificationOutboxEnqueuer enqueuer, NotificationEscalationService escalations,
-            org.springframework.context.ApplicationEventPublisher events) {
+            NotificationPerceptionDelivery perception) {
         this.enqueuer = enqueuer;
         this.escalations = escalations;
-        this.events = events;
+        this.perception = perception;
     }
     @Transactional public void priceAlert(long userId, String eventKey, String symbol, String summary, Instant at) {
         priceAlert(userId, eventKey, symbol, summary, at, null);
     }
     @Transactional public void priceAlert(long userId, String eventKey, String symbol, String summary, Instant at, java.util.List<String> channels) {
-        if (channels == null || channels.contains("telegram"))
-            events.publishEvent(new TelegramReminderService.Delivery(userId, "Bitpongo · " + symbol + "\n" + summary));
-        if (channels == null || channels.contains("email")) escalations.schedule(userId, eventKey, at);
-        var event = new NotificationEvent(NotificationEventType.PRICE_ALERT_TRIGGERED, userId,
-                null, null, at, eventKey, Map.of("symbol", symbol, "status", summary));
-        if (channels == null || channels.contains("bitpongo")) enqueuer.enqueueInCurrentTransaction(event);
-        if (channels != null && channels.contains("webhook")) {
-            events.publishEvent(new WebhookReminderEventListener.Candidate(event, true));
-        }
+        perception.schedule(userId, eventKey, channels == null ? java.util.List.of("bitpongo", "email", "telegram") : channels);
     }
     @Transactional public void webhook(long userId,String eventKey,String summary,Instant at) {
         escalations.schedule(userId, eventKey, at);
         enqueuer.enqueueInCurrentTransaction(new NotificationEvent(NotificationEventType.WEBHOOK_TRIGGERED,userId,null,null,at,eventKey,Map.of("status",summary)));
     }
     @Transactional public void strategy(long userId,String eventKey,String summary,Instant at) {
-        escalations.schedule(userId, eventKey, at);
-        enqueuer.enqueueInCurrentTransaction(new NotificationEvent(NotificationEventType.STRATEGY_SIGNAL,userId,null,null,at,eventKey,Map.of("status",summary)));
+        perception.schedule(userId, eventKey, null);
     }
 }
