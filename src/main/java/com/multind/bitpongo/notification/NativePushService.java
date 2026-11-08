@@ -156,7 +156,11 @@ public class NativePushService {
             case "zh-cn" -> "zh-CN";
             case "zh-tw" -> "zh-TW";
             case "en-us" -> "en-US";
-            default -> throw invalid("locale 无效");
+            default -> {
+                var copy = NotificationLocaleCopy.find(locale);
+                if (copy == null) throw invalid("locale 无效");
+                yield copy.tag();
+            }
         };
     }
     static void uuid(String id) {

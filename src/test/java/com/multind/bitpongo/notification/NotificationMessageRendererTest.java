@@ -234,6 +234,10 @@ class NotificationMessageRendererTest {
                 Arguments.of("en-US", "America/New_York", "Trade failed",
                         "Time: 2026-08-22 21:02:03 America/New_York\n"
                                 + "User ID: 7\nPlan ID: 11\nOrder Intent ID: 13\n"
-                                + "Symbol: BTCUSDT\nResult: REJECTED\nError: 余额不足"));
+                                + "Symbol: BTCUSDT\nResult: REJECTED\nError: 余额不足"),
+                Arguments.of("fr", "Europe/Paris", "Échec de la transaction",
+                        "Heure: 2026-08-23 03:02:03 Europe/Paris\n"
+                                + "ID utilisateur: 7\nID du plan: 11\nID de l’intention d’ordre: 13\n"
+                                + "Symbole: BTCUSDT\nRésultat: REJECTED\nErreur: 余额不足"));
     }
 }

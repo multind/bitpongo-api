@@ -47,12 +47,13 @@ public final class NotificationMessageRenderer {
             String url) {
         Objects.requireNonNull(event, "event");
         Language language = Language.from(locale);
+        NotificationLocaleCopy copy = NotificationLocaleCopy.find(locale);
         ZoneId zone = ZoneId.of(timezone);
         BarkEventPolicy.Policy policy = policies.policy(event);
 
         return new BarkMessage(
-                language.title(event.type()),
-                body(event, language, zone),
+                copy == null ? language.title(event.type()) : copy.title(event.type()),
+                body(event, language, copy, zone),
                 policy.level(),
                 policy.volume(),
                 policy.call(),
@@ -61,39 +62,41 @@ public final class NotificationMessageRenderer {
                 url);
     }
 
-    private static String body(NotificationEvent event, Language language, ZoneId zone) {
+    private static String body(NotificationEvent event, Language language, NotificationLocaleCopy copy, ZoneId zone) {
         List<String> lines = new ArrayList<>();
         if (event.scheduledAt() != null) {
-            lines.add(language.scheduledTime
+            lines.add((copy == null ? language.scheduledTime : copy.label(1))
                     + TIME.format(event.scheduledAt().atZone(zone)));
             if (event.occurredAt() != null) {
-                lines.add(language.executedTime
+                lines.add((copy == null ? language.executedTime : copy.label(2))
                         + TIME.format(event.occurredAt().atZone(zone)));
                 long delaySeconds = Math.max(0L,
                         Duration.between(event.scheduledAt(), event.occurredAt()).getSeconds());
-                lines.add(language.delay + delaySeconds + language.seconds);
+                lines.add(copy == null ? language.delay + delaySeconds + language.seconds
+                        : copy.label(3) + delaySeconds + " s");
             }
         } else if (event.occurredAt() != null) {
-            lines.add(language.time + TIME.format(event.occurredAt().atZone(zone)));
+            lines.add((copy == null ? language.time : copy.label(0)) + TIME.format(event.occurredAt().atZone(zone)));
         }
-        add(lines, language.userId, event.userId());
-        add(lines, language.planId, event.planId());
-        add(lines, language.intentId, event.intentId());
+        add(lines, copy == null ? language.userId : copy.label(4), event.userId());
+        add(lines, copy == null ? language.planId : copy.label(5), event.planId());
+        add(lines, copy == null ? language.intentId : copy.label(6), event.intentId());
 
         Map<String, Object> attributes = event.attributes() == null ? Map.of() : event.attributes();
         Object symbols = attributes.containsKey("symbol")
                 ? attributes.get("symbol")
                 : joinedSymbols(attributes.get("symbols"));
-        addSanitized(lines, language.symbol, symbols);
+        addSanitized(lines, copy == null ? language.symbol : copy.label(7), symbols);
         Object status = attributes.containsKey("status")
                 ? attributes.get("status")
                 : attributes.get("resultStatus");
-        addSanitized(lines, language.result, language.resultText(status));
+        addSanitized(lines, copy == null ? language.result : copy.label(8),
+                copy == null ? language.resultText(status) : copy.result(status));
         Object error = attributes.containsKey("error")
                 ? attributes.get("error")
                 : attributes.get("errorSummary");
         if (error != null) {
-            lines.add(language.error + sanitizeError(String.valueOf(error)));
+            lines.add((copy == null ? language.error : copy.label(9)) + sanitizeError(String.valueOf(error)));
         }
         return String.join("\n", lines);
     }

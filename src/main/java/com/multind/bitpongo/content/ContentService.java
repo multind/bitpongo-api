@@ -61,6 +61,7 @@ public class ContentService {
     }
     private static String locale(String value) {
         String normalized=value==null?"en-us":value.toLowerCase(Locale.ROOT);
+        if (List.of("es-mx", "es-es", "pt-br", "ja", "ko", "id", "th", "vi", "ar", "fr", "de", "it").contains(normalized)) return "en-us";
         if(!List.of("en-us","zh-cn","zh-tw").contains(normalized))throw invalid();return normalized;
     }
     private static String normalizeQuery(String query,boolean required) {

@@ -65,8 +65,9 @@ public class NativePushOutbox {
         if (devices.isEmpty()) throw NativePushService.invalid("设备不可用");
         String id=NativePushService.hash(UUID.randomUUID().toString());
         String locale=(String)devices.getFirst().get("locale");
-        String title="en-US".equals(locale)?"Notification test":"zh-TW".equals(locale)?"通知測試":"通知测试";
-        String body="en-US".equals(locale)?"Bitpongo notifications are ready.":"zh-TW".equals(locale)?"Bitpongo 通知已就緒。":"Bitpongo 通知已就绪。";
+        var copy = NotificationLocaleCopy.find(locale);
+        String title=copy!=null?copy.testTitle():"en-US".equals(locale)?"Notification test":"zh-TW".equals(locale)?"通知測試":"通知测试";
+        String body=copy!=null?copy.testBody():"en-US".equals(locale)?"Bitpongo notifications are ready.":"zh-TW".equals(locale)?"Bitpongo 通知已就緒。":"Bitpongo 通知已就绪。";
         insert(userId,devices.getFirst(),id,"PUSH_TEST",message(id,userId,"PUSH_TEST",null,title,body),now);
     }
     private void insert(long userId,Map<String,Object> device,String eventId,String eventType,Map<String,Object> message,LocalDateTime now) {
