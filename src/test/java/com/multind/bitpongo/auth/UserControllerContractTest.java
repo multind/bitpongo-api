@@ -41,6 +41,7 @@ class UserControllerContractTest {
     @Autowired private JwtTokenService tokens;
 
     @MockitoBean private UserRepository users;
+    @MockitoBean private AccountRecoveryService recovery;
     @MockitoBean private AccountDeletionService accountDeletionService;
     @MockitoBean private com.multind.bitpongo.exchange.ExchangeApplicationService exchangeApplicationService;
     @MockitoBean private com.multind.bitpongo.plan.PlanApplicationService planApplicationService;
@@ -50,6 +51,8 @@ class UserControllerContractTest {
 
     @BeforeEach
     void setUp() {
+        when(recovery.register(any(), any())).thenAnswer(call ->
+                call.<java.util.function.Supplier<UserDtos.LoginData>>getArgument(1).get());
         localUser = new UserEntity();
         localUser.setId(7L);
         localUser.setName("测试用户");
@@ -125,7 +128,7 @@ class UserControllerContractTest {
 
         mvc.perform(post("/api/users/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"新用户\",\"email\":\" New@Example.COM \",\"password\":\"abc12345\"}"))
+                        .content(withChallenge("{\"name\":\"新用户\",\"email\":\" New@Example.COM \",\"password\":\"abc12345\"}")))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.code").value(200))
                 .andExpect(jsonPath("$.data.token").isString())
@@ -138,8 +141,8 @@ class UserControllerContractTest {
         for (String password : new String[] {"short1", "abcdefgh", "12345678"}) {
             mvc.perform(post("/api/users/register")
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content("{\"name\":\"新用户\",\"email\":\"new@example.com\",\"password\":\""
-                                    + password + "\"}"))
+                            .content(withChallenge("{\"name\":\"新用户\",\"email\":\"new@example.com\",\"password\":\""
+                                    + password + "\"}")))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.message")
                             .value("密码须为 8 至 128 个字符，且同时包含字母和数字"));
@@ -150,7 +153,7 @@ class UserControllerContractTest {
     void duplicateRegistrationReturnsCompatibleError() throws Exception {
         mvc.perform(post("/api/users/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"重复\",\"email\":\"local@example.com\",\"password\":\"abc12345\"}"))
+                        .content(withChallenge("{\"name\":\"重复\",\"email\":\"local@example.com\",\"password\":\"abc12345\"}")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.message").value("用户已存在"));
     }
@@ -163,10 +166,14 @@ class UserControllerContractTest {
 
         mvc.perform(post("/api/users/register")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"name\":\"竞争用户\",\"email\":\"race@example.com\",\"password\":\"abc12345\"}"))
+                        .content(withChallenge("{\"name\":\"竞争用户\",\"email\":\"race@example.com\",\"password\":\"abc12345\"}")))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value(400))
                 .andExpect(jsonPath("$.message").value("用户已存在"));
+    }
+
+    private static String withChallenge(String json) {
+        return json.substring(0, json.length()-1) + ",\"challengeId\":\"00000000-0000-0000-0000-000000000001\",\"code\":\"01234567\"}";
     }
 
     @Test

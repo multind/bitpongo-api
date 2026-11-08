@@ -10,9 +10,12 @@ import java.util.HexFormat;
 import java.util.Locale;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executor;
+import java.util.concurrent.RejectedExecutionException;
 import javax.crypto.Mac;
 import javax.crypto.spec.SecretKeySpec;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Service;
@@ -27,15 +30,19 @@ public class AccountRecoveryService {
     private final AccountSecurityService security;
     private final EmailCodeSender mail;
     private final TransactionTemplate transaction;
+    private final Executor registrationMailExecutor;
     private final byte[] key;
     private final SecureRandom random=new SecureRandom();
     public AccountRecoveryService(JdbcTemplate jdbc,PasswordCompatibilityService passwords,AccountSecurityService security,
-            EmailCodeSender mail,PlatformTransactionManager manager,@Value("${zhitoubao.jwt.secret-key}") String secret) {
+            EmailCodeSender mail,PlatformTransactionManager manager,@Value("${zhitoubao.jwt.secret-key}") String secret,
+            @Qualifier("registrationMailExecutor") Executor registrationMailExecutor) {
         this.jdbc=jdbc; this.passwords=passwords; this.security=security; this.mail=mail;
+        this.registrationMailExecutor=registrationMailExecutor;
         transaction=new TransactionTemplate(manager); key=secret.getBytes(StandardCharsets.UTF_8);
     }
     public boolean available() { return mail.available(); }
     private static final String REMINDER_EMAIL = "REMINDER_EMAIL";
+    private static final String REGISTER = "REGISTER";
     @tools.jackson.databind.annotation.JsonNaming(tools.jackson.databind.PropertyNamingStrategies.LowerCamelCaseStrategy.class)
     public record ReminderEmail(String accountEmail, String customEmail, boolean available) {}
 
@@ -65,19 +72,24 @@ public class AccountRecoveryService {
     public String request(String purpose,String email,String oldPassword,Long userId,String remoteAddress) {
         if(!available()) throw new BusinessException(503,"邮件验证码服务暂不可用");
         boolean reminder=REMINDER_EMAIL.equals(purpose);
-        if(!"RESET".equals(purpose) && !"EMAIL".equals(purpose) && !reminder) throw new BusinessException(400,"验证码用途无效");
+        boolean registration=REGISTER.equals(purpose);
+        if(!"RESET".equals(purpose) && !"EMAIL".equals(purpose) && !reminder && !registration) throw new BusinessException(400,"验证码用途无效");
         String target=email.trim().toLowerCase(Locale.ROOT);
         if(("EMAIL".equals(purpose) || reminder) && userId==null) throw new BusinessException(401,"请先登录");
         // Persist rate counters separately, including failed ownership/password checks.
         transaction.executeWithoutResult(s->{
             if("EMAIL".equals(purpose)) rate("password:"+userId,10,false);
             if(reminder) rate("reminder:"+userId,10,false);
-            rate("ip:"+remoteAddress,20,false);
-            rate("email:"+target,5,true);
+            // An unauthenticated registration request must not exhaust recovery quotas.
+            String scope=registration?"register:":"";
+            rate(scope+"ip:"+remoteAddress,20,false);
+            rate(scope+"email:"+target,5,true);
         });
         Delivery delivery=transaction.execute(s->{
             Map<String,Object> account;
-            if(reminder) {
+            if(registration) {
+                account=null;
+            } else if(reminder) {
                 account=active(userId);
                 if(account==null || !(account.get("email") instanceof String current) || current.isBlank())
                     throw new BusinessException(400,"请先绑定账号邮箱");
@@ -94,22 +106,65 @@ public class AccountRecoveryService {
             Long owner=account==null?null:((Number)account.get("id")).longValue();
             long version=account==null?0:((Number)account.get("security_version")).longValue();
             String id=UUID.randomUUID().toString(), code=String.format(Locale.ROOT,"%08d",random.nextInt(100_000_000));
-            jdbc.update("update account_email_challenge set consumed=true where email=? and purpose=? and (user_id=? or user_id is null)",target,purpose,owner);
+            jdbc.update("update account_email_challenge set consumed=true where email=? and purpose=? and consumed=false and (user_id=? or user_id is null)",target,purpose,owner);
             Instant now=Instant.now();
             jdbc.update("insert into account_email_challenge(id,user_id,purpose,email,code_hash,security_version,expires_at,created_at) values(?,?,?,?,?,?,?,?)",
                 id,owner,purpose,target,digest("code:"+id+":"+code),version,UtcDateTimes.toDatabase(now.plusSeconds(600)),UtcDateTimes.toDatabase(now));
-            return new Delivery(id,target,code,purpose,owner!=null);
+            boolean send=registration
+                ? jdbc.queryForList("select id from user where email=?",target).isEmpty()
+                : owner!=null;
+            if(registration && !send) jdbc.update("update account_email_challenge set consumed=true where id=?",id);
+            return new Delivery(id,target,code,purpose,send);
         });
-        if(delivery.send()) {
+        if(registration) {
+            // Identical public response for existing addresses and recipient-specific SMTP failures.
+            // Queue both cases so the request does not wait for SMTP.
+            try { registrationMailExecutor.execute(()->sendRegistrationCode(delivery)); }
+            catch(RejectedExecutionException failure) {
+                invalidateDelivery(delivery);
+                throw new BusinessException(503,"验证码服务繁忙，请稍后重试");
+            }
+        } else if(delivery.send()) {
             try { mail.send(delivery.email(),delivery.code(),delivery.purpose()); }
             catch(RuntimeException failure) {
                 // Same public response as an unknown reset account; never expose provider errors.
-                transaction.executeWithoutResult(s->jdbc.update("update account_email_challenge set consumed=true where id=?",delivery.id()));
+                invalidateDelivery(delivery);
                 org.slf4j.LoggerFactory.getLogger(getClass()).warn("account verification email delivery failed");
                 if(reminder) throw new BusinessException(503,"验证码发送失败，请稍后重试");
             }
         }
         return delivery.id();
+    }
+    private void sendRegistrationCode(Delivery delivery) {
+        if(!delivery.send()) return;
+        if(jdbc.queryForList("select id from account_email_challenge where id=? and consumed=false and expires_at>UTC_TIMESTAMP(6)",
+            delivery.id()).isEmpty()) return;
+        try { mail.send(delivery.email(),delivery.code(),delivery.purpose()); }
+        catch(RuntimeException failure) {
+            org.slf4j.LoggerFactory.getLogger(getClass()).warn("registration verification email delivery failed");
+            invalidateDelivery(delivery);
+        }
+    }
+    private void invalidateDelivery(Delivery delivery) {
+        transaction.executeWithoutResult(s->jdbc.update("update account_email_challenge set consumed=true where id=?",delivery.id()));
+    }
+    public UserDtos.LoginData register(UserDtos.UserCreateRequest request, java.util.function.Supplier<UserDtos.LoginData> createAccount) {
+        String id=request.challengeId(), code=request.code();
+        if(!validChallengeInput(id,code)) throw invalid();
+        var result=transaction.execute(s->{
+            var rows=jdbc.queryForList("select * from account_email_challenge where id=? for update",id);
+            if(rows.isEmpty()) return null;
+            var row=rows.getFirst();
+            if(row.get("user_id")!=null || !REGISTER.equals(row.get("purpose")) ||
+                !request.email().equals(row.get("email")) || !redeemable(row)) return null;
+            if(!matchAndCountAttempt(id,code,row)) return null;
+            var account=createAccount.get();
+            jdbc.update("update account_email_challenge set consumed=true where id=?",id);
+            return account;
+        });
+        // Keep the failed attempt committed; success and consumption are atomic.
+        if(result==null) throw invalid();
+        return result;
     }
     public void reset(String id,String code,String password) {
         AccountSecurityService.validatePassword(password);
@@ -121,7 +176,7 @@ public class AccountRecoveryService {
         transaction.executeWithoutResult(s->rate("password:"+userId,10,false));
     }
     private void finish(String id,String code,String purpose,Long caller,String oldPassword,String newPassword) {
-        if(id==null || !id.matches("[a-fA-F0-9-]{36}") || code==null || !code.matches("[0-9]{8}")) throw invalid();
+        if(!validChallengeInput(id,code)) throw invalid();
         String result;
         try {
             result=transaction.execute(s->{
@@ -133,11 +188,9 @@ public class AccountRecoveryService {
                 var rows=jdbc.queryForList("select * from account_email_challenge where id=? for update",id);
                 if(account==null || rows.isEmpty()) return "invalid";
                 var row=rows.getFirst();
-                if(!purpose.equals(row.get("purpose")) || Boolean.TRUE.equals(row.get("consumed")) || ((Number)row.get("attempts")).intValue()>=5 ||
-                    !date(row.get("expires_at")).isAfter(UtcDateTimes.toDatabase(Instant.now())) ||
+                if(!purpose.equals(row.get("purpose")) || !redeemable(row) ||
                     ((Number)row.get("security_version")).longValue()!=((Number)account.get("security_version")).longValue()) return "invalid";
-                jdbc.update("update account_email_challenge set attempts=attempts+1 where id=?",id);
-                if(!MessageDigest.isEqual(digest("code:"+id+":"+code).getBytes(StandardCharsets.US_ASCII),((String)row.get("code_hash")).getBytes(StandardCharsets.US_ASCII))) return "invalid";
+                if(!matchAndCountAttempt(id,code,row)) return "invalid";
                 if(REMINDER_EMAIL.equals(purpose)) {
                     if(!(account.get("email") instanceof String current) || current.isBlank()) return "invalid";
                     jdbc.update("""
@@ -160,6 +213,18 @@ public class AccountRecoveryService {
         } catch(org.springframework.dao.DataIntegrityViolationException e) { throw new BusinessException(400,"此邮箱不可用于绑定"); }
         // Throw only AFTER commit so wrong attempts survive; code and password never enter logs.
         if(result!=null) throw invalid();
+    }
+    private static boolean validChallengeInput(String id,String code) {
+        return id!=null && id.matches("[a-fA-F0-9-]{36}") && code!=null && code.matches("[0-9]{8}");
+    }
+    private static boolean redeemable(Map<String,Object> row) {
+        return !Boolean.TRUE.equals(row.get("consumed")) && ((Number)row.get("attempts")).intValue()<5
+            && date(row.get("expires_at")).isAfter(UtcDateTimes.toDatabase(Instant.now()));
+    }
+    private boolean matchAndCountAttempt(String id,String code,Map<String,Object> row) {
+        jdbc.update("update account_email_challenge set attempts=attempts+1 where id=?",id);
+        return MessageDigest.isEqual(digest("code:"+id+":"+code).getBytes(StandardCharsets.US_ASCII),
+            ((String)row.get("code_hash")).getBytes(StandardCharsets.US_ASCII));
     }
     private Map<String,Object> active(long userId) {
         var rows=jdbc.queryForList("select id,password,email,security_version from user where id=? and status='active' for update",userId);

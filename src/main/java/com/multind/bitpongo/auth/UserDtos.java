@@ -5,6 +5,7 @@ import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Pattern;
+import jakarta.validation.constraints.Size;
 import java.time.Instant;
 import java.util.Locale;
 
@@ -17,12 +18,14 @@ public final class UserDtos {
 
     public record UserCreateRequest(
             @NotBlank(message = "姓名不能为空") String name,
-            @NotBlank(message = "邮箱不能为空") @Email(message = "邮箱格式错误") String email,
+            @NotBlank(message = "邮箱不能为空") @Email(message = "邮箱格式错误") @Size(max = 100) String email,
             @NotBlank(message = "密码不能为空")
             @Pattern(
                     regexp = "^(?=.*[A-Za-z])(?=.*\\d).{8,128}$",
                     message = "密码须为 8 至 128 个字符，且同时包含字母和数字")
-            String password) {
+            String password,
+            @JsonProperty("challengeId") @NotBlank(message = "请先获取邮箱验证码") @Size(max = 36) String challengeId,
+            @NotBlank(message = "请输入邮箱验证码") @Pattern(regexp = "[0-9]{8}", message = "请输入 8 位邮箱验证码") String code) {
         public UserCreateRequest {
             if (email != null) {
                 email = email.trim().toLowerCase(Locale.ROOT);

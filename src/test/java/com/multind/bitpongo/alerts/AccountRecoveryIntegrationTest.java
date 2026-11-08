@@ -19,6 +19,12 @@ class AccountRecoveryIntegrationTest extends PriceAlertIntegrationTest {
     @Autowired JwtTokenService tokens;
     @Autowired com.multind.bitpongo.auth.AccountRecoveryService recovery;
     @MockitoBean com.multind.bitpongo.auth.EmailCodeSender mail;
+    @MockitoBean(name="registrationMailExecutor") org.springframework.scheduling.concurrent.ThreadPoolTaskExecutor registrationMailExecutor;
+    @org.junit.jupiter.api.BeforeEach
+    void runRegistrationDeliveryInline() {
+        doAnswer(call->{call.<Runnable>getArgument(0).run();return null;})
+            .when(registrationMailExecutor).execute(any(Runnable.class));
+    }
     String sentCode;
     String challenge(String purpose,String email,String token) throws Exception {
         when(mail.available()).thenReturn(true);
@@ -31,6 +37,79 @@ class AccountRecoveryIntegrationTest extends PriceAlertIntegrationTest {
     }
     void prepare() { jdbc.update("update user set password=? where id=?",passwords.hash("OriginalPass!1"),user); }
     String email() { return jdbc.queryForObject("select email from user where id=?",String.class,user); }
+    private org.springframework.test.web.servlet.ResultActions register(String email, String challengeId, String code) throws Exception {
+        var body=new java.util.HashMap<String,String>(java.util.Map.of("name","New user","email",email,"password","Register1"));
+        if(challengeId!=null) body.put("challengeId",challengeId);
+        if(code!=null) body.put("code",code);
+        return mvc.perform(post("/api/users/register").contentType(MediaType.APPLICATION_JSON)
+            .content(new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(body)));
+    }
+    @Test void registrationWithoutCodeCannotCreateAccount() throws Exception {
+        String target=java.util.UUID.randomUUID()+"@example.com";
+        register(target,null,null).andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("select count(*) from user where email=?",Integer.class,target)).isZero();
+    }
+    @Test void registrationCodeIsBoundToEmailAndConsumedOnce() throws Exception {
+        String target=java.util.UUID.randomUUID()+"@example.com", id=challenge("REGISTER",target,null), code=sentCode;
+        String wrong=code.equals("00000000")?"11111111":"00000000";
+        register(target,id,wrong).andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("select attempts from account_email_challenge where id=?",Integer.class,id)).isEqualTo(1);
+        register("another-"+target,id,code).andExpect(status().isBadRequest());
+        register(target.toUpperCase(java.util.Locale.ROOT),id,code).andExpect(status().isOk())
+            .andExpect(jsonPath("$.data.token").isString()).andExpect(jsonPath("$.data.info.email").value(target));
+        register(target,id,code).andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("select count(*) from user where email=?",Integer.class,target)).isEqualTo(1);
+    }
+    @Test void registrationRejectsExpiredAndResetChallenges() throws Exception {
+        String resetId=challenge("RESET",email(),null);
+        register(email(),resetId,sentCode).andExpect(status().isBadRequest());
+        String target=java.util.UUID.randomUUID()+"@example.com", id=challenge("REGISTER",target,null);
+        jdbc.update("update account_email_challenge set expires_at=UTC_TIMESTAMP()-INTERVAL 1 SECOND where id=?",id);
+        register(target,id,sentCode).andExpect(status().isBadRequest());
+        assertThat(jdbc.queryForObject("select count(*) from user where email=?",Integer.class,target)).isZero();
+    }
+    @Test void registrationResendAndConcurrentRedemptionAllowOnlyOneAccount() throws Exception {
+        String target=java.util.UUID.randomUUID()+"@example.com", first=challenge("REGISTER",target,null), oldCode=sentCode;
+        jdbc.update("update account_security_rate set last_sent_at=UTC_TIMESTAMP()-INTERVAL 61 SECOND");
+        String second=challenge("REGISTER",target,null), code=sentCode;
+        register(target,first,oldCode).andExpect(status().isBadRequest());
+        try(var pool=java.util.concurrent.Executors.newFixedThreadPool(2)) {
+            var firstAttempt=pool.submit(()->register(target,second,code).andReturn().getResponse().getStatus());
+            var secondAttempt=pool.submit(()->register(target,second,code).andReturn().getResponse().getStatus());
+            assertThat(java.util.List.of(firstAttempt.get(),secondAttempt.get())).containsExactlyInAnyOrder(200,400);
+        }
+        assertThat(jdbc.queryForObject("select count(*) from user where email=?",Integer.class,target)).isEqualTo(1);
+    }
+    @Test void registrationCodeRequestForExistingEmailDoesNotSendOrBlockPasswordReset() throws Exception {
+        prepare();
+        String target=email();
+        challenge("REGISTER",target,null);
+        verify(mail,never()).send(anyString(),anyString(),anyString());
+        String resetId=challenge("RESET",target,null);
+        reset(resetId,sentCode,200);
+    }
+    @Test void registrationSmtpFailureDoesNotRevealAccountExistence() throws Exception {
+        when(mail.available()).thenReturn(true);
+        doThrow(new IllegalStateException("provider detail")).when(mail).send(anyString(),anyString(),eq("REGISTER"));
+        String target=java.util.UUID.randomUUID()+"@example.com";
+        var response=mvc.perform(post("/api/users/security/code").contentType(MediaType.APPLICATION_JSON)
+            .content("{\"purpose\":\"REGISTER\",\"email\":\""+target+"\"}"))
+            .andExpect(status().isOk()).andExpect(jsonPath("$.data.challengeId").isString())
+            .andReturn().getResponse().getContentAsString();
+        String id=new com.fasterxml.jackson.databind.ObjectMapper().readTree(response).path("data").path("challengeId").asText();
+        assertThat(jdbc.queryForObject("select consumed from account_email_challenge where id=?",Boolean.class,id)).isTrue();
+    }
+    @Test void registrationCodeRequestReturnsWithoutWaitingForSmtp() throws Exception {
+        when(mail.available()).thenReturn(true);
+        var task=org.mockito.ArgumentCaptor.forClass(Runnable.class);
+        doNothing().when(registrationMailExecutor).execute(any(Runnable.class));
+        String target=java.util.UUID.randomUUID()+"@example.com";
+        challenge("REGISTER",target,null);
+        verify(mail,never()).send(anyString(),anyString(),anyString());
+        verify(registrationMailExecutor).execute(task.capture());
+        task.getValue().run();
+        verify(mail).send(eq(target),matches("[0-9]{8}"),eq("REGISTER"));
+    }
     @Test void reminderEmailVerificationPreservesLoginAndSupportsReturningToDefault() throws Exception {
         String original=email(), token=tokens.issue(user), authorization="Bearer "+token;
         String target=java.util.UUID.randomUUID()+"@example.com";

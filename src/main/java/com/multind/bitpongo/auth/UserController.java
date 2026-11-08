@@ -1,6 +1,8 @@
 package com.multind.bitpongo.auth;
 
 import com.multind.bitpongo.common.api.ApiResponse;
+import com.multind.bitpongo.common.api.BusinessException;
+import java.util.Optional;
 import jakarta.validation.Valid;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.DeleteMapping;
@@ -26,14 +28,17 @@ public class UserController {
     private final UserApplicationService users;
     private final AccountDeletionService accountDeletion;
     private final UserTimeZoneService timeZones;
+    private final Optional<AccountRecoveryService> recovery;
 
     public UserController(
             UserApplicationService users,
             AccountDeletionService accountDeletion,
-            UserTimeZoneService timeZones) {
+            UserTimeZoneService timeZones,
+            Optional<AccountRecoveryService> recovery) {
         this.users = users;
         this.accountDeletion = accountDeletion;
         this.timeZones = timeZones;
+        this.recovery = recovery;
     }
 
     @PostMapping("/login")
@@ -43,7 +48,8 @@ public class UserController {
 
     @PostMapping("/register")
     public ApiResponse<LoginData> register(@Valid @RequestBody UserCreateRequest request) {
-        return ApiResponse.success(users.register(request));
+        var verification = recovery.orElseThrow(() -> new BusinessException(503, "邮件验证码服务暂不可用"));
+        return ApiResponse.success(verification.register(request, () -> users.register(request)));
     }
 
     @GetMapping("/profile")
