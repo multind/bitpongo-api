@@ -52,4 +52,28 @@ class UserTimeZoneServiceTest {
         assertThatThrownBy(() -> service.syncDeviceZone(7L, "Not/AZone"))
                 .isInstanceOf(BusinessException.class);
     }
+
+    @Test
+    void acceptsFixedOffsetDeviceZonesReportedByBrowsers() {
+        // Windows ICU reports "China Standard Time" as Etc/GMT-8 when automatic DST is off.
+        service.syncDeviceZone(7L, "Etc/GMT-8");
+        assertThat(user.getLastDeviceTimezone()).isEqualTo("Etc/GMT-8");
+        assertThat(service.resolveDisplayZone(7L)).isEqualTo(ZoneId.of("Etc/GMT-8"));
+        assertThat(service.preference(7L).effectiveTimezone()).isEqualTo("Etc/GMT-8");
+
+        for (String zone : new String[] {"Etc/UTC", "UTC", " Asia/Shanghai "}) {
+            service.syncDeviceZone(7L, zone);
+            assertThat(user.getLastDeviceTimezone()).isEqualTo(zone.trim());
+        }
+    }
+
+    @Test
+    void rejectsDeviceZonesThatAreNotIanaIds() {
+        for (String zone : new String[] {"", "  ", "+08:00", "GMT+8", "China Standard Time"}) {
+            assertThatThrownBy(() -> service.syncDeviceZone(7L, zone))
+                    .as(zone).isInstanceOf(BusinessException.class);
+        }
+        assertThatThrownBy(() -> service.syncDeviceZone(7L, null))
+                .isInstanceOf(BusinessException.class);
+    }
 }

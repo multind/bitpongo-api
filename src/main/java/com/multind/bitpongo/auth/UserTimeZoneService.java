@@ -52,7 +52,7 @@ public class UserTimeZoneService {
     @Transactional
     public void syncDeviceZone(long userId, String timezone) {
         UserEntity user = user(userId);
-        user.setLastDeviceTimezone(regionZone(timezone).getId());
+        user.setLastDeviceTimezone(deviceZone(timezone).getId());
         users.save(user);
     }
 
@@ -72,7 +72,7 @@ public class UserTimeZoneService {
             return regionZone(user.getDisplayTimezone());
         }
         if (user.getLastDeviceTimezone() != null && !user.getLastDeviceTimezone().isBlank()) {
-            return regionZone(user.getLastDeviceTimezone());
+            return deviceZone(user.getLastDeviceTimezone());
         }
         return ZoneId.of("UTC");
     }
@@ -88,6 +88,19 @@ public class UserTimeZoneService {
     private UserEntity user(long userId) {
         return users.findById(userId)
                 .orElseThrow(() -> new BusinessException(401, "无法验证凭据"));
+    }
+
+    /**
+     * Device zones only drive how times are displayed, so any IANA zone ID is accepted.
+     * Some Windows and Android browsers report fixed-offset IDs such as Etc/GMT-8
+     * instead of a region; rejecting them left those users on UTC.
+     */
+    private static ZoneId deviceZone(String value) {
+        String id = value == null ? "" : value.trim();
+        if (!ZoneId.getAvailableZoneIds().contains(id)) {
+            throw new BusinessException(400, "显示时区必须使用有效的地区名称");
+        }
+        return ZoneId.of(id);
     }
 
     private static ZoneId regionZone(String value) {
