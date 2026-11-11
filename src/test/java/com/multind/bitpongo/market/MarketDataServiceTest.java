@@ -57,6 +57,47 @@ class MarketDataServiceTest {
         assertThatThrownBy(service::tickers).isInstanceOf(BusinessException.class);
     }
 
+    @Test void keepsServingTheLastSymbolDirectoryWhenARefreshFails() {
+        Clock moving = mock(Clock.class);
+        when(moving.instant()).thenReturn(Instant.parse("2026-10-03T00:00:00Z"));
+        var cached = new MarketDataService(client, moving);
+        when(client.symbols()).thenReturn(List.of(new MarketDtos.Symbol("BTCUSDT", "BTC", "USDT")));
+        cached.symbols("");
+        when(moving.instant()).thenReturn(Instant.parse("2026-10-03T01:00:01Z"));
+        when(client.symbols()).thenThrow(new BusinessException(503, "Market unavailable"));
+        assertThat(cached.symbols("")).extracting(MarketDtos.Symbol::symbol).containsExactly("BTCUSDT");
+        // A failed refresh waits a minute before retrying instead of hitting upstream on every request.
+        when(moving.instant()).thenReturn(Instant.parse("2026-10-03T01:00:30Z"));
+        cached.symbols("");
+        verify(client, times(2)).symbols();
+    }
+
+    @Test void surfacesDirectoryFailureWhenNothingIsCached() {
+        when(client.symbols()).thenThrow(new BusinessException(503, "Market unavailable"));
+        assertThatThrownBy(() -> service.symbols("")).isInstanceOf(BusinessException.class);
+    }
+
+    @Test void slowDirectoryRefreshDoesNotBlockTickers() throws Exception {
+        var release = new java.util.concurrent.CountDownLatch(1);
+        var entered = new java.util.concurrent.CountDownLatch(1);
+        when(client.symbols()).thenAnswer(invocation -> {
+            entered.countDown();
+            release.await();
+            return List.of(new MarketDtos.Symbol("BTCUSDT", "BTC", "USDT"));
+        });
+        when(client.tickers()).thenReturn(List.of(
+                new MarketDtos.Ticker("BTCUSDT", new BigDecimal("60000"), BigDecimal.ZERO, BigDecimal.ONE, clock.instant())));
+        var directory = java.util.concurrent.CompletableFuture.runAsync(() -> service.symbols(""));
+        try {
+            assertThat(entered.await(5, java.util.concurrent.TimeUnit.SECONDS)).isTrue();
+            var tickers = java.util.concurrent.CompletableFuture.supplyAsync(service::tickers);
+            assertThat(tickers.get(5, java.util.concurrent.TimeUnit.SECONDS)).hasSize(1);
+        } finally {
+            release.countDown();
+            directory.get(5, java.util.concurrent.TimeUnit.SECONDS);
+        }
+    }
+
     @Test void refreshesExpiredTickerCacheAndDoesNotServeStaleDataOnFailure() {
         Clock moving = mock(Clock.class);
         when(moving.instant()).thenReturn(Instant.parse("2026-10-03T00:00:00Z"));

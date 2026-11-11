@@ -1,6 +1,8 @@
 package com.multind.bitpongo.market;
 
 import com.multind.bitpongo.common.api.BusinessException;
+import java.io.IOException;
+import java.io.InputStream;
 import java.math.BigDecimal;
 import java.net.URI;
 import java.net.http.HttpClient;
@@ -10,6 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.zip.GZIPInputStream;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
@@ -26,9 +29,12 @@ public class BinanceMarketDataClient implements MarketDataClient {
         this.json = json;
     }
 
+    /** Server-side filtering keeps the directory a few hundred kilobytes instead of the full ~18 MB catalogue. */
+    static final String EXCHANGE_INFO_PATH = "/api/v3/exchangeInfo?permissions=SPOT&symbolStatus=TRADING";
+
     @Override public List<MarketDtos.Symbol> symbols() {
         var result = new ArrayList<MarketDtos.Symbol>();
-        for (JsonNode s : get("/api/v3/exchangeInfo").path("symbols")) {
+        for (JsonNode s : get(EXCHANGE_INFO_PATH).path("symbols")) {
             if ("TRADING".equals(s.path("status").asText()) && s.path("isSpotTradingAllowed").asBoolean()) {
                 String tickSize = null;
                 for (JsonNode filter : s.path("filters")) {
@@ -65,11 +71,17 @@ public class BinanceMarketDataClient implements MarketDataClient {
 
     private JsonNode get(String path) {
         try {
-            var request = HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofSeconds(10)).GET().build();
-            var response = http.send(request, HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) throw new BusinessException(503, "行情服务暂时不可用");
-            JsonNode value = json.readTree(response.body());
-            if (value == null || (path.equals("/api/v3/exchangeInfo")
+            // Binance payloads compress ~50x; java.net.http does not negotiate gzip on its own.
+            var request = HttpRequest.newBuilder(URI.create(baseUrl + path)).timeout(Duration.ofSeconds(10))
+                    .header("Accept-Encoding", "gzip").GET().build();
+            var response = http.send(request, HttpResponse.BodyHandlers.ofInputStream());
+            if (response.statusCode() != 200) {
+                response.body().close();
+                throw new BusinessException(503, "行情服务暂时不可用");
+            }
+            JsonNode value;
+            try (InputStream body = decoded(response)) { value = json.readTree(body); }
+            if (value == null || (path.startsWith("/api/v3/exchangeInfo")
                     ? !value.path("symbols").isArray() : !value.isArray())) {
                 throw new BusinessException(502, "行情数据格式无效");
             }
@@ -79,6 +91,10 @@ public class BinanceMarketDataClient implements MarketDataClient {
             throw new BusinessException(503, "行情请求已中断");
         } catch (BusinessException e) { throw e;
         } catch (Exception e) { throw new BusinessException(503, "行情服务暂时不可用"); }
+    }
+    private static InputStream decoded(HttpResponse<InputStream> response) throws IOException {
+        boolean gzip = response.headers().firstValue("Content-Encoding").map(v -> v.equalsIgnoreCase("gzip")).orElse(false);
+        return gzip ? new GZIPInputStream(response.body()) : response.body();
     }
     private static BigDecimal decimal(JsonNode value) {
         try { return new BigDecimal(value.asText()); }

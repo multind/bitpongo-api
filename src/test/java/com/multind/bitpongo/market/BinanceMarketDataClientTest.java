@@ -25,7 +25,21 @@ class BinanceMarketDataClientTest {
                 """));
             var client = new BinanceMarketDataClient(server.url("/").toString(), JsonMapper.builder().build());
             assertThat(client.symbols()).extracting(MarketDtos.Symbol::symbol).containsExactly("BTCUSDT");
-            assertThat(server.takeRequest().getPath()).isEqualTo("/api/v3/exchangeInfo");
+            assertThat(server.takeRequest().getPath()).isEqualTo("/api/v3/exchangeInfo?permissions=SPOT&symbolStatus=TRADING");
+        }
+    }
+    @Test void requestsAndDecodesGzipPayloads() throws Exception {
+        var body = new okio.Buffer();
+        try (var gzip = new java.util.zip.GZIPOutputStream(body.outputStream())) {
+            gzip.write("""
+                [{"symbol":"BTCUSDT","lastPrice":"60000","priceChangePercent":"1.5","quoteVolume":"10","closeTime":1790989199999}]
+                """.getBytes(java.nio.charset.StandardCharsets.UTF_8));
+        }
+        try (var server = new MockWebServer()) {
+            server.enqueue(new MockResponse().addHeader("Content-Encoding", "gzip").setBody(body));
+            var client = new BinanceMarketDataClient(server.url("/").toString(), JsonMapper.builder().build());
+            assertThat(client.tickers().getFirst().lastPrice()).isEqualByComparingTo("60000");
+            assertThat(server.takeRequest().getHeader("Accept-Encoding")).isEqualTo("gzip");
         }
     }
     @Test void parsesCandleTimesAndDecimals() throws Exception {
